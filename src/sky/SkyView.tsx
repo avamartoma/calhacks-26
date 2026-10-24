@@ -20,7 +20,6 @@ export interface SkyProject { id: string; name: string; description: string; det
  */
 export type SkyStyle = 'clouds' | 'balloons' | 'clouds3d' | 'soft' | '2d';
 
-const styles: { id: SkyStyle; label: string }[] = [{ id: 'clouds', label: 'Clouds' }, { id: 'balloons', label: 'Balloons · 3D' }];
 /** Flat styles pan and zoom; 3D styles can also turn and fly. */
 const isFlat = (style: SkyStyle) => style === 'clouds' || style === '2d';
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -72,7 +71,7 @@ function homeCamera(projects: SkyProject[], view: Viewport, style: SkyStyle): Ca
   // An overview, not a close-up: your projects in the middle, with room around them for the
   // shared projects. The flat sky's bigger clouds need a wider view.
   // On the flat canvas, close enough that every one of your clouds shows its description and agents.
-  const closest = vector ? .62 : 1.3, widest = vector ? .47 : .45;
+  const closest = vector ? .4 : 1.3, widest = vector ? .32 : .45;
   const zoom = Math.min(closest, Math.max(widest, Math.min(view.width * .6 / (maxX - minX), view.height * .5 / (maxY - minY))));
   // In 3D, a slight angle, so the depth of the sky shows from the start.
   return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, zoom, z: 0, ...(isFlat(style) ? {} : { yaw: -.16, pitch: .1 }) };
@@ -83,8 +82,9 @@ function homeCamera(projects: SkyProject[], view: Viewport, style: SkyStyle): Ca
  * clouds. The choice is remembered; `?sky=` in the address overrides it.
  */
 export function SkyView(props: { projects: SkyProject[]; onEnter: (id: string) => void; returnFrom?: string | null }) {
-  const [style, setStyle] = useState<SkyStyle>(() => (new URLSearchParams(location.search).get('sky') || localStorage.getItem('iteration1-sky-look') || 'clouds') as SkyStyle);
-  useEffect(() => { localStorage.setItem('iteration1-sky-look', style); }, [style]);
+  // Clouds only for now. The other looks (balloons in 3D among them) are kept but hidden; open
+  // one with `?sky=balloons` and so on. See "Hidden sky looks" in the README before deleting them.
+  const style = (new URLSearchParams(location.search).get('sky') || 'clouds') as SkyStyle;
   const [view, setView] = useState<'sky' | 'folders'>('sky');
   // Commands for the sky from the corner controls.
   const [command, setCommand] = useState<SkyCommand>({ kind: 'none', n: 0 });
@@ -92,9 +92,6 @@ export function SkyView(props: { projects: SkyProject[]; onEnter: (id: string) =
   return <div className="sky-shell-view">
     <SkySpace key={style} style={style} command={command} {...props} />
     {view === 'folders' && <ProjectFolders projects={props.projects} onOpen={props.onEnter} />}
-    {view === 'sky' && <div className="sky-style-switch" role="tablist" aria-label="Sky style">
-      {styles.map(s => <button key={s.id} role="tab" aria-selected={style === s.id} className={style === s.id ? 'active' : ''} onClick={() => setStyle(s.id)}>{s.label}</button>)}
-    </div>}
     <div className="sky-corner">
       <button className="sky-home-button" onClick={() => { setView('sky'); go('home'); }} aria-label="Home: back to your projects" title="Back to your projects"><HomeIcon /></button>
       <div className="sky-view-toggle" role="tablist" aria-label="Projects view">
