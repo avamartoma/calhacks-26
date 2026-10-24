@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFile, writeFile, mkdir, rename, realpath, stat, copyFile } from 'node:fs/promises';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { Codex } from './codex.mjs';
+import { Codex, codexInstalled, installCodex, openInBrowser } from './codex.mjs';
 import { checkWorkspace } from './workspace-check.mjs';
 import { identifyEvidence, commandWorkspace, refreshReview, isTestCommand, trimEvidence, assertReviewVersion } from './evidence.mjs';
 import { createCursorDesk } from './cursor.mjs';
@@ -225,7 +225,11 @@ async function handleNotification(msg) {
     }
     return;
   }
-  if (msg.method === 'account/updated' || msg.method === 'account/login/completed') { refreshAccount().catch(e => { connection.error = e.message; changed(); }); return; }
+  if (msg.method === 'account/updated' || msg.method === 'account/login/completed') {
+    const failed = msg.method === 'account/login/completed' && msg.params?.success === false;
+    refreshAccount().then(() => { if (failed && !connection.account) { connection.error = msg.params.error || 'Sign-in did not finish. Try again.'; changed(); } }).catch(e => { connection.error = e.message; changed(); });
+    return;
+  }
   const p = msg.params || {}; const { room, a } = findThread(p.threadId); if (!a) return;
   if (msg.method === 'turn/started') { a.turnId = p.turn.id; a.status = 'working'; setWorkStatus(room, a, 'working'); }
   if (msg.method === 'turn/plan/updated') { a.plan = p.plan || []; a.progress = a.plan.length ? Math.round(a.plan.filter(s => s.status === 'completed').length / a.plan.length * 100) : 0; }
@@ -549,6 +553,22 @@ app.post('/api/sandbox/setup', wrap(async()=>{
   try{return await codex.call('windowsSandbox/setupStart',{mode:'elevated'});}
   catch(error){connection.sandboxSetupPending=false;changed();throw error;}
 }));
+// One click from signed out to signed in: install the Codex CLI if it is missing, connect,
+// and open ChatGPT sign-in in the browser. The account then arrives through
+// account/login/completed, which refreshes the connection for every open page.
+let signingIn = null;
+app.post('/api/codex/sign-in', wrap(() => signingIn ||= (async () => {
+  try {
+    connection.error = null;
+    if (!codexInstalled()) { connection.signIn = { step: 'installing' }; changed(); await installCodex(); connection.installed = true; }
+    await codex.connect(); await refreshAccount();
+    if (connection.account) return { connected: true };
+    const login = await codex.call('account/login/start', { type: 'chatgpt' });
+    const opened = await openInBrowser(login.authUrl);
+    connection.signIn = { step: 'browser', authUrl: login.authUrl, opened }; changed();
+    return { connected: false, authUrl: login.authUrl, opened };
+  } catch (error) { connection.signIn = null; connection.error = error.message; changed(); throw error; }
+})().finally(() => { signingIn = null; })));
 app.post('/api/login', wrap(async () => { await codex.connect(); return codex.call('account/login/start', { type: 'chatgpt' }); }));
 app.get('/api/tools', wrap(async req => { await ensureConnected(); const room = roomBy(state, String(req.query.roomId)); const results = await Promise.allSettled([codex.call('skills/list', { cwds: [room.path] }), codex.call('mcpServerStatus/list', { limit: 100 })]); return { skills: results[0].status === 'fulfilled' ? results[0].value : null, mcp: results[1].status === 'fulfilled' ? results[1].value : null, errors: results.filter(r => r.status === 'rejected').map(r => r.reason.message) }; }));
 app.post('/api/rooms', wrap(async req => {
@@ -657,5 +677,7 @@ setInterval(()=>{for(const room of state.rooms)if(!room.demo)for(const a of room
   expiring.add(a.id);stopAgent(a).then(()=>{setWorkStatus(room,a,'blocked','Turn time budget reached. Inspect the handoff and resume.');a.handoffPacket=handoffPacket(room,a);record(room,`${a.name} reached the turn time budget`,'pause');}).catch(e=>event(a,'error',e.message)).finally(()=>{expiring.delete(a.id);changed();});
 }},1000).unref();
 changed();
-codex.connect().then(refreshAccount).catch(e => { connection.error = e.message; changed(); });
+// Without a Codex CLI there is nothing to connect yet; the sign-in button installs it.
+if (codexInstalled()) codex.connect().then(refreshAccount).catch(e => { connection.error = e.message; changed(); });
+else connection.installed = false;
 process.on('SIGINT', () => { team.close();codex.close(); server.close(); process.exit(0); });
