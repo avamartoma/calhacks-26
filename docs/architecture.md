@@ -4,19 +4,20 @@
 
 | Area | Files | Responsibility |
 | --- | --- | --- |
-| Local companion | `server/index.mjs`, `server/codex.mjs` | Express app, Codex app-server connection, local session and lifecycle |
+| Local companion | `server/index.mjs`, `server/codex.mjs` | Express app, Codex app-server connection and one-click sign-in, local session and agent lifecycle for both engines |
 | Work graph | `server/domain.mjs`, `server/orchestration.mjs`, `server/tickets.mjs` | Roles, assignments, dependencies, scheduling and mode policies |
 | Review | `server/evidence.mjs`, `server/workspace-check.mjs` | Evidence receipts, current-source checks and verification gates |
 | Continuity | `server/checkpoints.mjs`, `server/peer-handoffs.mjs` | Checkpoints, replacement context and persistent messages |
 | Team transport | `server/team.mjs` | Paired local offices, status exchange and cross-office handoffs |
 | External execution | `server/cursor.mjs`, `server/office-mcp.mjs`, `scripts/cursor-mcp.mjs`, `scripts/claude-mcp.mjs`, `scripts/codex-mcp.mjs` | Cursor, Claude Code and Codex CLI session ownership and explicitly reported activity over MCP |
 | Launched Cursor agents | `server/cursor-agent.mjs` | Office-owned Cursor SDK runs: runtime selection, observable stream and cancellation |
-| Launched Claude agents | `server/claude-agent.mjs`, `src/ClaudePanel.tsx` | Office-owned Claude Agent SDK runs: model and access selection, sandboxed tools, observable stream and cancellation |
+| Claude engine | `server/claude-agent.mjs`, `server/claude-office.mjs`, `server/claude-key.mjs` | Office agents run on Claude through the Claude Agent SDK: same instructions, office tools (as MCP), permissions, evidence and handoffs as Codex agents; sessions, steering, cancellation and the locally stored API key |
 | Sign-in | `server/oauth.mjs` | Auth0 Authorization Code with PKCE, identity-token verification and local session storage |
 | Agent identity | `server/identity.mjs` | Credential subjects and per-identity track records |
 | Public runs | `server/run-doc.mjs` | Block projection, attribution labels, block-anchored comments and the run feed |
 | Workspace UI | `src/App.tsx`, `src/Operations.tsx`, panel components | Workspace picker, sky/project altitude, tickets, agents, permissions and evidence |
-| Workspace model | `server/workspaces.mjs` | Workspace CRUD, ring-placed cloud spots, migration of older rooms, never-orphan removal |
+| Workspace model | `server/workspaces.mjs` | Live workspace CRUD, ring-placed cloud spots, migration of older rooms, never-orphan removal |
+| Future share model | `src/cloud/model.ts`, `src/cloud/seed.json` | Access levels, share links and placeholder multi-tenant data. Not the live sky entity. |
 | Spatial view | `src/CloudField.ts`, `src/scene.ts`, `src/CityEnvironment.ts`, `src/TeamDistrict.ts` | Cloud sky as the default shell, office desks as the expanded project, city/district hidden on that path |
 | Alternative view | `src/CompactOffice.tsx`, `src/TeamMap.tsx` | Searchable project and team maps |
 
@@ -29,6 +30,8 @@ A **room is a project, and a project is a cloud**. The cloud’s position is sto
 The clouds are meshes in the existing three.js scene, not a second engine and not an HTML overlay. Zoom is cursor-anchored and unbounded in pan because a sky has no edge. Crossing a height threshold on the hovered or nearest cloud is what opens the project: that is the same camera, interpolating into the office desks that already existed. Zooming out, or Esc, reverses it. The city and team district stay compiled so recording and paired-office framing are not deleted; they are simply not the default shell.
 
 Older saved state has no workspaces. `initWorkspaces` gathers every existing room into “My workspace” and gives each a cloud spot, so nothing disappears when the file format grows this field. Removing a workspace rehomes its projects; the last workspace is refused because there would be nowhere to put them.
+
+There are two Workspace types on purpose. `src/types.ts` and `server/workspaces.mjs` are the live entity the sky already uses: a name, a color, and the rooms that belong to it. `src/cloud/model.ts` is the later share-and-access shape (company vs public, grants, share slugs). Do not merge them yet; Claude and Codex sign-in keep talking to the live office snapshot, not the placeholder seed.
 
 What is still rough: puff lighting and scale, empty-sky composition, opening a project from a URL, and showing a teammate district without leaving the sky.
 

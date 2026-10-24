@@ -8,7 +8,7 @@ Build the app and start its production server. The default address is `http://12
 
 For Codex, open **Connections → Codex** and click **Sign in with ChatGPT** and finish the ChatGPT login. When the browser and server run on the same machine, the callback can complete automatically. When they run on different machines, copy the full localhost callback URL from the address bar, paste it into **Callback URL**, and click **Complete sign-in**. A browser connection error on that localhost page is expected in the latter case.
 
-For Claude, open **Connections → Claude**. Click **Sign in with Claude**, authorize on Claude's website, and paste the displayed authorization code including `#state`, or the complete callback URL. Click **Complete sign-in**. The **Launch Claude from the office** section then uses that profile. An explicitly configured `ANTHROPIC_API_KEY` takes precedence over the browser profile.
+For Claude, open **Connections → Claude**. Click **Sign in with Claude**, authorize on Claude's website, and paste the displayed authorization code including `#state`, or the complete callback URL. Click **Complete sign-in**. Claude office agents then run on that profile: choose a Claude model as the manager model when you start work. An explicitly configured `ANTHROPIC_API_KEY` takes precedence over the browser profile.
 
 For Cursor, open **Connections → Cursor** and click **Sign in with Cursor**. Finish signing in on Cursor's website. Iteration1 updates automatically after the SDK creates a dedicated API key named **Iteration1**. An explicitly configured `CURSOR_API_KEY` takes precedence over the saved browser login.
 

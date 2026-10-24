@@ -13,10 +13,11 @@ import { runDoc, addComment, runFeed } from './run-doc.mjs';
 import { ticketFields, assignedTicket, focusTicket, editTicket, archiveTicket } from './tickets.mjs';
 import { peerTools, peerInstructions, inbox, queueHandoff, handoffEnvelope, presentHandoffs, delivered, acknowledge, transferInbox } from './peer-handoffs.mjs';
 import { createTeam } from './team.mjs';
-import { seed, uid, agent, event, workItem, evidenceFrom, roomBy, agentBy, active, canDelegate, handoff, publicItem, external, selfDriven } from './domain.mjs';
+import { seed, uid, agent, event, workItem, evidenceFrom, roomBy, agentBy, active, canDelegate, handoff, publicItem, external, selfDriven, isClaude } from './domain.mjs';
 import { initWorkspaces, createWorkspace, renameWorkspace, removeWorkspace, assignRoom, placeCloud, roomsIn, cloudSpot, workspaceBy } from './workspaces.mjs';
 import { createCursorRunner, launchFields } from './cursor-agent.mjs';
-import { createClaudeRunner, claudeLaunchFields, claudeModels } from './claude-agent.mjs';
+import { createClaudeRunner, claudeModels, isClaudeModel } from './claude-agent.mjs';
+import { OFFICE_SERVER, officeMcpServer, officeToolNames, todosToPlan, projectDiff } from './claude-office.mjs';
 import { createClaudeKeyStore } from './claude-key.mjs';
 import { claimIdentity, nameStoredRoom, replacementName } from './names.mjs';
 import { z } from 'zod';
@@ -81,7 +82,9 @@ await cursorLogin.load();
 const runner = createCursorRunner({ apiKey: () => cursorLogin.current() });
 const claudeKey = createClaudeKeyStore(); await claudeKey.load();
 const claude = createClaudeRunner({ apiKey: () => claudeKey.current(), oauth: async () => { if (claudeLogin.isCompleting()) throw new Error('Wait for Claude sign-in to finish.'); await claudeLogin.load(); return !process.env.ANTHROPIC_API_KEY && claudeLogin.status().configured; }, configDir: () => claudeLogin.configDir });
-function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, workspaces: initWorkspaces(state), claude: { ...claudeKey.status(), configured: claudeKey.status().configured || claudeLogin.status().configured }, identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates }; }
+/** Claude can run office agents on the signed-in Claude profile or on an API key. */
+const claudeReady = () => claudeKey.status().configured || claudeLogin.status().configured;
+function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, workspaces: initWorkspaces(state), claude: { ...claudeKey.status(), configured: claudeReady(), models: claudeModels }, identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates }; }
 function changed() {
   if (!broadcastTimer) broadcastTimer = setTimeout(() => {
     broadcastTimer = undefined;
@@ -146,7 +149,24 @@ async function scheduleWorkers(room) {
     }
   }finally{scheduling.delete(room.id);changed();}
 }
+// A model the office can run: a Claude model once Claude is connected, otherwise one from the Codex catalog.
+function assertModelAvailable(model) {
+  if (isClaudeModel(model)) { if (!claudeReady()) throw new Error('Connect Claude before choosing a Claude model.'); return; }
+  if (model !== 'Account default' && !connection.models.some(m => m.id === model)) throw new Error('Choose a model available to this account.');
+}
+function setEngine(a, model) { a.model = model; if (isClaudeModel(model)) a.provider = 'claude'; else if (isClaude(a)) delete a.provider; }
+async function ensureEngine(a, model = a.model) { if (isClaudeModel(model)) { if (!claudeReady()) throw new Error('Connect Claude before starting Claude agents.'); } else await ensureConnected(); }
 async function ensureConnected() { await codex.connect(); if (!connection.account) throw new Error('Sign in to Codex from the Connect panel first.'); }
+// What every office agent is told, whichever engine runs it.
+function developerInstructions(room, a, access) {
+  const instructions = (room.skills || skillNames).map(n => skillText[n]).filter(Boolean).join('\n\n');
+  return `${instructions}\nYou are ${a.name}${a.title ? `, ${a.title}` : ''}, ${a.role} in Iteration1. Your id is ${a.id}. Refer to other agents by id. ${a.manager ? `${access.canWrite?'You are the sole file writer.':'You are a read-only manager. Inspect, plan and delegate reviews; do not edit files or claim implementation is complete.'} Use office_delegate proactively for independent read-only work at project kickoff; do not wait for the user to ask for subagents. Maximum ${room.budget} concurrent workers. Use office_message for handoffs. Use office_update_work to keep the mission board accurate and attach concrete verification before marking work done. Declare affected files through office_update_work before implementation and include file scopes in office_delegate. Set dependencies to sequence implementation and review; inspect queued blockers before resequencing. Do not use other agent spawning tools; the office manages the concurrency budget.` : 'You are a read-only specialist. Return evidence with file paths and concrete findings. Do not spawn additional agents or edit files. Report results to the manager.'}\n${peerInstructions}\nOnly show concise progress, actions, plans and results.`;
+}
+function turnInstructions(room, a, prompt, access, minutes, assigned, pendingInbox) {
+  const policy = { minutes };
+  return `${prompt}\n${team.view(room) ? 'Paired teammate office (shared context, separate checkout): '+JSON.stringify(team.view(room))+'\nInspect their work scopes and use office_message with their agent IDs for relevant dependencies or overlapping files. Coordinate before editing overlapping files. Do not start or control their agents.\n' : ''}Project folder: ${room.path}. Set the command working directory explicitly. Before searching, verify that the shell is in this project; if directory access fails, report the blocker instead of searching the drive root.\n${a.manager ? teamInstructions(room) : ''}\nCurrent file access: ${access.canWrite?'Manager may edit project files.':'Read only. Inspect and report; do not edit files.'}\nActive ticket: ${assigned?.id || 'none'}.\n${pendingInbox.length ? handoffEnvelope(presentHandoffs(room, pendingInbox)) : ''}\n\nOffice mode: ${room.mode}. Turn time budget: ${policy.minutes} minutes. Current work items: ${JSON.stringify(room.workItems.filter(t=>!t.archived).map(({id,title,status,acceptanceCriteria,requiredEvidence,dependsOn})=>({id,title,status,acceptanceCriteria,requiredEvidence,dependsOn})))}\nPublish concise evidence and next steps. Run each test/check as a standalone command with an explicit working directory inside this project; do not combine checks with other shell commands. After source edits, rerun previously recorded checks so every latest result matches the current source. Completion requires checks with zero-based criterion indices and typed receipts through office_update_work; a plain success message cannot complete a task.`;
+}
+const workerTools = ['office_status', 'office_message', 'office_acknowledge'];
 async function startAgent(room, a, prompt) {
   if (startingAgents.has(a.id)) throw new Error('This agent is already starting.');
   startingAgents.add(a.id);
@@ -156,20 +176,19 @@ async function startAgentReserved(room, a, prompt) {
   const access=permissionsFor(room,a),accessKey=permissionKey(room,a);
   cursor.assertAvailable(room);
   if (selfDriven(a)) throw new Error(`Continue this task in ${toolName(a)} or replace the finished worker with a Codex model.`);
-  if (a.provider === 'claude') return continueClaude(room, a, prompt);
   if (external(a)) throw new Error('Relaunch this task with the Cursor agent runner, or replace the worker with a Codex model.');
-  await ensureConnected();
-  if(access.canWrite && process.platform==='win32' && connection.sandboxStatus!=='ready')throw new Error('Windows sandbox setup is required to edit project files. Open Connect Codex, choose Set up Windows sandbox, then resume this ticket.');
+  if (!isClaude(a)) await ensureConnected();
+  if(!isClaude(a) && access.canWrite && process.platform==='win32' && connection.sandboxStatus!=='ready')throw new Error('Windows sandbox setup is required to edit project files. Open Connect Codex, choose Set up Windows sandbox, then resume this ticket.');
   if(!room.agents.includes(a))throw new Error('Office changed. Reopen the ticket and try again.');
   if (room.archived) throw new Error('Restore this project before starting work.');
   if (room.paused) throw new Error('Resume this office before starting work.');
   if (room.capturing) throw new Error('A checkpoint is being captured. Try again shortly.');
   if (a.status === 'ejected') throw new Error('This agent has been ejected. Replace it to continue.');
   if (a.turnId) throw new Error('This agent is already working. Send a message to steer it.');
-  if(access.canWrite && state.rooms.some(other=>!other.demo && path.relative(other.path,room.path)==='' && other.agents.some(w=>w.provider==='claude' && w.access==='edit' && w.turnId)))throw new Error('A Claude agent is editing this project. Wait for it to finish or stop it first.');
   if(a.manager && state.rooms.some(other=>other!==room && !other.demo && path.relative(other.path,room.path)==='' && other.agents.some(owner=>owner.manager && (owner.turnId || startingAgents.has(owner.id)))))throw new Error('Another room is already implementing in this project folder. Pause its manager first.');
   if (!a.manager) canDelegate(room);
   const assigned=assignedWork(room,a.id); if(assigned){const wait=waitingReason(room,assigned);if(wait)throw new Error(wait.reason);}
+  if (isClaude(a)) return startClaudeTurn(room, a, prompt, access, assigned);
   const policy=selectPolicy(room,a,connection.models); const model=policy.model;
   const resetSession=a.threadId && (a.protocolVersion!==5 || a.threadPermissionKey!==accessKey);
   if(resetSession)a.handoffPacket=handoffPacket(room,a);
@@ -179,8 +198,7 @@ async function startAgentReserved(room, a, prompt) {
     if(resetSession){a.previousThreads=[...(a.previousThreads||[]),a.threadId].slice(-8);a.threadId=null;}
     if (!a.threadId) {
       if(a.handoffPacket)prompt+=`\nSaved context (inspect current files before continuing):\n${JSON.stringify(a.handoffPacket)}`;
-      const instructions = (room.skills || skillNames).map(n => skillText[n]).filter(Boolean).join('\n\n');
-      const result = await codex.call('thread/start', { cwd: room.path, model, sandbox: access.sandbox, approvalPolicy: access.approvalPolicy, developerInstructions: `${instructions}\nYou are ${a.name}${a.title ? `, ${a.title}` : ''}, ${a.role} in Iteration1. Your id is ${a.id}. Refer to other agents by id. ${a.manager ? `${access.canWrite?'You are the sole file writer.':'You are a read-only manager. Inspect, plan and delegate reviews; do not edit files or claim implementation is complete.'} Use office_delegate proactively for independent read-only work at project kickoff; do not wait for the user to ask for subagents. Maximum ${room.budget} concurrent workers. Use office_message for handoffs. Use office_update_work to keep the mission board accurate and attach concrete verification before marking work done. Declare affected files through office_update_work before implementation and include file scopes in office_delegate. Set dependencies to sequence implementation and review; inspect queued blockers before resequencing. Do not use other agent spawning tools; the office manages the concurrency budget.` : 'You are a read-only specialist. Return evidence with file paths and concrete findings. Do not spawn additional agents or edit files. Report results to the manager.'}\n${peerInstructions}\nOnly show concise progress, actions, plans and results.`, dynamicTools: a.manager ? dynamicTools : dynamicTools.filter(t=>['office_status','office_message','office_acknowledge'].includes(t.name)), serviceName: 'iteration1' });
+      const result = await codex.call('thread/start', { cwd: room.path, model, sandbox: access.sandbox, approvalPolicy: access.approvalPolicy, developerInstructions: developerInstructions(room, a, access), dynamicTools: a.manager ? dynamicTools : dynamicTools.filter(t=>workerTools.includes(t.name)), serviceName: 'iteration1' });
       if(result.sandbox?.type !== (access.canWrite?'workspaceWrite':'readOnly'))throw new Error('Codex did not grant the requested project permissions. Refresh Connect Codex and complete sandbox setup before resuming.');
       a.threadId = result.thread.id; a.protocolVersion=5;a.threadPermissionKey=accessKey; loadedThreads.add(a.threadId);
     } else if (!loadedThreads.has(a.threadId)) { const resumed=await codex.call('thread/resume', { threadId: a.threadId, sandbox:access.sandbox, approvalPolicy:access.approvalPolicy });if(resumed.sandbox?.type !== (access.canWrite?'workspaceWrite':'readOnly'))throw new Error('Resumed session permissions do not match this office. Reconnect before continuing.');loadedThreads.add(a.threadId); }
@@ -188,7 +206,7 @@ async function startAgentReserved(room, a, prompt) {
     const requestedServiceTier = policy.serviceTier;
     const pendingInbox = inbox(room,a.id);
     a.peerMessagesThisTurn = 0;
-    const instructions=`${prompt}\n${team.view(room) ? 'Paired teammate office (shared context, separate checkout): '+JSON.stringify(team.view(room))+'\nInspect their work scopes and use office_message with their agent IDs for relevant dependencies or overlapping files. Coordinate before editing overlapping files. Do not start or control their agents.\n' : ''}Project folder: ${room.path}. Set the command working directory explicitly. Before searching, verify that the shell is in this project; if directory access fails, report the blocker instead of searching the drive root.\n${a.manager ? teamInstructions(room) : ''}\nCurrent file access: ${access.canWrite?'Manager may edit project files.':'Read only. Inspect and report; do not edit files.'}\nActive ticket: ${assigned?.id || 'none'}.\n${pendingInbox.length ? handoffEnvelope(presentHandoffs(room, pendingInbox)) : ''}\n\nOffice mode: ${room.mode}. Turn time budget: ${policy.minutes} minutes. Current work items: ${JSON.stringify(room.workItems.filter(t=>!t.archived).map(({id,title,status,acceptanceCriteria,requiredEvidence,dependsOn})=>({id,title,status,acceptanceCriteria,requiredEvidence,dependsOn})))}\nPublish concise evidence and next steps. Run each test/check as a standalone command with an explicit working directory inside this project; do not combine checks with other shell commands. After source edits, rerun previously recorded checks so every latest result matches the current source. Completion requires checks with zero-based criterion indices and typed receipts through office_update_work; a plain success message cannot complete a task.`;
+    const instructions=turnInstructions(room, a, prompt, access, policy.minutes, assigned, pendingInbox);
     const result = await codex.call('turn/start', { threadId: a.threadId, input: [{ type: 'text', text: instructions }], model, effort: policy.effort || null, serviceTier: requestedServiceTier });
     if(pendingInbox.length) delivered(room,a,pendingInbox);
     a.effectiveModel=model || 'Account default'; a.effectiveEffort=policy.effort || 'Model default';a.deadline=Date.now()+policy.minutes*60000;
@@ -197,11 +215,88 @@ async function startAgentReserved(room, a, prompt) {
   } catch (e) { a.status = 'error'; a.turnId = null; setWorkStatus(room,a,'blocked',e.message); event(a, 'error', e.message); throw e; }
   finally { changed(); }
 }
+// A Claude office agent's turn: same instructions, office tools, permissions and evidence as a
+// Codex turn, run through the Claude Agent SDK. Tool calls come back through officeTool.
+async function startClaudeTurn(room, a, prompt, access, assigned) {
+  const mode = modes[room.mode] || modes.balanced;
+  const model = isClaudeModel(a.model) ? a.model : 'claude-opus-5-5';
+  const tools = a.manager ? dynamicTools : dynamicTools.filter(t => workerTools.includes(t.name));
+  if (!a.sessionId && a.handoffPacket) prompt += `\nSaved context (inspect current files before continuing):\n${JSON.stringify(a.handoffPacket)}`;
+  a.workStartedAt = Date.now(); a.diff = ''; a.plan = []; a.progress = 0;
+  a.status = 'working'; a.turnId = uid(); setWorkStatus(room, a, 'working'); event(a, 'user', prompt); changed();
+  const turnId = a.turnId, pendingInbox = inbox(room, a.id), versions = new Map();
+  a.peerMessagesThisTurn = 0;
+  // Evidence is recorded in order, and the turn completes only after its evidence is in.
+  let recording = Promise.resolve();
+  try {
+    const sdk = await claude.sdk();
+    await claude.launch(a.id, { prompt: turnInstructions(room, a, prompt, access, mode.minutes, assigned, pendingInbox), model, access: access.canWrite ? 'edit' : 'read', effort: mode.effort }, {
+      cwd: room.path, resume: a.sessionId,
+      instructions: `${developerInstructions(room, a, access)}\nOffice tools are available as ${OFFICE_SERVER} MCP tools (mcp__${OFFICE_SERVER}__office_*). Use TodoWrite to publish your plan.`,
+      mcpServers: { [OFFICE_SERVER]: officeMcpServer(sdk, tools, (name, args) => officeTool(room, a, name, args)) },
+      extraTools: officeToolNames(tools),
+      onSession: id => { a.sessionId = id; changed(); },
+      onMessage: entry => { event(a, entry.kind, entry.text); changed(); },
+      onToolUse: block => {
+        if (block.name === 'TodoWrite') { const plan = todosToPlan(block.input?.todos); if (plan) { a.plan = plan; a.progress = plan.length ? Math.round(plan.filter(s => s.status === 'completed').length / plan.length * 100) : 0; changed(); } }
+        if (block.name === 'Bash' && isTestCommand(block.input?.command)) versions.set(block.id, commandWorkspace(room.path, room.path));
+      },
+      onToolResult: (call, result) => { recording = recording.then(() => recordClaudeTool(room, a, call, result, versions)).catch(error => event(a, 'error', `Could not record evidence: ${error.message}`)); },
+      onDone: outcome => { recording.then(() => finishClaudeTurn(room, a, turnId, outcome)).catch(error => { event(a, 'error', error.message); changed(); }); }
+    });
+    if (pendingInbox.length) delivered(room, a, pendingInbox);
+    a.effectiveModel = model; a.effectiveEffort = mode.effort; a.deadline = Date.now() + mode.minutes * 60000;
+  } catch (e) { a.status = 'error'; a.turnId = null; setWorkStatus(room, a, 'blocked', e.message); event(a, 'error', e.message); throw e; }
+  finally { changed(); }
+}
+// Commands and file edits a Claude agent made, recorded as observed evidence like Codex items.
+async function recordClaudeTool(room, a, call, result, versions) {
+  const work = assignedWork(room, a.id);
+  if (call.name === 'Bash' && work) {
+    const command = String(call.input?.command || ''), isTest = isTestCommand(command);
+    const receipt = { kind: isTest ? 'test' : 'log', text: `${command}\n${result.output}\nExit: ${result.isError ? 'non-zero' : 0}`, passed: !result.isError, time: Date.now(), source: 'observed-command', command, id: uid() };
+    if (isTest) {
+      const before = await versions.get(call.id), after = await commandWorkspace(room.path, room.path); versions.delete(call.id);
+      Object.assign(receipt, { workspaceVersion: after.version, stableWorkspace: !!before?.version && before.version === after.version, commandCwd: after.commandCwd, cwdVerified: before?.cwdVerified === true && after.cwdVerified === true && before.commandCwd === after.commandCwd });
+    }
+    work.evidence.push(receipt); trimEvidence(room, work);
+  }
+  if (['Edit', 'Write', 'NotebookEdit'].includes(call.name) && !result.isError) recordTurnDiff(room, a, await projectDiff(room.path), a.turnId);
+  changed();
+}
+function recordTurnDiff(room, a, diff, turnId) {
+  a.diff = String(diff || '').slice(-120000);
+  const work = assignedWork(room, a.id);
+  if (work && a.diff) { const receipt = { id: uid(), kind: 'diff', text: a.diff, time: Date.now(), source: 'observed-turn-diff', turnId }; const index = work.evidence.findIndex(e => e.source === receipt.source && e.turnId === receipt.turnId); if (index >= 0 && !room.messages.some(m => m.evidenceLinks?.some(link => link.receiptId === work.evidence[index].id))) work.evidence[index] = receipt; else work.evidence.push(receipt); trimEvidence(room, work); }
+}
+function finishClaudeTurn(room, a, turnId, outcome) {
+  if (a.turnId !== turnId) return;
+  a.sessionId = outcome.sessionId || a.sessionId;
+  if (outcome.tokens != null) a.tokens = (a.tokens || 0) + outcome.tokens;
+  if (outcome.costUsd != null) event(a, 'system', `Claude turn: ${outcome.turns ?? '?'} steps, about $${outcome.costUsd.toFixed(2)}.`);
+  completeTurn(room, a, { status: outcome.status === 'finished' ? 'completed' : outcome.status === 'cancelled' ? 'interrupted' : 'failed', error: outcome.error });
+  changed();
+  // Messages that arrived as the turn was closing continue the same session right away.
+  if (outcome.status === 'finished' && outcome.unsent?.length) startAgent(room, a, outcome.unsent.join('\n\n')).catch(() => {});
+  scheduleWorkers(room).catch(() => {});
+}
+/** Delivers text into an agent's turn in flight, whichever engine runs it. */
+async function steerAgent(target, text) {
+  if (isClaude(target)) { if (!claude.send(target.id, text)) throw new Error('The Claude turn has ended.'); return; }
+  await codex.call('turn/steer', { threadId: target.threadId, expectedTurnId: target.turnId, input: [{ type: 'text', text }] });
+}
 async function stopAgent(a) {
   if (selfDriven(a) && a.turnId) throw new Error(`Stop execution in ${toolName(a)}, then use ${reporters[a.provider].tools}_finish to release this assignment.`);
   if (startingAgents.has(a.id)) throw new Error('Agent is starting. Wait for the turn to begin, then stop it.');
   // A run the office launched can genuinely be cancelled; cancellation lands through the stream.
-  if (a.provider === 'claude') { if (claude.running(a.id)) await claude.stop(a.id); a.status = 'paused'; return; }
+  if (isClaude(a)) {
+    if (claude.running(a.id)) await claude.stop(a.id);
+    // Wait for the turn to settle before replacing the writer, as with Codex.
+    const deadline = Date.now() + 12000;
+    while (a.turnId && Date.now() < deadline) await new Promise(r => setTimeout(r, 100));
+    if (a.turnId) throw new Error('Stop requested; waiting for Claude to stop. Try again when this turn stops.');
+    a.status = 'paused'; return;
+  }
   if (external(a)) { if (runner.running(a.id)) await runner.stop(a.id); a.status = 'paused'; return; }
   if (a.threadId && a.turnId) {
     try { await codex.call('turn/interrupt', { threadId: a.threadId, turnId: a.turnId }); }
@@ -215,9 +310,9 @@ async function stopAgent(a) {
 }
 async function sendTo(room, a, text) {
   if (selfDriven(a)) throw new Error(`Send this message in ${toolName(a)}. Iteration1 tracks this worker but does not control its execution.`);
-  if (a.provider === 'claude') { if (claude.send(a.id, text)) { event(a, 'user', text); changed(); } else await startAgent(room, a, text); return; }
   if (external(a)) throw new Error('This Cursor run takes one prompt. Wait for it to finish, then launch a follow-up run.');
   if (a.status === 'ejected') throw new Error('Replace this agent before sending a message.');
+  if (isClaude(a)) { if (claude.send(a.id, text)) { event(a, 'user', text); changed(); } else await startAgent(room, a, text); return; }
   if (a.turnId) { await codex.call('turn/steer', { threadId: a.threadId, expectedTurnId: a.turnId, input: [{ type: 'text', text }] }); event(a, 'user', text); }
   else await startAgent(room, a, text);
 }
@@ -229,7 +324,7 @@ async function refreshAccount() {
   connection.sandboxStatus=sandboxStatus;
   changed();
 }
-codex.on('offline', message => { loadedThreads.clear(); connection.connected = false; connection.error = message; for (const r of state.rooms) if (!r.demo) for (const a of r.agents) if (!external(a) && active(a)) { a.status = 'error'; a.turnId = null; setWorkStatus(r,a,'blocked',message);event(a, 'error', message); } state.approvals = []; changed(); });
+codex.on('offline', message => { loadedThreads.clear(); connection.connected = false; connection.error = message; for (const r of state.rooms) if (!r.demo) for (const a of r.agents) if (!external(a) && !isClaude(a) && active(a)) { a.status = 'error'; a.turnId = null; setWorkStatus(r,a,'blocked',message);event(a, 'error', message); } state.approvals = []; changed(); });
 let notificationQueue=Promise.resolve();
 const commandVersions=new Map();
 codex.on('notification', msg => {
@@ -279,13 +374,16 @@ async function handleNotification(msg) {
     const work=assignedWork(room,a.id);
     if(work && a.diff){const receipt={id:uid(),kind:'diff',text:a.diff,time:Date.now(),source:'observed-turn-diff',turnId:p.turnId || a.turnId};const index=work.evidence.findIndex(e=>e.source===receipt.source && e.turnId===receipt.turnId);if(index>=0 && !room.messages.some(m=>m.evidenceLinks?.some(link=>link.receiptId===work.evidence[index].id)))work.evidence[index]=receipt;else work.evidence.push(receipt);trimEvidence(room,work);}
   }
-  if (msg.method === 'turn/completed') {
-    a.lastCompletedTurnId = p.turn.id;
+  if (msg.method === 'turn/completed') { a.lastCompletedTurnId = p.turn.id; completeTurn(room, a, { status: p.turn.status, error: p.turn.error?.message }); }
+  changed();
+  if(msg.method==='turn/completed')scheduleWorkers(room).catch(()=>{});
+}
+function completeTurn(room, a, { status, error }) {
     a.turnId = null;
-    if (a.status !== 'ejected') a.status = p.turn.status === 'completed' ? 'done' : p.turn.status === 'failed' ? 'error' : 'paused';
+    if (a.status !== 'ejected') a.status = status === 'completed' ? 'done' : status === 'failed' ? 'error' : 'paused';
     if (a.status === 'done') a.progress = 100;
-    if (p.turn.error) event(a, 'error', p.turn.error.message);
-    setWorkStatus(room, a, a.status === 'done' ? 'review' : 'blocked', p.turn.error?.message || (a.status==='done'?'':'Turn interrupted. Resume explicitly.'));
+    if (error) event(a, 'error', error);
+    setWorkStatus(room, a, a.status === 'done' ? 'review' : 'blocked', error || (a.status==='done'?'':'Turn interrupted. Resume explicitly.'));
     delete a.deadline; record(room,`${a.name}: ${a.status==='done'?'work ready for review':a.status}`,'work');
     state.approvals = state.approvals.filter(x => x.agentId !== a.id);
     if (!a.manager && a.status === 'done') {
@@ -298,9 +396,6 @@ async function handleNotification(msg) {
         scheduleHandoff(room, manager);
       }
     }
-  }
-  changed();
-  if(msg.method==='turn/completed')scheduleWorkers(room).catch(()=>{});
 }
 const handoffTimers = new Map();
 function scheduleHandoff(room, manager) {
@@ -313,42 +408,52 @@ function scheduleHandoff(room, manager) {
     catch(e) { room.pendingHandoffs.unshift(...batch); event(manager, 'error', `Handoff awaiting manual resume: ${e.message}`); changed(); }
   }, 1200));
 }
+// The office tools both engines call: Codex through dynamic tool requests, Claude through MCP.
+async function officeTool(room, a, tool, args) {
+  if (room.paused || !a.turnId || a.status==='ejected') throw new Error('Only an active agent can coordinate this office');
+  if (!a.manager && !['office_status','office_message','office_acknowledge'].includes(tool)) throw new Error('Only the manager can delegate or update work.');
+  let output;
+  if (tool === 'office_delegate') {
+    const parsed = z.object({ name: z.string().min(1).max(40), task: z.string().min(1).max(12000), role: z.string().min(1).max(40), acceptanceCriteria: z.array(z.string().min(1).max(500)).max(8).optional(), dependsOn: z.array(z.string()).max(8).optional(), files:z.array(z.string().trim().min(1).max(500)).max(20).optional(),requiredEvidence:z.array(z.enum(['diff','test','screenshot','log'])).optional() }).parse(args);
+    const known = new Set(room.workItems.map(item => item.id));
+    if (parsed.dependsOn?.some(id => !known.has(id))) throw new Error('A dependency does not match a visible work item');
+    if(room.workItems.filter(t=>t.status!=='done' && !t.archived).length>=40)throw new Error('Finish existing assignments before creating more'); const worker = agent('', parsed.role, parsed.task, room.agents.length, delegateEngine(room, a)); room.agents.push(worker); claimIdentity(worker, room);
+    const item = workItem(parsed.task.split('\n')[0].slice(0, 120), parsed.task, { agentId: worker.id, status: 'queued', acceptanceCriteria: parsed.acceptanceCriteria || ['Return findings with file references'], dependsOn: parsed.dependsOn || [], files:parsed.files || [], requiredEvidence:parsed.requiredEvidence || ['log'], checks:[] }); room.workItems.push(item);
+    record(room, `Assigned: ${item.title}`, 'plan'); await scheduleWorkers(room);
+    output = { agentId: worker.id, workItemId: item.id, status: worker.status };
+  } else if (tool === 'office_status') {
+    identifyEvidence(room); const messages=inbox(room,a.id); if(messages.length)delivered(room,a,messages);
+    output = { selfId:a.id, inbox:messages, teammate:team.view(room), workItems:room.workItems.filter(t=>!t.archived), workers:room.agents.filter(w=>w.status!=='ejected').map(w=>({id:w.id,name:w.name,title:w.title,role:w.role,manager:!!w.manager,status:w.status,task:w.task,latest:w.events.at(-1)?.text})) };
+  } else if (tool === 'office_message') {
+    const message=team.queue(room,a,args) || queueHandoff(room,a,args); changed();
+    const target=room.agents.find(target=>target.id===message.toId);
+    if(target && !room.paused && target.turnId && target.status==='working' && !external(target) && !startingAgents.has(target.id)) {
+      try { await steerAgent(target, handoffEnvelope(presentHandoffs(room,[message])));delivered(room,target,[message]); }
+      catch(e) {message.deliveryError='Current turn ended or delivery failed. Waiting for the next turn.';event(a,'system',`Handoff queued for ${target.name}: ${e.message}`);}
+    }
+    record(room,`${a.name} -> ${message.toOwner ? message.toOwner+' / ' : ''}${message.to}: ${message.status}`,'handoff');
+    output={messageId:message.id,status:message.status,startsRecipient:false};
+  } else if(tool==='office_acknowledge') {
+    output=acknowledge(room,a,args);record(room,`${a.name} acknowledged a handoff from ${output.from}`,'handoff');
+  } else if (tool === 'office_update_work') {
+    const parsed = workChange.parse(args);
+    const item = room.workItems.find(item => item.id === parsed.workItemId); if (!item) throw new Error('Work item not found');
+    await validateReceipts(room,item,parsed); output = updateWork(room,item,parsed); await scheduleWorkers(room);
+  } else throw new Error('Unknown office tool');
+  return output;
+}
+// Workers a Claude manager delegates run on Claude too; lighter modes use the lightweight model.
+function delegateEngine(room, manager) {
+  if (!isClaude(manager)) return {};
+  return { provider: 'claude', model: ['crunch', 'economy'].includes(room.mode) ? 'claude-haiku-5-5' : manager.model };
+}
 codex.on('request', async msg => {
   await notificationQueue;
   const p = msg.params || {}; const { room, a } = findThread(p.threadId);
   if (!a) { codex.reject(msg.id, 'No matching office agent'); return; }
   if (msg.method === 'item/tool/call') {
     try {
-      if (room.paused || !a.turnId || a.status==='ejected') throw new Error('Only an active agent can coordinate this office');
-      if (!a.manager && !['office_status','office_message','office_acknowledge'].includes(p.tool)) throw new Error('Only the manager can delegate or update work.');
-      let output; const args = p.arguments || {};
-      if (p.tool === 'office_delegate') {
-        const parsed = z.object({ name: z.string().min(1).max(40), task: z.string().min(1).max(12000), role: z.string().min(1).max(40), acceptanceCriteria: z.array(z.string().min(1).max(500)).max(8).optional(), dependsOn: z.array(z.string()).max(8).optional(), files:z.array(z.string().trim().min(1).max(500)).max(20).optional(),requiredEvidence:z.array(z.enum(['diff','test','screenshot','log'])).optional() }).parse(args);
-        const known = new Set(room.workItems.map(item => item.id));
-        if (parsed.dependsOn?.some(id => !known.has(id))) throw new Error('A dependency does not match a visible work item');
-        if(room.workItems.filter(t=>t.status!=='done' && !t.archived).length>=40)throw new Error('Finish existing assignments before creating more'); const worker = agent('', parsed.role, parsed.task, room.agents.length); room.agents.push(worker); claimIdentity(worker, room);
-        const item = workItem(parsed.task.split('\n')[0].slice(0, 120), parsed.task, { agentId: worker.id, status: 'queued', acceptanceCriteria: parsed.acceptanceCriteria || ['Return findings with file references'], dependsOn: parsed.dependsOn || [], files:parsed.files || [], requiredEvidence:parsed.requiredEvidence || ['log'], checks:[] }); room.workItems.push(item);
-        record(room, `Assigned: ${item.title}`, 'plan'); await scheduleWorkers(room);
-        output = { agentId: worker.id, workItemId: item.id, status: worker.status };
-      } else if (p.tool === 'office_status') {
-        identifyEvidence(room); const messages=inbox(room,a.id); if(messages.length)delivered(room,a,messages);
-        output = { selfId:a.id, inbox:messages, teammate:team.view(room), workItems:room.workItems.filter(t=>!t.archived), workers:room.agents.filter(w=>w.status!=='ejected').map(w=>({id:w.id,name:w.name,title:w.title,role:w.role,manager:!!w.manager,status:w.status,task:w.task,latest:w.events.at(-1)?.text})) };
-      } else if (p.tool === 'office_message') {
-        const message=team.queue(room,a,args) || queueHandoff(room,a,args); changed();
-        const target=room.agents.find(target=>target.id===message.toId);
-        if(target && !room.paused && target.turnId && target.status==='working' && !external(target) && !startingAgents.has(target.id)) {
-          try { await codex.call('turn/steer',{threadId:target.threadId,expectedTurnId:target.turnId,input:[{type:'text',text:handoffEnvelope(presentHandoffs(room,[message]))}]});delivered(room,target,[message]); }
-          catch(e) {message.deliveryError='Current turn ended or delivery failed. Waiting for the next turn.';event(a,'system',`Handoff queued for ${target.name}: ${e.message}`);}
-        }
-        record(room,`${a.name} -> ${message.toOwner ? message.toOwner+' / ' : ''}${message.to}: ${message.status}`,'handoff');
-        output={messageId:message.id,status:message.status,startsRecipient:false};
-      } else if(p.tool==='office_acknowledge') {
-        output=acknowledge(room,a,args);record(room,`${a.name} acknowledged a handoff from ${output.from}`,'handoff');
-      } else if (p.tool === 'office_update_work') {
-        const parsed = workChange.parse(args);
-        const item = room.workItems.find(item => item.id === parsed.workItemId); if (!item) throw new Error('Work item not found');
-        await validateReceipts(room,item,parsed); output = updateWork(room,item,parsed); await scheduleWorkers(room);
-      } else throw new Error('Unknown office tool');
+      const output = await officeTool(room, a, p.tool, p.arguments || {});
       codex.respond(msg.id, { contentItems: [{ type: 'inputText', text: JSON.stringify(output) }], success: true }); changed();
     } catch (e) { codex.respond(msg.id, { contentItems: [{ type: 'inputText', text: e.message }], success: false }); }
   } else if (['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/tool/requestUserInput'].includes(msg.method)) {
@@ -365,7 +470,7 @@ const team=await createTeam({state,dataDir,port:Number(process.env.OFFICE_TEAM_P
 },onReceive:async(room,target,message)=>{
   record(room,`${message.fromOwner} / ${message.from} -> ${target.name}`,'handoff');
   if(room.paused || !target.turnId || target.status!=='working' || startingAgents.has(target.id))return;
-  try {await codex.call('turn/steer',{threadId:target.threadId,expectedTurnId:target.turnId,input:[{type:'text',text:handoffEnvelope([message])}]});delivered(room,target,[message]);}
+  try {await steerAgent(target, handoffEnvelope([message]));delivered(room,target,[message]);}
   catch {message.deliveryError='Waiting for the recipient’s next turn.';}
 }});
 app.disable('x-powered-by');
@@ -450,57 +555,6 @@ app.post('/api/rooms/:id/cursor/launch', wrap(async req => {
   try { const launched = await runner.launch(worker.id, input, { cwd: room.path, onMessage, onDone }); event(worker, 'system', `Cursor ${launched.runtime} run ${launched.runId}. Execution is owned by this office and can be stopped here.`); record(room, 'Cursor agent launched', 'work'); changed(); return { roomId: room.id, agentId: worker.id, workItemId: item.id, ...launched }; }
   catch (error) { worker.turnId = null; worker.status = 'error'; event(worker, 'error', error.message); item.status = 'blocked'; item.blocker = error.message; item.updatedAt = Date.now(); changed(); throw error; }
 }));
-// A Claude agent the office launches through the Claude Agent SDK. Like a Codex desk it can be
-// messaged mid-run, continued after it finishes (the session is resumed) and stopped.
-function claudeWriterBusy(room, a) {
-  return room.agents.some(w => w !== a && (w.turnId || startingAgents.has(w.id)) && (a.access === 'edit' || w.manager || w.access === 'edit'));
-}
-async function startClaudeTurn(room, a, prompt) {
-  const item = assignedWork(room, a.id);
-  a.workStartedAt = Date.now(); a.status = 'working'; a.turnId = uid(); setWorkStatus(room, a, 'working'); event(a, 'user', prompt); changed();
-  const onMessage = entry => { event(a, entry.kind, entry.text); a.updatedAt = Date.now(); changed(); };
-  const onDone = outcome => {
-    a.turnId = null; a.sessionId = outcome.sessionId || a.sessionId;
-    if (a.status !== 'ejected') a.status = outcome.status === 'finished' ? 'done' : outcome.status === 'cancelled' ? 'paused' : 'error';
-    if (a.status === 'done') a.progress = 100;
-    if (outcome.error) event(a, 'error', outcome.error);
-    if (outcome.result) event(a, 'update', outcome.result);
-    if (outcome.costUsd != null) event(a, 'system', `Claude run used ${outcome.turns ?? '?'} turns, about $${outcome.costUsd.toFixed(2)}.`);
-    setWorkStatus(room, a, outcome.status === 'finished' ? 'review' : 'blocked', outcome.status === 'finished' ? '' : outcome.error || 'Run stopped. Send a message to continue.');
-    if (item) { identifyEvidence(room); trimEvidence(room, item); }
-    record(room, `${a.name}: Claude run ${outcome.status}`, 'work'); changed();
-    // Messages that arrived while the run was closing continue the same session right away.
-    if (outcome.status === 'finished' && outcome.unsent.length) startAgent(room, a, outcome.unsent.join('\n\n')).catch(() => {});
-  };
-  try { const launched = await claude.launch(a.id, { prompt, model: a.model, access: a.access, effort: a.effort || 'high' }, { cwd: room.path, resume: a.sessionId, onSession: id => { a.sessionId = id; changed(); }, onMessage, onDone }); if (!launched.resumed) event(a, 'system', `Claude ${a.access === 'edit' ? 'editing' : 'read-only'} run on ${launched.model}. Message this desk to steer or continue it.`); changed(); return launched; }
-  catch (error) { a.turnId = null; a.status = 'error'; event(a, 'error', error.message); setWorkStatus(room, a, 'blocked', error.message); changed(); throw error; }
-}
-async function continueClaude(room, a, prompt) {
-  if (room.archived) throw new Error('Restore this project before starting work.');
-  if (room.paused) throw new Error('Resume this office before starting work.');
-  if (room.capturing) throw new Error('A checkpoint is being captured. Try again shortly.');
-  if (a.status === 'ejected') throw new Error('This agent has been ejected. Replace it to continue.');
-  if (claude.running(a.id)) throw new Error('This agent is already working. Send a message to steer it.');
-  cursor.assertAvailable(room);
-  if (claudeWriterBusy(room, a)) throw new Error('Wait for the active office work to finish before continuing this Claude agent.');
-  await startClaudeTurn(room, a, prompt);
-}
-app.post('/api/rooms/:id/claude/launch', wrap(async req => {
-  const room = roomBy(state, req.params.id);
-  if (room.demo) throw new Error('Choose a live project room for Claude work.');
-  const input = claudeLaunchFields.parse(req.body);
-  cursor.assertAvailable(room);
-  if (room.capturing) throw new Error('Wait for the checkpoint to finish before launching a run.');
-  // Only one writer per project: an editing run waits for every active turn; a read-only run only for other writers.
-  if (claudeWriterBusy(room, { access: input.access })) throw new Error('Wait for the active office work to finish before launching a Claude agent.');
-  const worker = agent('', input.access === 'edit' ? 'Implementation' : 'Research', input.prompt, room.agents.length, { provider: 'claude', model: input.model, modelSource: 'office-selected', access: input.access, effort: input.effort, status: 'idle' });
-  const item = workItem(input.prompt.split('\n')[0].slice(0, 120), input.prompt, { agentId: worker.id, status: 'queued', acceptanceCriteria: ['Return a concrete, evidence-backed result'], requiredEvidence: [input.access === 'edit' ? 'diff' : 'log'], checks: [], comments: [], files: [] });
-  room.paused = false; room.agents.push(worker); claimIdentity(worker, room); room.workItems.push(item); room.goal ||= input.prompt;
-  focusTicket(room, worker, item);
-  const launched = await startClaudeTurn(room, worker, input.prompt);
-  record(room, 'Claude agent launched', 'work'); changed();
-  return { roomId: room.id, agentId: worker.id, workItemId: item.id, ...launched };
-}));
 // Cursor, Claude Code and Codex CLI sessions report in over MCP under /cursor, /claude-code and /codex-cli.
 for (const provider of Object.keys(reporters)) {
   app.post(`/api/rooms/:id/${provider}/start`, wrap(async req => { await syncIdentity(); return cursor.start(roomBy(state, req.params.id), req.body, provider); }));
@@ -551,8 +605,8 @@ app.post('/api/rooms/:id/work/:workId/assign',wrap(async req=>{
   const {role}=z.object({role:z.enum(['Implementation','Research','Review'])}).strict().parse(req.body);
   const manager=room.agents.find(a=>a.manager && a.status!=='ejected');
   const available=()=>{if(!room.workItems.includes(item) || (manager && !room.agents.includes(manager)))throw new Error('Office changed. Reopen this ticket.');if(item.agentId || item.status==='done' || item.archived)throw new Error('This ticket is already assigned, archived or verified.');if(room.capturing)throw new Error('Wait for the checkpoint to finish.');cursor.assertAvailable(room);if(role==='Implementation' && (!manager || manager.status==='ejected' || manager.turnId || startingAgents.has(manager.id)))throw new Error('Pause the current manager assignment before starting this ticket.');};
-  available();if(!room.demo)await ensureConnected();available();
-  const worker=role==='Implementation'?manager:agent('',role,`${item.title}\n${item.description}`,room.agents.length);
+  available();if(!room.demo){if(manager)await ensureEngine(manager);else await ensureConnected();}available();
+  const worker=role==='Implementation'?manager:agent('',role,`${item.title}\n${item.description}`,room.agents.length,manager?delegateEngine(room,manager):{});
   if(!worker.manager){room.agents.push(worker);claimIdentity(worker,room);}
   focusTicket(room,worker,item);item.updatedAt=Date.now();item.status='queued';item.blocker='';
   if(worker.manager){item.requiredEvidence=[...new Set([...(item.requiredEvidence||[]),'diff','test'])];room.goal ||= item.title;}
@@ -668,15 +722,17 @@ app.post('/api/rooms/:id/dispatch', wrap(async req => {
   let a = r.agents.find(a => a.manager && a.status !== 'ejected'); if (!a) throw new Error('Replace the manager first.');
   if (!r.demo && r.agents.some(w=>w.turnId || startingAgents.has(w.id))) throw new Error('Pause the office before starting a new mission.');
   if (b.templateId && !templates.some(template=>template.id===b.templateId)) throw new Error('Template not found');
+  const managerModel = b.model || a.model;
   if (!r.demo) {
-    await ensureConnected();
+    await ensureEngine(a, managerModel);
     cursor.assertAvailable(r);
     if(!r.agents.includes(a))throw new Error('Office changed. Try starting the mission again.');
-    if (b.model && b.model!=='Account default' && !connection.models.some(model=>model.id===b.model)) throw new Error('Choose a model available to this account.');
+    if (b.model) assertModelAvailable(b.model);
     if (r.agents.some(worker=>worker.turnId || startingAgents.has(worker.id))) throw new Error('Pause the office before starting a new mission.');
   }
-  if(!r.demo){r.workspaceCheck=await checkWorkspace(codex,r.path);cursor.assertAvailable(r);if(!r.agents.includes(a) || a.status==='ejected' || r.stopping || r.capturing || r.agents.some(w=>w.turnId || startingAgents.has(w.id)))throw new Error('Office changed during the access check. Try again.');}
-  if (b.model) a.model = b.model;
+  // The Codex sandbox read check applies to Codex managers; Claude reads the folder through its own tools.
+  if(!r.demo && !isClaudeModel(managerModel)){r.workspaceCheck=await checkWorkspace(codex,r.path);cursor.assertAvailable(r);if(!r.agents.includes(a) || a.status==='ejected' || r.stopping || r.capturing || r.agents.some(w=>w.turnId || startingAgents.has(w.id)))throw new Error('Office changed during the access check. Try again.');}
+  if (b.model) setEngine(a, b.model);
   r.goal = b.prompt; r.paused = false; r.missionStartedAt = Date.now(); a.task = b.prompt;
   if(!b.templateId){const item=workItem(b.prompt.split('\n')[0].slice(0,120),b.prompt,{agentId:a.id,status:'queued',acceptanceCriteria:['The requested outcome is implemented','Verification evidence is attached'],requiredEvidence:['diff','test']});focusTicket(r,a,item);r.workItems.push(item);}
   if (r.demo) { event(a, 'user', b.prompt); event(a, 'update', 'Demo assignment received. In a live office, the manager delegates research, implements changes, and requests review.'); a.status = 'working'; a.progress = 10;
@@ -692,7 +748,7 @@ app.post('/api/rooms/:id/pause',wrap(async req=>{
   r.stopping=false;record(r,'Office paused','pause');changed();const fail=results.find(x=>x.status==='rejected');if(fail)throw fail.reason;
 }));
 app.post('/api/rooms/:id/resume',wrap(async req=>{
-  const r=roomBy(state,req.params.id);cursor.assertAvailable(r);if(!r.demo)await ensureConnected();cursor.assertAvailable(r);
+  const r=roomBy(state,req.params.id);cursor.assertAvailable(r);if(!r.demo){const lead=r.agents.find(a=>a.manager && a.status!=='ejected');if(lead)await ensureEngine(lead);else await ensureConnected();}cursor.assertAvailable(r);
   if(r.stopping || r.capturing || r.agents.some(a=>startingAgents.has(a.id)) || (r.paused && r.agents.some(a=>a.turnId)))throw new Error('Wait for the current operation to finish.');
   r.paused=false;
   const resumable=r.workItems.filter(t=>t.resumeOnOffice && !t.archived && t.status==='blocked');
@@ -710,7 +766,8 @@ app.post('/api/rooms/:id/agents/:aid/speed', wrap(async req => {
   const r = roomBy(state, req.params.id); const a = agentBy(r, req.params.aid);
   const { fast } = z.object({ fast: z.boolean() }).strict().parse(req.body);
   if (selfDriven(a)) throw new Error(`Choose model and speed settings in ${toolName(a)}.`);
-  if (external(a)) throw new Error(`Choose the model when you launch the next ${a.provider === 'claude' ? 'Claude' : 'Cursor'} run.`);
+  if (external(a)) throw new Error('Choose the model when you launch the next Cursor run.');
+  if (isClaude(a)) throw new Error('Fast mode applies to Codex agents. Replace this agent to choose a different Claude model.');
   if (a.status === 'ejected') throw new Error('This agent has left. Select its replacement.');
   if (startingAgents.has(a.id)) throw new Error('A turn is starting. Try again once it has started.');
   const message = `${r.demo ? 'Demo: ' : ''}${fast ? 'Fast mode requested' : 'Standard speed selected'} for ${a.name}’s next turn.${fast && !r.demo ? ' Higher usage may apply; availability depends on the model and account.' : ''}`;
@@ -721,7 +778,7 @@ app.post('/api/rooms/:id/agents/:aid/eject', wrap(async req => {
   const r = roomBy(state, req.params.id); const a = agentBy(r, req.params.aid); if (a.status === 'ejected') throw new Error('Agent already ejected.');
   if (a.manager) { cursor.assertAvailable(r); r.paused = true; for (const worker of r.agents.filter(w => !w.manager && active(w))) { if (!r.demo) await stopAgent(worker); else worker.status = 'paused'; setWorkStatus(r, worker, 'blocked', 'Manager replaced; waiting for the new manager to resume this task.'); } }
   if (!r.demo) await stopAgent(a);
-  a.handoffPacket=handoffPacket(r,a); a.handoff = JSON.stringify(a.handoffPacket); a.status = 'ejected'; a.ejectedAt = Date.now(); setWorkStatus(r, a, 'blocked', 'Agent ejected; task is waiting for a replacement.'); event(a, 'system', 'Ejected from floor 14. Task history preserved for replacement.'); record(r,`${a.name} ejected; handoff saved`,'handoff'); changed();
+  a.handoffPacket=handoffPacket(r,a); a.handoff = JSON.stringify(a.handoffPacket); a.status = 'ejected'; a.ejectedAt = Date.now(); setWorkStatus(r, a, 'blocked', 'Agent ejected; task is waiting for a replacement.'); event(a, 'system', 'Ejected from the office. Task history preserved for replacement.'); record(r,`${a.name} ejected; handoff saved`,'handoff'); changed();
 }));
 app.post('/api/rooms/:id/agents/:aid/replace', wrap(async req => {
   const r = roomBy(state, req.params.id); cursor.assertAvailable(r); const old = agentBy(r, req.params.aid); const { model } = z.object({ model: z.string().min(1).max(120) }).parse(req.body);
@@ -736,11 +793,11 @@ app.post('/api/rooms/:id/agents/:aid/replace', wrap(async req => {
   };
   preflight();
   if (!r.demo) {
-    await ensureConnected();
+    await ensureEngine(old, model);
     preflight();
-    if (model !== 'Account default' && !connection.models.some(m => m.id === model)) throw new Error('Choose a model available to this account.');
+    assertModelAvailable(model);
   }
-  const packet=old.handoffPacket || handoffPacket(r,old); if(!old.title)claimIdentity(old,r); const next = agent(replacementName(old, r), old.role, old.task, r.agents.length, { model, manager: old.manager, color: old.color, title: old.title, replaces: old.id, handoffPacket:packet });
+  const packet=old.handoffPacket || handoffPacket(r,old); if(!old.title)claimIdentity(old,r); const next = agent(replacementName(old, r), old.role, old.task, r.agents.length, { model, ...(isClaudeModel(model) ? { provider: 'claude' } : {}), manager: old.manager, color: old.color, title: old.title, replaces: old.id, handoffPacket:packet });
   old.replacedBy = next.id; old.status = 'ejected'; old.ejectedAt ||= Date.now(); r.agents.push(next); transferInbox(r,old,next); if (next.manager) r.paused = false;
   const focused = assignedWork(r, old.id);const item=focused && focused.status!=='done' && !focused.archived?focused:null;for(const task of r.workItems.filter(t=>t.agentId===old.id && t.status!=='done' && !t.archived))task.agentId=next.id;if(item){next.currentWorkItemId=item.id;item.status='queued';item.blocker='';item.updatedAt=Date.now();}
   if(!item){next.status='idle';next.task='Ready for an assignment';record(r,`${old.name} replaced; verified work preserved`,'handoff');changed();return {agent:next};}

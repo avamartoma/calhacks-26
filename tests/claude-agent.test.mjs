@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createClaudeRunner, createTranslator, accessOptions, claudeLaunchFields } from '../server/claude-agent.mjs';
+import { createClaudeRunner, createTranslator, accessOptions, isClaudeModel } from '../server/claude-agent.mjs';
+import { todosToPlan, officeToolNames, projectDiff } from '../server/claude-office.mjs';
 
 const assistant = content => ({ type: 'assistant', message: { role: 'assistant', content } });
 const toolResult = (id, content, isError = false) => ({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content, is_error: isError }] } });
@@ -32,15 +33,12 @@ function fakeSdk({ turns = [[success]], hold, throwAt, sessionId = 'session-1' }
   return { sdk: { query }, calls };
 }
 
-const input = claudeLaunchFields.parse({ prompt: 'Make search keyboard accessible' });
+const input = { prompt: 'Make search keyboard accessible', model: 'claude-opus-5-5', access: 'edit', effort: 'high' };
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve)); };
 
-test('launch fields default to Opus with editing access and reject unknown models', () => {
-  assert.equal(input.model, 'claude-opus-5-5');
-  assert.equal(input.access, 'edit');
-  assert.equal(input.effort, 'high');
-  assert.throws(() => claudeLaunchFields.parse({ prompt: 'x', model: 'gpt-6-sol' }));
-  assert.throws(() => claudeLaunchFields.parse({ prompt: 'x', cwd: '/' }), 'unknown fields are rejected');
+test('Claude models are told apart from Codex models', () => {
+  assert.ok(isClaudeModel('claude-opus-5-5') && isClaudeModel('claude-haiku-5-5'));
+  assert.ok(!isClaudeModel('gpt-6-sol') && !isClaudeModel('Account default') && !isClaudeModel(undefined));
 });
 
 test('private reasoning and bookkeeping never become observable work', () => {
@@ -73,7 +71,7 @@ test('a tool call is published once its result arrives, by tool kind', () => {
 
 test('read-only desks get read tools only; editing desks run commands in a required sandbox', async () => {
   const read = accessOptions('read');
-  assert.deepEqual(read.tools, ['Read', 'Glob', 'Grep']);
+  assert.deepEqual(read.tools, ['Read', 'Glob', 'Grep', 'TodoWrite'], 'read-only desks can still publish a plan');
   assert.equal(read.permissionMode, 'dontAsk');
   assert.equal(read.sandbox, undefined);
   assert.equal((await read.canUseTool('Write')).behavior, 'deny');
@@ -178,4 +176,44 @@ test('a follow-up after a run ends resumes the saved session', async () => {
   await settle();
   assert.equal(launched.resumed, true);
   assert.equal(calls.options.resume, 'session-1', 'the agent keeps its earlier context');
+});
+
+test('office tools are allowed by their MCP names, and nothing else is', async () => {
+  const names = officeToolNames([{ name: 'office_delegate' }, { name: 'office_status' }]);
+  assert.deepEqual(names, ['mcp__office__office_delegate', 'mcp__office__office_status']);
+  const options = accessOptions('read', names);
+  assert.ok(options.allowedTools.includes('mcp__office__office_status'));
+  assert.equal((await options.canUseTool('mcp__office__office_delegate')).behavior, 'allow');
+  assert.equal((await options.canUseTool('mcp__other__anything')).behavior, 'deny');
+  assert.equal((await options.canUseTool('Bash')).behavior, 'deny', 'a read-only desk still cannot run commands');
+});
+
+test('tool calls and results reach the evidence hooks', () => {
+  const uses = [], results = [];
+  const translate = createTranslator({ onToolUse: block => uses.push(block.name), onToolResult: (call, result) => results.push([call.name, result]) });
+  translate(assistant([{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'npm test' } }]));
+  translate(toolResult('t1', [{ type: 'text', text: '3 passing' }], true));
+  assert.deepEqual(uses, ['Bash']);
+  assert.deepEqual(results, [['Bash', { output: '3 passing', isError: true }]]);
+});
+
+test('a TodoWrite list becomes the office plan', () => {
+  assert.deepEqual(todosToPlan([{ content: 'Read the code', status: 'completed' }, { content: 'Add tests', status: 'in_progress' }, { content: 'Ship', status: 'pending' }]),
+    [{ step: 'Read the code', status: 'completed' }, { step: 'Add tests', status: 'inProgress' }, { step: 'Ship', status: 'pending' }]);
+  assert.equal(todosToPlan(undefined), null);
+});
+
+test('the project diff covers edited and new files, and is empty outside Git', async t => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { execFileSync } = await import('node:child_process');
+  const os = await import('node:os'); const path = await import('node:path');
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'iteration1-diff-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  assert.equal(await projectDiff(dir), '');
+  const git = (...args) => execFileSync('git', args, { cwd: dir });
+  git('init', '-q'); git('config', 'user.email', 'f@example.invalid'); git('config', 'user.name', 'F');
+  await writeFile(path.join(dir, 'a.txt'), 'one\n'); git('add', 'a.txt'); git('commit', '-qm', 'base');
+  await writeFile(path.join(dir, 'a.txt'), 'two\n'); await writeFile(path.join(dir, 'new.txt'), 'fresh\n');
+  const diff = await projectDiff(dir);
+  assert.match(diff, /-one/); assert.match(diff, /\+two/); assert.match(diff, /new\.txt/); assert.match(diff, /\+fresh/);
 });

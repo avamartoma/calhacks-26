@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, CheckCheck, Copy, ExternalLink, KeyRound, LoaderCircle, Play } from 'lucide-react';
+import { ArrowRight, Check, CheckCheck, Copy, ExternalLink, KeyRound, LoaderCircle } from 'lucide-react';
 import type { Room } from './types';
 import { ProviderConnection } from './ProviderConnection';
 
@@ -19,13 +19,11 @@ async function post(url: string, body: unknown) {
 
 /**
  * Claude Code reports into this room over MCP and runs on its own Claude sign-in, so no key is
- * needed. The office can also launch runs with its own Claude profile or an API key.
+ * needed. With the office's own Claude profile or an API key, Claude also runs office agents
+ * like Codex: choose a Claude model for the manager or any agent.
  */
-export function ClaudePanel({ room, claude, code, onChange }: { room: Room; claude: ClaudeIntegration | null; code: ClaudeCodeIntegration | null; onChange: () => void }) {
+export function ClaudePanel({ room, claude, code, onChange, onStartWork }: { room: Room; claude: ClaudeIntegration | null; code: ClaudeCodeIntegration | null; onChange: () => void; onStartWork?: () => void }) {
   const [apiKey, setApiKey] = useState('');
-  const [prompt, setPrompt] = useState('');
-  const [model, setModel] = useState('claude-opus-5-5');
-  const [access, setAccess] = useState<'edit' | 'read'>('edit');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(''); const [notice, setNotice] = useState(''); const [copied, setCopied] = useState('');
   async function run(fn: () => Promise<string | void>) {
@@ -35,10 +33,6 @@ export function ClaudePanel({ room, claude, code, onChange }: { room: Room; clau
   async function copy(text: string, kind: string) { try { await navigator.clipboard.writeText(text); setCopied(kind); setError(''); } catch { setError('Clipboard unavailable. Copy the command from Connection setup instead.'); } }
   const connect = (key = apiKey) => run(async () => { await post('/api/claude/key', { apiKey: key }); setApiKey(''); onChange(); return 'Claude connected.'; });
   const disconnect = () => run(async () => { await post('/api/claude/key/remove', {}); onChange(); return 'Claude disconnected. The key was removed from this computer.'; });
-  const launch = () => run(async () => {
-    const body = await post(`/api/rooms/${room.id}/claude/launch`, { prompt, model, access });
-    setPrompt(''); return `Launched on ${claude?.models.find(m => m.id === body.model)?.name || body.model}. Follow it at its desk.`;
-  });
 
   const outcome = sessionStorage.getItem(`iteration1-mission:${room.id}`)?.trim();
   const sessionPrompt = `Use Iteration1 for ${room.path}. ${room.demo ? 'Call office_open and office_status to inspect the live workspace.' : `Call office_status with roomId ${room.id} to inspect this office.`} Show existing work and blockers before starting. When I ask you to implement, claim ownership with office_claude_start, publish progress with office_claude_update, and call office_claude_finish after execution ends. Report your model id only if your environment states it. Do not edit alongside an active office writer.${outcome ? ` Requested outcome: ${outcome}` : ''}`;
@@ -73,7 +67,7 @@ export function ClaudePanel({ room, claude, code, onChange }: { room: Room; clau
     </details>
     </details>
 
-    <details className="compact-disclosure" open={ready}><summary>Launch Claude from the office</summary>
+    <details className="compact-disclosure" open={ready}><summary>Run Claude agents in the office</summary>
     {!claude ? <p>Loading…</p>
       : !ready ? <>
         <p>Sign in above, or connect an Anthropic API key billed to that account.</p>
@@ -86,16 +80,8 @@ export function ClaudePanel({ room, claude, code, onChange }: { room: Room; clau
       </>
       : <>
         <div className="account-info"><CheckCheck size={22} /><div><b>{subscription ? 'Claude account connected' : 'API key connected'}</b><small>{subscription ? 'Using the Iteration1 Claude Code profile' : claude.source === 'environment' ? `Using ANTHROPIC_API_KEY (${claude.hint})` : `API key ${claude.hint}`}</small></div></div>
-        {room.demo ? <p className="notice">Open a live project room to launch Claude agents.</p> : <>
-          <p>Launch a Claude agent at a new desk. It works in <code>{room.path}</code>. Message it at its desk to steer or continue it.</p>
-          <label>Task<textarea rows={3} value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Describe the work" /></label>
-          <label>Model<select value={model} onChange={e => setModel(e.target.value)}>{claude.models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
-          <label>Access<select value={access} onChange={e => setAccess(e.target.value as 'edit' | 'read')}>
-            <option value="edit">Edit files and run sandboxed commands</option>
-            <option value="read">Read only</option>
-          </select></label>
-          <button className="primary full" disabled={busy || !prompt.trim()} onClick={() => void launch()}><Play size={16} /> {busy ? 'Launching…' : 'Launch Claude agent'}</button>
-        </>}
+        <p>Claude agents work in the office like Codex agents: a Claude manager plans, delegates to Claude workers, edits, runs checks and hands off through tickets. Choose a Claude model as the <b>Manager model</b> when you start work, or when you replace any agent.</p>
+        {room.demo ? <p className="notice">Open a live project room to run Claude agents.</p> : onStartWork && <button className="primary full" onClick={onStartWork}><ArrowRight size={16} /> Start work with Claude</button>}
         {claude.source === 'saved' && <button className="text-button" disabled={busy} onClick={() => void disconnect()}>Disconnect key</button>}
       </>}
     </details>

@@ -44,8 +44,10 @@ export function agentBy(room, id) { const a = room.agents.find(a => a.id === id)
 export function active(a) { return ['working', 'talking', 'approval'].includes(a.status); }
 /** A Cursor, Claude Code or Codex CLI session drives itself; the office observes it and cannot stop it. */
 export function selfDriven(a) { return a?.provider === 'cursor' || a?.provider === 'claude-code' || a?.provider === 'codex-cli'; }
-/** Any worker that does not run on the Codex app-server thread: a self-driven session, a launched Cursor run, or a launched Claude agent. */
-export function external(a) { return selfDriven(a) || a?.provider === 'cursor-sdk' || a?.provider === 'claude'; }
+/** A worker whose turns the office does not run: a self-driven session or a launched Cursor run. */
+export function external(a) { return selfDriven(a) || a?.provider === 'cursor-sdk'; }
+/** An office agent whose turns run on Claude through the Claude Agent SDK instead of Codex. */
+export function isClaude(a) { return a?.provider === 'claude'; }
 export function canDelegate(room) {
   if (room.paused) throw new Error('This office is paused');
   if (room.agents.filter(a => !a.manager && active(a)).length >= room.budget) throw new Error(`Worker limit reached (${room.budget}). Wait for a result before delegating more.`);

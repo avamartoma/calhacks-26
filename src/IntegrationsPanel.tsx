@@ -14,7 +14,7 @@ const providerNames = { codex: 'Codex', claude: 'Claude', cursor: 'Cursor' };
 interface Integrations { cursor: { command: string; script: string; url: string; account?: { configured: boolean } }; claudeCode: ClaudeCodeIntegration; codexCli?: CodexCliIntegration; claude: ClaudeIntegration }
 interface Identity { sub: string; label: string; email?: string; record: { started: number; review: number; blocked: number; verified: number } }
 interface Auth { provider: { domain: string; clientId: string; fromEnv: boolean } | null; signedIn: boolean; identity: Identity | null; redirectUri: string }
-export function IntegrationsPanel({ room, connection, focus, onContinue }: { room: Room; connection: OfficeState['connection']; focus?: { provider: ConnectionProvider; request: number } | null; onContinue?: () => void }) {
+export function IntegrationsPanel({ room, connection, focus, onContinue, onStartWork }: { room: Room; connection: OfficeState['connection']; focus?: { provider: ConnectionProvider; request: number } | null; onContinue?: () => void; onStartWork?: () => void }) {
   const [selected, setSelected] = useState<ConnectionProvider>(focus?.provider || 'codex');
   const tabs = useRef<Partial<Record<ConnectionProvider, HTMLButtonElement | null>>>({});
   useEffect(() => { if (focus) { setSelected(focus.provider); tabs.current[focus.provider]?.focus({ preventScroll: true }); } }, [focus?.provider, focus?.request]);
@@ -71,7 +71,7 @@ export function IntegrationsPanel({ room, connection, focus, onContinue }: { roo
     </div>
     <section className="provider-content" role="tabpanel" id={`connection-panel-${selected}`} aria-labelledby={`connection-tab-${selected}`} tabIndex={0}>
     {selected === 'codex' && <><CodexConnection connection={connection} onContinue={onContinue} /><CodexSessionPanel room={room} codex={data?.codexCli ?? null} /></>}
-    {selected === 'claude' && <ClaudePanel room={room} claude={data?.claude ?? null} code={data?.claudeCode ?? null} onChange={() => void load()} />}
+    {selected === 'claude' && <ClaudePanel room={room} claude={data?.claude ?? null} code={data?.claudeCode ?? null} onChange={() => void load()} onStartWork={onStartWork} />}
     {selected === 'cursor' && <>
     <h3 className="provider-title">Cursor</h3>
     <ProviderConnection provider="cursor" onChange={() => void load()} />
