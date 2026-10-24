@@ -106,6 +106,7 @@ export function createClaudeRunner({
   // OFFICE_CLAUDE_SDK points tests at a deterministic stand-in, as OFFICE_CODEX_BIN does for Codex.
   importSdk = () => import(process.env.OFFICE_CLAUDE_SDK ? pathToFileURL(process.env.OFFICE_CLAUDE_SDK).href : '@anthropic-ai/claude-agent-sdk'),
   apiKey = () => process.env.ANTHROPIC_API_KEY,
+  oauth = async () => false,
   // Sessions are kept apart from the user's own Claude Code history, as Codex keeps its own home.
   configDir = () => process.env.OFFICE_CLAUDE_HOME || path.join(homedir(), '.iteration1', 'claude')
 } = {}) {
@@ -113,8 +114,9 @@ export function createClaudeRunner({
   /** Starts a run. With `resume`, it continues an earlier session, so the agent keeps its context. */
   async function launch(id, input, { cwd, resume, instructions, mcpServers, extraTools = [], onSession, onMessage, onToolUse, onToolResult, onDone }) {
     if (runs.has(id)) throw new Error('This desk already has a Claude run in flight. Stop it before launching another.');
-    const key = apiKey();
-    if (!key) throw new Error('Connect Claude first: open Tools → Integrations and add your Anthropic API key.');
+    const useOAuth = await oauth();
+    const key = useOAuth ? null : apiKey();
+    if (!key && !useOAuth) throw new Error('Connect Claude first: open Connections → Claude and sign in or add your Anthropic API key.');
     const { query } = await importSdk();
     const abortController = new AbortController();
     const prompt = inputQueue(input.prompt);
@@ -123,10 +125,11 @@ export function createClaudeRunner({
       ...(resume ? { resume } : {}),
       // Only the project folder and this office's instructions shape the run, never the user's own Claude settings.
       settingSources: [],
-      env: { ...process.env, ANTHROPIC_API_KEY: key, CLAUDE_CONFIG_DIR: configDir() },
+      // Auth comes from this profile or its explicit key. Never inherit a different CLI's token.
+      env: { ...process.env, ANTHROPIC_API_KEY: key || undefined, ANTHROPIC_AUTH_TOKEN: undefined, CLAUDE_CODE_OAUTH_TOKEN: undefined, CLAUDE_CONFIG_DIR: configDir() },
       systemPrompt: { type: 'preset', preset: 'claude_code', append: instructions || (input.access === 'edit'
-        ? 'You are working at a desk in Iteration1. Keep changes focused on the request, run the relevant checks, and finish with a short summary of what changed and how you verified it.'
-        : 'You are a read-only specialist at a desk in Iteration1. Inspect and report findings with file paths. Do not try to edit files.') },
+        ? 'You are working at a desk in Iteration1. Keep changes focused on the request, run the relevant checks, and finish with a short summary of what changed and how you verified it. The user may send follow-up messages; treat each as a continuation of the same work.'
+        : 'You are a read-only specialist at a desk in Iteration1. Inspect and report findings with file paths. Do not try to edit files. The user may send follow-up messages; treat each as a continuation of the same work.') },
       ...(mcpServers ? { mcpServers } : {}),
       ...accessOptions(input.access, extraTools)
     };

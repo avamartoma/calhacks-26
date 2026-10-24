@@ -24,6 +24,8 @@ import { featureUrl } from './feature-link.mjs';
 import { permissionMode, permissionsFor, permissionKey } from './permissions.mjs';
 import { modes, templates, initOffice, record, waitingReason, completionGaps, updateWork, handoffPacket, selectPolicy, teamInstructions, applyTemplate, createDemo, stepDemo } from './orchestration.mjs';
 import { checkpoint, restoreState, branchCheckpoint } from './checkpoints.mjs';
+import { homedir } from 'node:os';
+import { createCodexCallback, createClaudeLogin, createCursorLogin } from './provider-login.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = path.resolve(process.env.OFFICE_DATA_DIR || path.join(root, '.office'));
@@ -69,10 +71,16 @@ async function syncIdentity() {
 await syncIdentity();
 const cursor = createCursorDesk({ state, changed, isStarting: id => startingAgents.has(id), currentIdentity: () => liveIdentity });
 const toolName = a => reporters[a.provider]?.name || 'Cursor';
-const runner = createCursorRunner();
+const codexCallback = createCodexCallback();
+let codexLoginId = null;
+const claudeLogin = createClaudeLogin({ configDir: process.env.OFFICE_CLAUDE_HOME || path.join(homedir(), '.iteration1', 'claude') });
+await claudeLogin.load();
+const cursorLogin = createCursorLogin({ file: process.env.OFFICE_CURSOR_AUTH_FILE || path.join(dataDir, 'provider-auth', 'cursor.json'), changed });
+await cursorLogin.load();
+const runner = createCursorRunner({ apiKey: () => cursorLogin.current() });
 const claudeKey = createClaudeKeyStore(); await claudeKey.load();
-const claude = createClaudeRunner({ apiKey: () => claudeKey.current() });
-function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, claude: { ...claudeKey.status(), models: claudeModels }, identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates }; }
+const claude = createClaudeRunner({ apiKey: () => claudeKey.current(), oauth: async () => { if (claudeLogin.isCompleting()) throw new Error('Wait for Claude sign-in to finish.'); await claudeLogin.load(); return !process.env.ANTHROPIC_API_KEY && claudeLogin.status().configured; }, configDir: () => claudeLogin.configDir });
+function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, claude: { ...claudeKey.status(), models: claudeModels, configured: claudeKey.status().configured || claudeLogin.status().configured }, identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates }; }
 function changed() {
   if (!broadcastTimer) broadcastTimer = setTimeout(() => {
     broadcastTimer = undefined;
@@ -335,6 +343,7 @@ async function handleNotification(msg) {
     return;
   }
   if (msg.method === 'account/updated' || msg.method === 'account/login/completed') {
+    if (msg.method === 'account/login/completed') { codexCallback.cancel(); codexLoginId = null; }
     const failed = msg.method === 'account/login/completed' && msg.params?.success === false;
     refreshAccount().then(() => { if (failed && !connection.account) { connection.error = msg.params.error || 'Sign-in did not finish. Try again.'; changed(); } }).catch(e => { connection.error = e.message; changed(); });
     return;
@@ -489,7 +498,23 @@ app.post('/api/rooms/:id/team/message',wrap(async req=>{
   const message=team.queue(room,{...sender,peerMessagesThisTurn:0},args);if(!message)throw new Error('Choose a teammate agent.');
   message.sentByOwner=true;changed();return {message};
 }));
-app.get('/api/integrations', (req, res) => res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claudeCode: { command: process.execPath, script: path.join(root, 'scripts', 'claude-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claude: { ...claudeKey.status(), models: claudeModels } }));
+app.get('/api/integrations', wrap(async (req, res) => {
+  await claudeLogin.load();
+  res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}`, account: cursorLogin.status() }, claudeCode: { command: process.execPath, script: path.join(root, 'scripts', 'claude-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claude: { ...claudeKey.status(), models: claudeModels, subscription: claudeLogin.status() } });
+}));
+// These endpoints expose login links and connection status, never provider credentials.
+app.use('/api/providers', (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
+app.get('/api/providers/cursor', (req, res) => res.json(cursorLogin.status()));
+app.post('/api/providers/cursor/login', wrap(async () => cursorLogin.begin()));
+app.post('/api/providers/cursor/cancel', wrap(async () => cursorLogin.cancel()));
+app.post('/api/providers/cursor/disconnect', wrap(async () => { if (runner.count()) throw new Error('Stop Cursor agents before disconnecting.'); return cursorLogin.disconnect(); }));
+const callbackFields = z.object({ callback: z.string().trim().min(1).max(8192) }).strict();
+app.get('/api/providers/claude', wrap(async () => claudeLogin.load()));
+function assertClaudeLoginIdle() { if (claude.count() || state.rooms.some(r => r.agents.some(a => a.provider === 'claude' && a.turnId))) throw new Error('Stop Claude agents before changing the connected account.'); }
+app.post('/api/providers/claude/login', wrap(async () => { assertClaudeLoginIdle(); const status = claudeLogin.begin(); changed(); return status; }));
+app.post('/api/providers/claude/complete', wrap(async req => { assertClaudeLoginIdle(); const status = await claudeLogin.complete(callbackFields.parse(req.body).callback); changed(); return status; }));
+app.post('/api/providers/claude/cancel', wrap(async () => { const status = claudeLogin.cancel(); changed(); return status; }));
+app.post('/api/providers/claude/disconnect', wrap(async () => { assertClaudeLoginIdle(); const status = await claudeLogin.disconnect(); changed(); return status; }));
 // Connecting Claude: the key is checked with Anthropic, then kept locally. It is never returned to the page.
 app.post('/api/claude/key', wrap(async req => { const status = await claudeKey.save(z.object({ apiKey: z.string() }).strict().parse(req.body).apiKey); changed(); return status; }));
 app.post('/api/claude/key/remove', wrap(async () => { const status = await claudeKey.remove(); changed(); return status; }));
@@ -689,12 +714,26 @@ app.post('/api/codex/sign-in', wrap(() => signingIn ||= (async () => {
     if (!codexInstalled()) { connection.signIn = { step: 'installing' }; changed(); await installCodex(); connection.installed = true; }
     await codex.connect(); await refreshAccount();
     if (connection.account) return { connected: true };
+    if (codexCallback.isCompleting()) throw new Error('Wait for the current callback to finish.');
     const login = await codex.call('account/login/start', { type: 'chatgpt' });
+    codexLoginId = login.loginId;
+    const manual = codexCallback.begin(login.authUrl);
     const opened = await openInBrowser(login.authUrl);
-    connection.signIn = { step: 'browser', authUrl: login.authUrl, opened }; changed();
+    connection.signIn = { step: 'browser', authUrl: login.authUrl, opened, manualCallback: !!manual, expiresAt: manual?.expiresAt }; changed();
     return { connected: false, authUrl: login.authUrl, opened };
   } catch (error) { connection.signIn = null; connection.error = error.message; changed(); throw error; }
 })().finally(() => { signingIn = null; })));
+app.post('/api/codex/callback', wrap(async req => {
+  await codexCallback.complete(callbackFields.parse(req.body).callback);
+  await refreshAccount();
+  if (!connection.account) throw new Error('Codex is still completing sign-in. Refresh the connection in a moment.');
+  return { connected: true };
+}));
+app.post('/api/codex/cancel', wrap(async () => { if (codexCallback.isCompleting()) throw new Error('Wait for the current callback to finish.'); if (codexLoginId) await codex.call('account/login/cancel', { loginId: codexLoginId }); codexLoginId = null; codexCallback.cancel(); connection.signIn = null; changed(); return { cancelled: true }; }));
+app.post('/api/codex/disconnect', wrap(async () => {
+  if (startingAgents.size || state.rooms.some(r => !r.demo && r.agents.some(a => !external(a) && a.provider !== 'claude' && a.turnId))) throw new Error('Stop Codex agents before disconnecting.');
+  await codex.call('account/logout', {}); codexLoginId = null; codexCallback.cancel(); await refreshAccount(); return { disconnected: true };
+}));
 app.post('/api/login', wrap(async () => { await codex.connect(); return codex.call('account/login/start', { type: 'chatgpt' }); }));
 app.get('/api/tools', wrap(async req => { await ensureConnected(); const room = roomBy(state, String(req.query.roomId)); const results = await Promise.allSettled([codex.call('skills/list', { cwds: [room.path] }), codex.call('mcpServerStatus/list', { limit: 100 })]); return { skills: results[0].status === 'fulfilled' ? results[0].value : null, mcp: results[1].status === 'fulfilled' ? results[1].value : null, errors: results.filter(r => r.status === 'rejected').map(r => r.reason.message) }; }));
 app.post('/api/rooms', wrap(async req => {
@@ -823,4 +862,4 @@ changed();
 // Without a Codex CLI there is nothing to connect yet; the sign-in button installs it.
 if (codexInstalled()) codex.connect().then(refreshAccount).catch(e => { connection.error = e.message; changed(); });
 else connection.installed = false;
-process.on('SIGINT', () => { team.close();codex.close(); server.close(); process.exit(0); });
+process.on('SIGINT', () => { cursorLogin.cancel();team.close();codex.close(); server.close(); process.exit(0); });

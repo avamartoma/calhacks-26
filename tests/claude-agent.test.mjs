@@ -127,6 +127,17 @@ test('failed runs and broken streams settle the desk with the reason', async () 
   assert.equal(broken.running('desk-2'), false);
 });
 
+test('a browser-connected Claude run uses only the office profile and no inherited OAuth token', async () => {
+  const { sdk, calls } = fakeSdk();
+  const runner = createClaudeRunner({ importSdk: async () => sdk, apiKey: () => 'unused-api-key', oauth: async () => true, configDir: () => '/office/browser-profile' });
+  await runner.launch('browser-desk', input, { cwd: '/project', onMessage() {}, onDone() {} });
+  await settle();
+  assert.equal(calls.options.env.CLAUDE_CONFIG_DIR, '/office/browser-profile');
+  assert.equal(calls.options.env.ANTHROPIC_API_KEY, undefined);
+  assert.equal(calls.options.env.ANTHROPIC_AUTH_TOKEN, undefined);
+  assert.equal(calls.options.env.CLAUDE_CODE_OAUTH_TOKEN, undefined);
+});
+
 test('a launch needs a key, refuses a second run at one desk and can be stopped', async () => {
   const keyless = createClaudeRunner({ importSdk: async () => fakeSdk().sdk, apiKey: () => '' });
   await assert.rejects(keyless.launch('desk-1', input, { cwd: '/p', onMessage() {}, onDone() {} }), /Connect Claude first/);

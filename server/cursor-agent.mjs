@@ -48,8 +48,8 @@ export function createCursorRunner({ importSdk = () => import('@cursor/sdk'), ap
   const runs = new Map();
   async function launch(id, input, { cwd, mcpServers, onMessage, onDone }) {
     if (runs.has(id)) throw new Error('This desk already has a Cursor run in flight. Stop it before launching another.');
-    const key = apiKey();
-    if (!key) throw new Error('Set CURSOR_API_KEY before launching a Cursor agent. Issue a key at Cursor Dashboard → Integrations.');
+    const key = await apiKey();
+    if (!key) throw new Error('Connect Cursor in Connections → Cursor, or set CURSOR_API_KEY before launching a Cursor agent.');
     const { Agent, CursorAgentError } = await importSdk();
     // Runtime is always explicit: the SDK silently defaults to local, which would run
     // a cloud-intended job against this machine's checkout.
