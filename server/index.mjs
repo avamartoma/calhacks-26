@@ -57,7 +57,7 @@ const cursor = createCursorDesk({ state, changed, isStarting: id => startingAgen
 const runner = createCursorRunner();
 const claudeKey = createClaudeKeyStore(); await claudeKey.load();
 const claude = createClaudeRunner({ apiKey: () => claudeKey.current() });
-function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates }; }
+function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, claude: claudeKey.status(), identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates }; }
 function changed() {
   if (!broadcastTimer) broadcastTimer = setTimeout(() => {
     broadcastTimer = undefined;
@@ -374,8 +374,8 @@ app.post('/api/rooms/:id/team/message',wrap(async req=>{
 }));
 app.get('/api/integrations', (req, res) => res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claude: { ...claudeKey.status(), models: claudeModels } }));
 // Connecting Claude: the key is checked with Anthropic, then kept locally. It is never returned to the page.
-app.post('/api/claude/key', wrap(async req => claudeKey.save(z.object({ apiKey: z.string() }).strict().parse(req.body).apiKey)));
-app.post('/api/claude/key/remove', wrap(async () => claudeKey.remove()));
+app.post('/api/claude/key', wrap(async req => { const status = await claudeKey.save(z.object({ apiKey: z.string() }).strict().parse(req.body).apiKey); changed(); return status; }));
+app.post('/api/claude/key/remove', wrap(async () => { const status = await claudeKey.remove(); changed(); return status; }));
 // The token is shown once at issue time; only its hash is kept, so a lost token is reissued, not recovered.
 app.post('/api/identities', wrap(async req => { const { token, identity } = issueAgentIdentity(state, req.body); changed(); return { token, identity: publicIdentity(identity) }; }));
 app.delete('/api/identities/:sub', wrap(async req => { const removed = revokeIdentity(state, req.params.sub); changed(); return { identity: publicIdentity(removed) }; }));
