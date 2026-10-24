@@ -9,7 +9,7 @@
 | Review | `server/evidence.mjs`, `server/workspace-check.mjs` | Evidence receipts, current-source checks and verification gates |
 | Continuity | `server/checkpoints.mjs`, `server/peer-handoffs.mjs` | Checkpoints, replacement context and persistent messages |
 | Team transport | `server/team.mjs` | Paired local offices, status exchange and cross-office handoffs |
-| External execution | `server/cursor.mjs`, `server/office-mcp.mjs`, `scripts/cursor-mcp.mjs`, `scripts/claude-mcp.mjs` | Cursor and Claude Code session ownership and explicitly reported activity over MCP |
+| External execution | `server/cursor.mjs`, `server/office-mcp.mjs`, `scripts/cursor-mcp.mjs`, `scripts/claude-mcp.mjs`, `scripts/codex-mcp.mjs` | Cursor, Claude Code and Codex CLI session ownership and explicitly reported activity over MCP |
 | Launched Cursor agents | `server/cursor-agent.mjs` | Office-owned Cursor SDK runs: runtime selection, observable stream and cancellation |
 | Launched Claude agents | `server/claude-agent.mjs`, `src/ClaudePanel.tsx` | Office-owned Claude Agent SDK runs: model and access selection, sandboxed tools, observable stream and cancellation |
 | Sign-in | `server/oauth.mjs` | Auth0 Authorization Code with PKCE, identity-token verification and local session storage |

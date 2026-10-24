@@ -30,6 +30,6 @@ New credential files use owner-only permissions and atomic replacement. Provider
 
 This remains a single-operator app. Auth0 identity does not partition provider credentials, project access, or execution. Each separately hosted operator needs an isolated instance and provider profiles. The execution API retains its existing loopback binding and host/origin checks. Account linking alone does not turn the server into a public, multi-user service.
 
-These connections authorize future work. They do not import conversation history or attach to an already running CLI session. Existing Cursor and Claude Code sessions can still report through MCP.
+These connections authorize future work. They do not import conversation history or attach to an already running CLI session. Existing Cursor, Claude Code and Codex CLI sessions can still report through MCP.
 
 The callback-paste interaction was informed by [OmniRoute's provider connection UI](https://github.com/cheaper-inference/OmniRoute/blob/edab7c3a59bf7d6f040d581dbda3a46adbee0d57/src/shared/components/OAuthModal.tsx). Cursor uses its [documented SDK browser login](https://prod.cursor.com/docs/sdk/typescript#cursor-auth).

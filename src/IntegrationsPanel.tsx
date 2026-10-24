@@ -5,12 +5,13 @@ import './integrations.css';
 import { ClaudePanel, type ClaudeCodeIntegration, type ClaudeIntegration } from './ClaudePanel';
 import { ProviderConnection } from './ProviderConnection';
 import { CodexConnection } from './CodexConnection';
+import { CodexSessionPanel, type CodexCliIntegration } from './CodexSession';
 
 export type ConnectionProvider = 'codex' | 'claude' | 'cursor';
 const providers: ConnectionProvider[] = ['codex', 'claude', 'cursor'];
 const providerNames = { codex: 'Codex', claude: 'Claude', cursor: 'Cursor' };
 
-interface Integrations { cursor: { command: string; script: string; url: string; account?: { configured: boolean } }; claudeCode: ClaudeCodeIntegration; claude: ClaudeIntegration }
+interface Integrations { cursor: { command: string; script: string; url: string; account?: { configured: boolean } }; claudeCode: ClaudeCodeIntegration; codexCli?: CodexCliIntegration; claude: ClaudeIntegration }
 interface Identity { sub: string; label: string; email?: string; record: { started: number; review: number; blocked: number; verified: number } }
 interface Auth { provider: { domain: string; clientId: string; fromEnv: boolean } | null; signedIn: boolean; identity: Identity | null; redirectUri: string }
 export function IntegrationsPanel({ room, connection, focus, onContinue }: { room: Room; connection: OfficeState['connection']; focus?: { provider: ConnectionProvider; request: number } | null; onContinue?: () => void }) {
@@ -69,7 +70,7 @@ export function IntegrationsPanel({ room, connection, focus, onContinue }: { roo
       }}><span>{providerNames[provider]}</span><small>{statuses[provider]}</small></button>)}
     </div>
     <section className="provider-content" role="tabpanel" id={`connection-panel-${selected}`} aria-labelledby={`connection-tab-${selected}`} tabIndex={0}>
-    {selected === 'codex' && <CodexConnection connection={connection} onContinue={onContinue} />}
+    {selected === 'codex' && <><CodexConnection connection={connection} onContinue={onContinue} /><CodexSessionPanel room={room} codex={data?.codexCli ?? null} /></>}
     {selected === 'claude' && <ClaudePanel room={room} claude={data?.claude ?? null} code={data?.claudeCode ?? null} onChange={() => void load()} />}
     {selected === 'cursor' && <>
     <h3 className="provider-title">Cursor</h3>
@@ -104,11 +105,11 @@ export function IntegrationsPanel({ room, connection, focus, onContinue }: { roo
     <details className="compact-disclosure office-identity"><summary>Office identity (optional)</summary>
       <p className="muted small">Attribute reported work to an office identity. Provider sign-ins above work independently.</p>
       {auth?.signedIn && auth.identity
-        ? <><p className="notice">Signed in as <b>{auth.identity.label}</b>{auth.identity.email ? ` · ${auth.identity.email}` : ''}. Cursor and Claude Code sessions publish under this account automatically.</p>
+        ? <><p className="notice">Signed in as <b>{auth.identity.label}</b>{auth.identity.email ? ` · ${auth.identity.email}` : ''}. Cursor, Claude Code and Codex CLI sessions publish under this account automatically.</p>
             <p className="muted small">{auth.identity.record.started} runs started · {auth.identity.record.verified} verified</p>
             <button className="text-button" onClick={() => void signOut()}>Sign out</button></>
         : auth?.provider
-          ? <><p>Sign in once. Cursor and Claude Code sessions then publish under your account with a durable desk and track record, and nothing secret goes in <code>.cursor/mcp.json</code>.</p>
+          ? <><p>Sign in once. Cursor, Claude Code and Codex CLI sessions then publish under your account with a durable desk and track record, and nothing secret goes in <code>.cursor/mcp.json</code>.</p>
               <button className="primary full" onClick={() => void signIn()}>Sign in with Auth0</button>
               <p className="muted small">Opens <code>{auth.provider.domain}</code> in a browser tab.</p></>
           : <><p>Connect an Auth0 tenant once to enable sign-in. The domain and client id are public for a PKCE client; no client secret is stored.</p>

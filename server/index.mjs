@@ -397,7 +397,7 @@ app.post('/api/rooms/:id/team/message',wrap(async req=>{
 }));
 app.get('/api/integrations', wrap(async (req, res) => {
   await claudeLogin.load();
-  res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}`, account: cursorLogin.status() }, claudeCode: { command: process.execPath, script: path.join(root, 'scripts', 'claude-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claude: { ...claudeKey.status(), models: claudeModels, subscription: claudeLogin.status() } });
+  res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}`, account: cursorLogin.status() }, claudeCode: { command: process.execPath, script: path.join(root, 'scripts', 'claude-mcp.mjs'), url: `http://127.0.0.1:${port}` }, codexCli: { command: process.execPath, script: path.join(root, 'scripts', 'codex-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claude: { ...claudeKey.status(), models: claudeModels, subscription: claudeLogin.status() } });
 }));
 // These endpoints expose login links and connection status, never provider credentials.
 app.use('/api/providers', (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
@@ -499,7 +499,7 @@ app.post('/api/rooms/:id/claude/launch', wrap(async req => {
   record(room, 'Claude agent launched', 'work'); changed();
   return { roomId: room.id, agentId: worker.id, workItemId: item.id, ...launched };
 }));
-// Cursor and Claude Code sessions report in over MCP under /cursor and /claude-code.
+// Cursor, Claude Code and Codex CLI sessions report in over MCP under /cursor, /claude-code and /codex-cli.
 for (const provider of Object.keys(reporters)) {
   app.post(`/api/rooms/:id/${provider}/start`, wrap(async req => { await syncIdentity(); return cursor.start(roomBy(state, req.params.id), req.body, provider); }));
   app.post(`/api/rooms/:id/${provider}/:aid/update`, wrap(async req => { await syncIdentity(); return cursor.update(roomBy(state, req.params.id), req.params.aid, req.body, provider); }));

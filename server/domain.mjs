@@ -42,8 +42,8 @@ export function seed(cwd) {
 export function roomBy(state, id) { const r = state.rooms.find(r => r.id === id); if (!r) throw new Error('Room not found'); return r; }
 export function agentBy(room, id) { const a = room.agents.find(a => a.id === id); if (!a) throw new Error('Agent not found'); return a; }
 export function active(a) { return ['working', 'talking', 'approval'].includes(a.status); }
-/** A Cursor or Claude Code session drives itself; the office observes it and cannot stop it. */
-export function selfDriven(a) { return a?.provider === 'cursor' || a?.provider === 'claude-code'; }
+/** A Cursor, Claude Code or Codex CLI session drives itself; the office observes it and cannot stop it. */
+export function selfDriven(a) { return a?.provider === 'cursor' || a?.provider === 'claude-code' || a?.provider === 'codex-cli'; }
 /** Any worker that does not run on the Codex app-server thread: a self-driven session, a launched Cursor run, or a launched Claude agent. */
 export function external(a) { return selfDriven(a) || a?.provider === 'cursor-sdk' || a?.provider === 'claude'; }
 export function canDelegate(room) {
