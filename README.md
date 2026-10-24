@@ -61,6 +61,10 @@ Tools includes workflows, skills, Cursor setup, development modes, and presentat
 
 The `.cursor/mcp.json` configuration and `/office` command connect an existing Cursor session to Fourteenth. Cursor controls its own execution and permissions. Reports are marked as reported evidence and cannot automatically verify a task. No separate provider API key is needed by this integration.
 
+Issue an **agent identity** from the Cursor panel to give a session a durable desk, a name that persists across runs, and a track record. The token is shown once and stored only as a hash; put it in `FOURTEENTH_AGENT_TOKEN` in `.cursor/mcp.json`. Work still runs without one, but publishes unattributed.
+
+Fourteenth can also **launch** a Cursor agent itself through the Cursor SDK, as an alternative to a session reporting in. Those runs use a model chosen here, stream their observable work, and can be stopped from the office. Set `CURSOR_API_KEY` first; launching requires Node 22.13+, which the rest of the app does not.
+
 Reusable manager, handoff, and review skills live in `skills/`. The app can install them into a project's `.agents/skills` without overwriting differing instructions.
 
 ## Validation

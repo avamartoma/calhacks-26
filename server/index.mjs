@@ -7,10 +7,13 @@ import { Codex } from './codex.mjs';
 import { checkWorkspace } from './workspace-check.mjs';
 import { identifyEvidence, commandWorkspace, refreshReview, isTestCommand, trimEvidence, assertReviewVersion } from './evidence.mjs';
 import { createCursorDesk } from './cursor.mjs';
+import { initIdentities, issueAgentIdentity, revokeIdentity, identityBySub, publicIdentity, creditRun, verifyAgentToken, agentToken } from './identity.mjs';
+import { runDoc, addComment, runFeed } from './run-doc.mjs';
 import { ticketFields, assignedTicket, focusTicket, editTicket, archiveTicket } from './tickets.mjs';
 import { peerTools, peerInstructions, inbox, queueHandoff, handoffEnvelope, presentHandoffs, delivered, acknowledge, transferInbox } from './peer-handoffs.mjs';
 import { createTeam } from './team.mjs';
-import { seed, uid, agent, event, workItem, evidenceFrom, roomBy, agentBy, active, canDelegate, handoff, publicItem } from './domain.mjs';
+import { seed, uid, agent, event, workItem, evidenceFrom, roomBy, agentBy, active, canDelegate, handoff, publicItem, external, selfDriven } from './domain.mjs';
+import { createCursorRunner, launchFields } from './cursor-agent.mjs';
 import { claimIdentity, nameStoredRoom, replacementName } from './names.mjs';
 import { z } from 'zod';
 import { featureUrl } from './feature-link.mjs';
@@ -26,6 +29,7 @@ let state;
 try { state = JSON.parse(await readFile(stateFile, 'utf8')); if (state.version !== 1 || !Array.isArray(state.rooms)) throw new Error('Unsupported state'); }
 catch (e) { if (e.code !== 'ENOENT') throw e; state = seed(root); }
 state.approvals = [];
+initIdentities(state);
 for (const r of state.rooms) {
   if (r.orchestrationVersion !== 1) {
     let visibleAgents = r.agents.filter(a => a.status !== 'ejected');
@@ -48,7 +52,8 @@ let saveTimer, broadcastTimer, writeQueue = Promise.resolve();
 const loadedThreads = new Set();
 const startingAgents = new Set();
 const cursor = createCursorDesk({ state, changed, isStarting: id => startingAgents.has(id) });
-function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates }; }
+const runner = createCursorRunner();
+function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates }; }
 function changed() {
   if (!broadcastTimer) broadcastTimer = setTimeout(() => {
     broadcastTimer = undefined;
@@ -103,7 +108,7 @@ async function scheduleWorkers(room) {
   scheduling.add(room.id);
   try {
     for(const item of room.workItems.filter(t=>t.status==='queued' && !t.archived).sort((a,b)=>({high:0,normal:1,low:2}[a.priority || 'normal']-({high:0,normal:1,low:2}[b.priority || 'normal'])) || a.createdAt-b.createdAt)) {
-      const worker=room.agents.find(a=>a.id===item.agentId);if(!worker || worker.provider==='cursor' || worker.status==='ejected' || worker.turnId || startingAgents.has(worker.id))continue;
+      const worker=room.agents.find(a=>a.id===item.agentId);if(!worker || external(worker) || worker.status==='ejected' || worker.turnId || startingAgents.has(worker.id))continue;
       if(worker.manager && worker.currentWorkItemId!==item.id)continue;
       const wait=waitingReason(room,item);
       if(wait){item.blocker=wait.reason; if(wait.files.length && !item.coordination){item.coordination=wait;worker.talkingUntil=Date.now()+18000;for(const id of wait.tasks){const owner=room.agents.find(a=>a.id===room.workItems.find(t=>t.id===id)?.agentId);if(owner)owner.talkingUntil=worker.talkingUntil;}room.messages.push({id:uid(),fromId:worker.id,from:worker.name,toId:room.agents.find(a=>a.manager && a.status!=='ejected')?.id,to:room.agents.find(a=>a.manager && a.status!=='ejected')?.name || 'Manager',text:`Shared files: ${wait.files.join(', ')}. Assignment held until its owner finishes.`,time:Date.now()});record(room,'Shared files: assignment held for coordination','coordination');}continue;}
@@ -122,7 +127,8 @@ async function startAgent(room, a, prompt) {
 async function startAgentReserved(room, a, prompt) {
   const access=permissionsFor(room,a),accessKey=permissionKey(room,a);
   cursor.assertAvailable(room);
-  if (a.provider === 'cursor') throw new Error('Continue this task in Cursor or replace the finished worker with a Codex model.');
+  if (selfDriven(a)) throw new Error('Continue this task in Cursor or replace the finished worker with a Codex model.');
+  if (external(a)) throw new Error('Relaunch this task with the Cursor agent runner, or replace the worker with a Codex model.');
   await ensureConnected();
   if(access.canWrite && process.platform==='win32' && connection.sandboxStatus!=='ready')throw new Error('Windows sandbox setup is required to edit project files. Open Connect Codex, choose Set up Windows sandbox, then resume this ticket.');
   if(!room.agents.includes(a))throw new Error('Office changed. Reopen the ticket and try again.');
@@ -162,8 +168,10 @@ async function startAgentReserved(room, a, prompt) {
   finally { changed(); }
 }
 async function stopAgent(a) {
-  if (a.provider === 'cursor' && a.turnId) throw new Error('Stop execution in Cursor, then use office_cursor_finish to release this assignment.');
+  if (selfDriven(a) && a.turnId) throw new Error('Stop execution in Cursor, then use office_cursor_finish to release this assignment.');
   if (startingAgents.has(a.id)) throw new Error('Agent is starting. Wait for the turn to begin, then stop it.');
+  // A run the office launched can genuinely be cancelled; cancellation lands through the stream.
+  if (external(a)) { if (runner.running(a.id)) await runner.stop(a.id); a.status = 'paused'; return; }
   if (a.threadId && a.turnId) {
     try { await codex.call('turn/interrupt', { threadId: a.threadId, turnId: a.turnId }); }
     catch(error){if(!/no active turn to interrupt/i.test(error.message))throw error;}
@@ -175,7 +183,8 @@ async function stopAgent(a) {
   a.status = 'paused';
 }
 async function sendTo(room, a, text) {
-  if (a.provider === 'cursor') throw new Error('Send this message in Cursor. Fourteenth tracks this worker but does not control its execution.');
+  if (selfDriven(a)) throw new Error('Send this message in Cursor. Fourteenth tracks this worker but does not control its execution.');
+  if (external(a)) throw new Error('This Cursor run takes one prompt. Wait for it to finish, then launch a follow-up run.');
   if (a.status === 'ejected') throw new Error('Replace this agent before sending a message.');
   if (a.turnId) { await codex.call('turn/steer', { threadId: a.threadId, expectedTurnId: a.turnId, input: [{ type: 'text', text }] }); event(a, 'user', text); }
   else await startAgent(room, a, text);
@@ -188,7 +197,7 @@ async function refreshAccount() {
   connection.sandboxStatus=sandboxStatus;
   changed();
 }
-codex.on('offline', message => { loadedThreads.clear(); connection.connected = false; connection.error = message; for (const r of state.rooms) if (!r.demo) for (const a of r.agents) if (a.provider !== 'cursor' && active(a)) { a.status = 'error'; a.turnId = null; setWorkStatus(r,a,'blocked',message);event(a, 'error', message); } state.approvals = []; changed(); });
+codex.on('offline', message => { loadedThreads.clear(); connection.connected = false; connection.error = message; for (const r of state.rooms) if (!r.demo) for (const a of r.agents) if (!external(a) && active(a)) { a.status = 'error'; a.turnId = null; setWorkStatus(r,a,'blocked',message);event(a, 'error', message); } state.approvals = []; changed(); });
 let notificationQueue=Promise.resolve();
 const commandVersions=new Map();
 codex.on('notification', msg => {
@@ -290,7 +299,7 @@ codex.on('request', async msg => {
       } else if (p.tool === 'office_message') {
         const message=team.queue(room,a,args) || queueHandoff(room,a,args); changed();
         const target=room.agents.find(target=>target.id===message.toId);
-        if(target && !room.paused && target.turnId && target.status==='working' && target.provider!=='cursor' && !startingAgents.has(target.id)) {
+        if(target && !room.paused && target.turnId && target.status==='working' && !external(target) && !startingAgents.has(target.id)) {
           try { await codex.call('turn/steer',{threadId:target.threadId,expectedTurnId:target.turnId,input:[{type:'text',text:handoffEnvelope(presentHandoffs(room,[message]))}]});delivered(room,target,[message]); }
           catch(e) {message.deliveryError='Current turn ended or delivery failed. Waiting for the next turn.';event(a,'system',`Handoff queued for ${target.name}: ${e.message}`);}
         }
@@ -352,6 +361,39 @@ app.post('/api/rooms/:id/team/message',wrap(async req=>{
   message.sentByOwner=true;changed();return {message};
 }));
 app.get('/api/integrations', (req, res) => res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}` } }));
+// The token is shown once at issue time; only its hash is kept, so a lost token is reissued, not recovered.
+app.post('/api/identities', wrap(async req => { const { token, identity } = issueAgentIdentity(state, req.body); changed(); return { token, identity: publicIdentity(identity) }; }));
+app.delete('/api/identities/:sub', wrap(async req => { const removed = revokeIdentity(state, req.params.sub); changed(); return { identity: publicIdentity(removed) }; }));
+app.post('/api/identities/verify', wrap(async req => { const identity = verifyAgentToken(state, z.object({ token: agentToken }).strict().parse(req.body).token); if (!identity) throw new Error('That agent token is not recognised. Issue a new identity in Fourteenth.'); return { identity: publicIdentity(identity) }; }));
+app.get('/api/feed', wrap(async () => ({ runs: runFeed(state) })));
+// A Cursor agent the office launches and owns: unlike an MCP session it can be stopped,
+// its model is the one chosen here, and its stream is recorded as observed work.
+app.post('/api/rooms/:id/cursor/launch', wrap(async req => {
+  const room = roomBy(state, req.params.id);
+  if (room.demo) throw new Error('Choose a live project room for Cursor work.');
+  const input = launchFields.parse(req.body);
+  cursor.assertAvailable(room);
+  if (room.capturing) throw new Error('Wait for the checkpoint to finish before launching a run.');
+  if (room.agents.some(a => a.turnId || startingAgents.has(a.id))) throw new Error('Wait for the active office work to finish before launching a Cursor agent.');
+  const worker = agent('', 'Implementation', input.prompt, room.agents.length, { provider: 'cursor-sdk', model: input.model, modelSource: 'office-selected', status: 'working', turnId: uid() });
+  const item = workItem(input.prompt.split('\n')[0].slice(0, 120), input.prompt, { agentId: worker.id, status: 'working', acceptanceCriteria: ['Return a concrete, evidence-backed result'], requiredEvidence: ['diff'], checks: [], comments: [], files: [] });
+  room.paused = false; room.agents.push(worker); claimIdentity(worker, room); room.workItems.push(item); room.goal ||= input.prompt;
+  event(worker, 'user', input.prompt);
+  const onMessage = entry => { event(worker, entry.kind, entry.text); worker.updatedAt = Date.now(); changed(); };
+  const onDone = outcome => {
+    worker.turnId = null; worker.status = outcome.status === 'finished' ? 'done' : outcome.status === 'cancelled' ? 'paused' : 'error';
+    if (outcome.error) event(worker, 'error', outcome.error);
+    if (outcome.result) event(worker, 'update', outcome.result);
+    item.evidence.push(...evidenceFrom(worker));
+    item.status = outcome.status === 'finished' ? 'review' : 'blocked';
+    item.blocker = item.status === 'blocked' ? outcome.error || `Cursor run ${outcome.status}.` : '';
+    item.updatedAt = Date.now();
+    identifyEvidence(room); trimEvidence(room, item);
+    record(room, `Cursor agent run ${outcome.status}`, 'work'); changed();
+  };
+  try { const launched = await runner.launch(worker.id, input, { cwd: room.path, onMessage, onDone }); event(worker, 'system', `Cursor ${launched.runtime} run ${launched.runId}. Execution is owned by this office and can be stopped here.`); record(room, 'Cursor agent launched', 'work'); changed(); return { roomId: room.id, agentId: worker.id, workItemId: item.id, ...launched }; }
+  catch (error) { worker.turnId = null; worker.status = 'error'; event(worker, 'error', error.message); item.status = 'blocked'; item.blocker = error.message; item.updatedAt = Date.now(); changed(); throw error; }
+}));
 app.post('/api/rooms/:id/cursor/start', wrap(async req => cursor.start(roomBy(state, req.params.id), req.body)));
 app.post('/api/rooms/:id/cursor/:aid/update', wrap(async req => cursor.update(roomBy(state, req.params.id), req.params.aid, req.body)));
 app.post('/api/rooms/:id/cursor/:aid/finish', wrap(async req => cursor.finish(roomBy(state, req.params.id), req.params.aid, req.body)));
@@ -420,8 +462,13 @@ app.post('/api/rooms/:id/work/:workId',wrap(async req=>{
   const {expectedUpdatedAt,expectedVersion,...body}=req.body;
   if(expectedUpdatedAt!==undefined && expectedUpdatedAt!==item.updatedAt)throw new Error('This ticket changed. Reopen it before reviewing.');
   const change=workChange.parse(body);const revision=item.updatedAt;const guard=()=>{if(!room.workItems.includes(item))throw new Error('Office changed. Reopen this ticket.');const owner=room.agents.find(a=>a.id===item.agentId);if(room.capturing || item.archived || owner?.turnId || (owner && startingAgents.has(owner.id)))throw new Error('Pause the owner and restore the ticket before reviewing.');if(item.updatedAt!==revision)throw new Error('This ticket changed. Inspect the latest evidence before reviewing.');};guard();
-  await validateReceipts(room,item,change);guard();assertReviewVersion(room,item,change,expectedUpdatedAt,expectedVersion);updateWork(room,item,change);changed();await scheduleWorkers(room);return {item};
+  await validateReceipts(room,item,change);guard();assertReviewVersion(room,item,change,expectedUpdatedAt,expectedVersion);
+  const accepting=change.status==='done' && item.status!=='done';updateWork(room,item,change);
+  if(accepting)creditRun(identityBySub(state,room.agents.find(a=>a.id===item.agentId)?.credentialSub),'verified');
+  changed();await scheduleWorkers(room);return {item};
 }));
+app.get('/api/rooms/:id/work/:workId/doc',wrap(async req=>{const room=roomBy(state,req.params.id),item=room.workItems.find(t=>t.id===req.params.workId);if(!item)throw new Error('Ticket not found');return {doc:runDoc(room,item)};}));
+app.post('/api/rooms/:id/work/:workId/comments',wrap(async req=>{const room=roomBy(state,req.params.id),item=room.workItems.find(t=>t.id===req.params.workId);if(!item)throw new Error('Ticket not found');const comment=addComment(room,item,req.body);changed();return {comment};}));
 app.get('/api/rooms/:id/work/:workId/review',wrap(async req=>{const room=roomBy(state,req.params.id),item=room.workItems.find(t=>t.id===req.params.workId);if(!item)throw new Error('Ticket not found');await notificationQueue;const review=await refreshReview(room,item);changed();return {review,updatedAt:item.updatedAt};}));
 app.post('/api/rooms/:id/work/:workId/feature',wrap(async req=>{
   const room=roomBy(state,req.params.id);const item=room.workItems.find(t=>t.id===req.params.workId);if(!item)throw new Error('Work item not found');
@@ -505,7 +552,8 @@ app.post('/api/rooms/:id/agents/:aid/stop', wrap(async req => { const r = roomBy
 app.post('/api/rooms/:id/agents/:aid/speed', wrap(async req => {
   const r = roomBy(state, req.params.id); const a = agentBy(r, req.params.aid);
   const { fast } = z.object({ fast: z.boolean() }).strict().parse(req.body);
-  if (a.provider === 'cursor') throw new Error('Choose model and speed settings in Cursor.');
+  if (selfDriven(a)) throw new Error('Choose model and speed settings in Cursor.');
+  if (external(a)) throw new Error('Choose the model when you launch the next Cursor run.');
   if (a.status === 'ejected') throw new Error('This agent has left. Select its replacement.');
   if (startingAgents.has(a.id)) throw new Error('A turn is starting. Try again once it has started.');
   const message = `${r.demo ? 'Demo: ' : ''}${fast ? 'Fast mode requested' : 'Standard speed selected'} for ${a.name}’s next turn.${fast && !r.demo ? ' Higher usage may apply; availability depends on the model and account.' : ''}`;

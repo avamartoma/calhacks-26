@@ -1,7 +1,7 @@
 import { identifyEvidence, trimEvidence } from './evidence.mjs';
 import { featureUrl } from './feature-link.mjs';
 import { queueHandoff, delivered, acknowledge } from './peer-handoffs.mjs';
-import { uid, agent, workItem, event, DEFAULT_MODEL } from './domain.mjs';
+import { uid, agent, workItem, event, DEFAULT_MODEL, external } from './domain.mjs';
 import { claimIdentity, nameRoom, replacementName } from './names.mjs';
 import { illustrativeDiff, passingTranscript, failingTranscript } from './demo-evidence.mjs';
 
@@ -27,7 +27,7 @@ export function initOffice(room) {
   room.permissionMode ||= 'project-write';
   room.mode ||= 'balanced'; room.timeline ||= []; room.checkpoints ||= []; room.workItems ||= [];
   if(!room.demo && !room.solDefaultsApplied){
-    for(const a of room.agents || [])if(a.provider!=='cursor' && (!a.model || a.model==='Account default'))a.model=DEFAULT_MODEL;
+    for(const a of room.agents || [])if(!external(a) && (!a.model || a.model==='Account default'))a.model=DEFAULT_MODEL;
     room.solDefaultsApplied=true;
   }
   for (const item of room.workItems) { item.files ||= []; item.checks ||= []; item.requiredEvidence ||= []; item.evidence ||= []; }
@@ -49,7 +49,7 @@ export function overlappingFiles(first, second) {
 export function waitingReason(room, item) {
   const dependencies = item.dependsOn.filter(id => room.workItems.find(t=>t.id===id)?.status !== 'done');
   if (dependencies.length) return { reason: 'Waiting for dependencies', tasks: dependencies, files: [] };
-  const readOnly=t=>{const owner=room.agents.find(a=>a.id===t.agentId);return !room.demo && owner && !owner.manager && owner.provider!=='cursor';};
+  const readOnly=t=>{const owner=room.agents.find(a=>a.id===t.agentId);return !room.demo && owner && !owner.manager && !external(owner);};
   const other = room.workItems.find(t => t.id!==item.id && t.status==='working' && !readOnly(item) && !readOnly(t) && overlappingFiles(item.files || [],t.files || []).length);
   return other ? { reason: 'Shared files need coordination', tasks: [other.id], files: overlappingFiles(item.files || [],other.files || []) } : null;
 }

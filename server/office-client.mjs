@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { realpath } from 'node:fs/promises';
 
-export function createOfficeClient({ url = 'http://127.0.0.1:4314', project = process.cwd(), fetchImpl = fetch } = {}) {
+export function createOfficeClient({ url = 'http://127.0.0.1:4314', project = process.cwd(), token, fetchImpl = fetch } = {}) {
   const parsed = new URL(url);
   if (parsed.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(parsed.hostname) || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) throw new Error('Fourteenth URL must be a local HTTP origin.');
   const base = parsed.origin;
@@ -29,11 +29,15 @@ export function createOfficeClient({ url = 'http://127.0.0.1:4314', project = pr
     return state.rooms.filter(room => !room.demo && path.relative(actual, room.path) === '');
   }
   async function room(id) { const found = (await rooms()).find(r => r.id === id); if (!found) throw new Error('Choose a live office belonging to this Cursor workspace.'); return found; }
-  return { request, rooms, room,
+  // The agent token travels with every report so the office can attribute it, never in a URL or log line.
+  const attributed = body => token ? { ...body, token } : body;
+  return { request, rooms, room, hasToken: !!token,
     async open(name) { const existing = await rooms(); return existing[0] || (await request('/rooms', { name, path: await realpath(project), demo: false })).room; },
+    async identify() { if (!token) throw new Error('No agent identity configured. Issue one in Fourteenth under Tools, then set FOURTEENTH_AGENT_TOKEN in .cursor/mcp.json.'); return request('/identities/verify', { token }); },
     async dispatch(id, body) { await room(id); return request(`/rooms/${encodeURIComponent(id)}/dispatch`, body); },
-    async cursorStart(id, body) { await room(id); return request(`/rooms/${encodeURIComponent(id)}/cursor/start`, body); },
-    async cursorReport(id, agentId, operation, body) { await room(id); if (!['update', 'finish'].includes(operation)) throw new Error('Invalid Cursor operation'); return request(`/rooms/${encodeURIComponent(id)}/cursor/${encodeURIComponent(agentId)}/${operation}`, body); }
+    async cursorStart(id, body) { await room(id); return request(`/rooms/${encodeURIComponent(id)}/cursor/start`, attributed(body)); },
+    async cursorReport(id, agentId, operation, body) { await room(id); if (!['update', 'finish'].includes(operation)) throw new Error('Invalid Cursor operation'); return request(`/rooms/${encodeURIComponent(id)}/cursor/${encodeURIComponent(agentId)}/${operation}`, attributed(body)); },
+    async runDoc(id, workId) { await room(id); return request(`/rooms/${encodeURIComponent(id)}/work/${encodeURIComponent(workId)}/doc`); }
   };
 }
 
@@ -42,7 +46,7 @@ export function summarizeOffice(room, includeEvidence = false) {
     roomId: room.id, name: room.name, goal: room.goal, paused: room.paused,
     tasks: room.workItems.map(({ evidence, ...item }) => ({ ...item, evidenceCount: evidence.length,
       ...(includeEvidence ? { evidence: evidence.slice(-8).map(e => ({ ...e, text: e.text.slice(0, 4000), truncated: e.text.length > 4000 })), omittedReceipts: Math.max(0, evidence.length - 8) } : {}) })),
-    agents: room.agents.filter(a => a.status !== 'ejected').map(a => ({ id: a.id, name: a.name, title: a.title, model: a.effectiveModel || a.model, modelSource: a.modelSource, provider: a.provider || 'codex', assignmentOpen: !!a.turnId, status: a.status, task: a.task, latest: a.events.slice(-2).map(e => ({ kind: e.kind, text: e.text.slice(-2000), time: e.time })) })),
+    agents: room.agents.filter(a => a.status !== 'ejected').map(a => ({ id: a.id, name: a.name, title: a.title, model: a.effectiveModel || a.model, modelSource: a.modelSource, provider: a.provider || 'codex', credentialSub: a.credentialSub || null, assignmentOpen: !!a.turnId, status: a.status, task: a.task, latest: a.events.slice(-2).map(e => ({ kind: e.kind, text: e.text.slice(-2000), time: e.time })) })),
     handoffs: room.messages.slice(-3).map(m => ({ ...m, text: m.text.slice(0, 2000) }))
   };
 }

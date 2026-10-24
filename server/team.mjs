@@ -6,6 +6,7 @@ import { readFile, writeFile, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { queueHandoff } from './peer-handoffs.mjs';
+import { external } from './domain.mjs';
 
 const id = z.string().min(1).max(100);
 const short = z.string().max(300);
@@ -71,7 +72,7 @@ export async function createTeam({state,dataDir,port,changed,persist,onReceive})
       const visited=new Set();
       while(target?.replacedBy && !visited.has(target.id)){visited.add(target.id);target=room.agents.find(a=>a.id===target.replacedBy);}
       message={...data,from:incoming.office.agents.find(a=>a.id===data.fromId).name,fromOwner:incoming.office.owner,toOwner:link.owner,status:'queued',receivedAt:Date.now()};
-      if(target && target.status!=='ejected' && target.provider!=='cursor') {
+      if(target && target.status!=='ejected' && !external(target)) {
         message.originalToId=data.toId;message.toId=target.id;message.to=target.name;room.messages.push(message);
         await onReceive(room,target,message);
       } else {message.deliveryError='Recipient is unavailable. Choose a current teammate agent.';room.messages.push(message);}

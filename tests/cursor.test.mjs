@@ -95,7 +95,7 @@ test('stdio MCP runs a complete Cursor assignment without model credentials or C
   await startServer();
   client = new Client({ name: 'fourteenth-test', version: '1.0.0' });
   await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'scripts/cursor-mcp.mjs')], env: { FOURTEENTH_URL: base, FOURTEENTH_PROJECT: temp }, stderr: 'pipe' }));
-  const tools = await client.listTools(); assert.equal(tools.tools.length, 6); assert.ok(!tools.tools.some(tool => /grok_review/.test(tool.name)));
+  const tools = await client.listTools(); assert.equal(tools.tools.length, 8); assert.ok(!tools.tools.some(tool => /grok_review/.test(tool.name)));
   const call = async (name, args) => { const res = await client.callTool({ name, arguments: args }); return { ...JSON.parse(res.content[0].text), isError: res.isError }; };
   const opened = await call('office_open', { name: 'Cursor integration test' }); assert.ok(opened.roomId);
   const openedAgain = await call('office_open', {}); assert.equal(openedAgain.roomId, opened.roomId);

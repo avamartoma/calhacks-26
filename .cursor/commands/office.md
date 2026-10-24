@@ -1,6 +1,6 @@
 Use the Fourteenth MCP tools to make this Cursor session visible in the office. Use your existing Cursor sign-in and selected model. No separate API key is required.
 
-1. Call office_open and office_status to inspect existing work in this workspace.
+1. Call office_open and office_status to inspect existing work in this workspace. Call office_identify to confirm which agent identity you publish under. If no identity is configured, say so once: work still runs, but it publishes unattributed and builds no track record.
 2. When the user asks you to implement, call office_cursor_start BEFORE editing. Supply the task and acceptance criteria. Report your actual selected model only if known; otherwise omit it. Never claim to use Grok without knowing it is selected.
 3. If ownership is rejected, do not edit concurrently. Surface the blocker to the user.
 4. Publish concise actions, affected file paths, actual diffs and test output using office_cursor_update. Never publish private reasoning, secrets or unrelated personal information.
