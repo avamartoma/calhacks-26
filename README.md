@@ -1,8 +1,8 @@
-# Fourteenth Floor
+# Iteration1
 
 A spatial workspace for AI-assisted software development. Project folders become offices, agents occupy desks, and tickets connect their assignments, handoffs, code changes, and checks.
 
-![The Fourteenth office](assets/blender-office-review.png)
+![The Iteration1 office](assets/blender-office-review.png)
 
 ## Run locally
 
@@ -15,9 +15,9 @@ npm run dev
 
 Open **http://127.0.0.1:4314**. For a production build, run `npm run build`, then `npm start`.
 
-The sample office works without signing in and is explicitly simulated. For live work, connect Codex through the app and choose an existing local project folder. Fourteenth uses its own sign-in profile in `~/.fourteenth/codex`; it does not switch the Codex desktop app's account. Account model availability and usage limits apply.
+The sample office works without signing in and is explicitly simulated. For live work, connect Codex through the app and choose an existing local project folder. Iteration1 uses its own sign-in profile in `~/.iteration1/codex`; it does not switch the Codex desktop app's account. Account model availability and usage limits apply.
 
-On Windows, `npm run runtime:install` installs the pinned project-local Codex runtime. Restart Fourteenth after installation. Complete Windows sandbox setup from the connection panel before starting work if requested.
+On Windows, `npm run runtime:install` installs the pinned project-local Codex runtime. Restart Iteration1 after installation. Complete Windows sandbox setup from the connection panel before starting work if requested.
 
 ## Use it
 
@@ -31,7 +31,7 @@ Replacing an agent preserves its task and handoff. Development modes adjust the 
 
 ## Team offices
 
-Each participant runs Fourteenth with their own checkout and account. **Team** creates or accepts a short-lived invitation. Pairing shares assignments and explicit handoffs; it does not synchronize files or merge branches.
+Each participant runs Iteration1 with their own checkout and account. **Team** creates or accepts a short-lived invitation. Pairing shares assignments and explicit handoffs; it does not synchronize files or merge branches.
 
 The current transport supports **one real paired teammate per project**. The visual district supports nine offices with selective interior detail; the **+** control adds local visual previews, not authenticated teammates. [Connection guide and limitations](docs/team-offices.md).
 
@@ -59,7 +59,7 @@ Tools includes workflows, skills, Cursor setup, development modes, and presentat
 
 ## Cursor and skills
 
-The `.cursor/mcp.json` configuration and `/office` command connect an existing Cursor session to Fourteenth. Cursor controls its own execution and permissions. Reports are marked as reported evidence and cannot automatically verify a task. No separate provider API key is needed by this integration.
+The `.cursor/mcp.json` configuration and `/office` command connect an existing Cursor session to Iteration1. Cursor controls its own execution and permissions. Reports are marked as reported evidence and cannot automatically verify a task. No separate provider API key is needed by this integration.
 
 Reusable manager, handoff, and review skills live in `skills/`. The app can install them into a project's `.agents/skills` without overwriting differing instructions.
 
@@ -83,6 +83,6 @@ Optional configuration: `PORT`, `OFFICE_DATA_DIR`, `OFFICE_CODEX_HOME`, `OFFICE_
 
 ## Assets and VR
 
-The office geometry and procedural city were created for this project. The runtime model is included at `public/models/office-shell.glb`; asset provenance is in `assets/`. Blender is optional for authoring and is not started by the app. From the repository root, an explicitly launched Blender session can run `scripts/build_office_assets.py`; `FOURTEENTH_ROOT` overrides its output root. That script replaces the active scene, so use a fresh Blender file.
+The office geometry and procedural city were created for this project. The runtime model is included at `public/models/office-shell.glb`; asset provenance is in `assets/`. Blender is optional for authoring and is not started by the app. From the repository root, an explicitly launched Blender session can run `scripts/build_office_assets.py`; `ITERATION1_ROOT` overrides its output root. That script replaces the active scene, so use a fresh Blender file.
 
 Three.js WebXR provides an initial headset path. Headset comfort, controller behavior, and production VR performance are unverified; the supported demonstration is the desktop walkthrough.

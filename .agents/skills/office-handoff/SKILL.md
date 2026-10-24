@@ -1,6 +1,6 @@
 ---
 name: office-handoff
-description: Preserve task continuity when a Fourteenth agent stops, changes models, or hands work to another office worker. Use for agent replacement and task-dependent collaboration.
+description: Preserve task continuity when a Iteration1 agent stops, changes models, or hands work to another office worker. Use for agent replacement and task-dependent collaboration.
 ---
 
 Write a compact handoff containing the original objective, current status, file paths touched, decisions with evidence, verification results, unresolved blockers, and the next useful action. Separate completed actions from proposed actions. Do not include credentials or hidden reasoning.

@@ -64,7 +64,7 @@ function Avatar({ agent, size = '' }: { agent: Agent; size?: string }) {
 function Status({ agent }: { agent: Agent }) { return <span className={`status status-${agent.status}`}><i />{statusLabels[agent.status]}</span>; }
 export default function App() {
   const [data, setData] = useState<OfficeState | null>(null);
-  const [roomId, setRoomId] = useState(localStorage.getItem('fourteenth-live-room') || localStorage.getItem('fourteenth-room') || '');
+  const [roomId, setRoomId] = useState(localStorage.getItem('iteration1-live-room') || localStorage.getItem('iteration1-room') || '');
   const [allowDemo,setAllowDemo]=useState(false);
   const [connectReturn,setConnectReturn]=useState<Tool>('templates');
   const [tool, setTool] = useState<Tool>('office'); const [selection, setSelection] = useState<string | null>(null);
@@ -76,7 +76,7 @@ export default function App() {
   const [panelExpanded,setPanelExpanded]=useState(false);
   const spatial=tool==='office' || (tool==='replay'?historySpatial:!panelExpanded);
   useEffect(()=>{if(tool==='office')setPanelExpanded(false);},[tool]);
-  const [compact,setCompact]=useState(()=>localStorage.getItem('fourteenth-view')==='map');
+  const [compact,setCompact]=useState(()=>localStorage.getItem('iteration1-view')==='map');
   const [selectedWork,setSelectedWork]=useState<string|null>(null);
   const [walk, setWalk] = useState(false); const [error, setError] = useState(''); const [toast, setToast] = useState(''); const [busy, setBusy] = useState(false);
   const [whip, setWhip] = useState(false); const [crack, setCrack] = useState(0); const [help, setHelp] = useState(false); const [streamOnline, setStreamOnline] = useState(true);
@@ -95,7 +95,7 @@ export default function App() {
     setTool('office');setCompact(false);
     if(index===demoTeam.selected)scene.current?.focusOffice();
   },[room?.id,demoOffices,demoTeam.selected]);
-  useEffect(()=>{if(room && !room.demo && !room.archived)localStorage.setItem('fourteenth-live-room',room.id);else if(room?.demo && !allowDemo)setTool('rooms');},[room?.id,allowDemo]);
+  useEffect(()=>{if(room && !room.demo && !room.archived)localStorage.setItem('iteration1-live-room',room.id);else if(room?.demo && !allowDemo)setTool('rooms');},[room?.id,allowDemo]);
   const cursorOwner = room?.agents.find(a => a.provider === 'cursor' && a.turnId);
   const selected = room?.agents.find(a => a.id === selection);
   const liveAgents = room?.agents.filter(a => a.status !== 'ejected') || [];
@@ -125,8 +125,8 @@ export default function App() {
   useEffect(() => { if (displayRoom) scene.current?.update(replayRoom || {...displayRoom,workItems:displayRoom.workItems.filter(t=>!t.archived)}, selection); }, [displayRoom, replayRoom, selection, sceneReady]);
   useEffect(() => { if(scene.current)scene.current.onTeammate=()=>demoCount?setToast('Demo office · simulated agents and assignments.'):setTool('team'); }, [demoCount,sceneReady]);
   useEffect(()=>{if(scene.current)scene.current.onOfficeSelect=chooseDemoOffice;},[chooseDemoOffice,sceneReady]);
-  useEffect(()=>{localStorage.setItem('fourteenth-view',compact?'map':'office');scene.current?.setRendering(!compact && (spatial || cinematic || recording));},[compact,sceneReady,spatial,cinematic,recording]);
-  useEffect(() => { if (roomId) localStorage.setItem('fourteenth-room', roomId); }, [roomId]);
+  useEffect(()=>{localStorage.setItem('iteration1-view',compact?'map':'office');scene.current?.setRendering(!compact && (spatial || cinematic || recording));},[compact,sceneReady,spatial,cinematic,recording]);
+  useEffect(() => { if (roomId) localStorage.setItem('iteration1-room', roomId); }, [roomId]);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 5000); return () => clearTimeout(t); }, [toast]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => { if(cinematic){if(e.key==='Escape')setCinematic(false);return;} if(recording){if(e.key==='Escape'||e.key.toLowerCase()==='f'){setRecording(false);setTool('recording');}if(e.altKey && /^[1-4]$/.test(e.key)){e.preventDefault();scene.current?.tourStop(Number(e.key)-1);}return;} if(e.key.toLowerCase()==='f' && tool==='recording' && sceneReady && !sceneError && !(e.target as HTMLElement).closest('input,textarea,select')){setCompact(false);setWhip(false);setHelp(false);setRecording(true);return;} if ((e.target as HTMLElement).closest('input,textarea,select,[contenteditable=true]')) return; const entry = hotbar.find(t => t.key === e.key); if (entry) setTool(entry.tool); if (e.key === '9') { setCompact(false); setWhip(v => !v); setTool('office'); } if (e.key === 'Escape') { setCinematic(false); setWhip(false); setTool('office');scene.current?.setWalk(false); setSelection(null); setHelp(false); } if (e.key.toLowerCase() === 'v') {setTool('office');setCompact(false);scene.current?.setWalk(!scene.current.walk);} };
@@ -157,7 +157,7 @@ export default function App() {
   if(room.archived)return <main className="empty-projects"><span className="brand-mark">14</span>{tool==='newroom'?<NewRoom defaultPath="" connected={!!data.connection.account} busy={busy} onSubmit={(name,path,demo)=>action(async()=>{const result=await api('/rooms',{name,path,demo});switchRoom(result.room.id);})}/>:<ProjectRooms rooms={data.rooms} current="" busy={busy} action={action} onRoom={switchRoom} onNew={()=>setTool('newroom')}/>}<p role={error?'alert':undefined}>{error || toast}</p></main>;
   return <div className={`app quiet-office ${!spatial && !cinematic && !recording?'workbench':'spatial-shell'} ${tool!=='office'?'has-panel':''} ${walk ? 'walk-mode' : ''} ${compact?'compact-mode':''} ${cinematic?'cinema-mode':''} ${recording?'recording-mode':''}`}>
     <header className="topbar" inert={cinematic || recording}>
-      <button className="brand" onClick={() => { setTool('office'); setWhip(false); scene.current?.setWalk(false); }} aria-label="Fourteenth home"><span className="brand-mark">14</span><span className="brand-name">Fourteenth</span></button>
+      <button className="brand" onClick={() => { setTool('office'); setWhip(false); scene.current?.setWalk(false); }} aria-label="Iteration1 home"><span className="brand-mark">14</span><span className="brand-name">Iteration1</span></button>
       <button className="project-picker" onClick={() => setTool('rooms')}><span>{room.name}</span><ChevronDown size={14} /></button>
       {room.demo && <span className="demo-label">Demo</span>}
       {!room.demo && data.connection.testAgents && <span className="demo-label" title="Real office transport; simulated agent execution">Test agents</span>}

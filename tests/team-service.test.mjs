@@ -16,12 +16,12 @@ test('replies follow the original sender through replacement',()=>{
 });
 
 test('lost pairing response retries idempotently; receiving a packet awaits durable storage',{timeout:20000},async t=>{
-  const dir=await mkdtemp(path.join(os.tmpdir(),'fourteenth-team-service-'));
+  const dir=await mkdtemp(path.join(os.tmpdir(),'iteration1-team-service-'));
   const originalFetch=globalThis.fetch;
   const room=name=>({id:name,name,paused:false,demo:false,agents:[agent('Morgan','Manager','Inspect',0)],workItems:[],messages:[]});
   const ar=room('A'),br=room('B');let release;let block=false,persisted=0;
   const services=[];
-  t.after(async()=>{globalThis.fetch=originalFetch;services.forEach(s=>s.close());if(path.dirname(dir)===os.tmpdir() && path.basename(dir).startsWith('fourteenth-team-service-'))await rm(dir,{recursive:true,force:true});});
+  t.after(async()=>{globalThis.fetch=originalFetch;services.forEach(s=>s.close());if(path.dirname(dir)===os.tmpdir() && path.basename(dir).startsWith('iteration1-team-service-'))await rm(dir,{recursive:true,force:true});});
   for(const name of ['a','b'])await mkdir(path.join(dir,name));
   const a=await createTeam({state:{rooms:[ar]},dataDir:path.join(dir,'a'),port:44451,changed(){},onReceive:async()=>{},persist:async()=>{if(block)await new Promise(r=>release=r);persisted++;}});services.push(a);
   const b=await createTeam({state:{rooms:[br]},dataDir:path.join(dir,'b'),port:44452,changed(){},onReceive:async()=>{},persist:async()=>{}});services.push(b);

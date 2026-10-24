@@ -3,17 +3,17 @@ import { realpath } from 'node:fs/promises';
 
 export function createOfficeClient({ url = 'http://127.0.0.1:4314', project = process.cwd(), fetchImpl = fetch } = {}) {
   const parsed = new URL(url);
-  if (parsed.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(parsed.hostname) || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) throw new Error('Fourteenth URL must be a local HTTP origin.');
+  if (parsed.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(parsed.hostname) || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) throw new Error('Iteration1 URL must be a local HTTP origin.');
   const base = parsed.origin;
   let cookie;
   async function localFetch(url, options) {
     try { return await fetchImpl(url, options); }
-    catch { throw new Error(`Fourteenth is unavailable at ${base}. Start it with npm start, then retry.`); }
+    catch { throw new Error(`Iteration1 is unavailable at ${base}. Start it with npm start, then retry.`); }
   }
   async function session() {
     const res = await localFetch(base, { redirect: 'error', signal: AbortSignal.timeout(10000) });
     cookie = res.headers.get('set-cookie')?.split(';')[0];
-    if (!cookie?.startsWith(`office_session_${parsed.port || '80'}=`) && !cookie?.startsWith('office_session=')) throw new Error('Start Fourteenth before connecting Cursor.');
+    if (!cookie?.startsWith(`office_session_${parsed.port || '80'}=`) && !cookie?.startsWith('office_session=')) throw new Error('Start Iteration1 before connecting Cursor.');
   }
   async function request(route, body, retry = true) {
     if (!cookie) await session();

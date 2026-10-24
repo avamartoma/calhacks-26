@@ -1,15 +1,15 @@
 # Team offices
 
-Two people can connect their Fourteenth offices for a shared project. Each runs Fourteenth locally with their own project checkout and Codex account. No provider API key is required.
+Two people can connect their Iteration1 offices for a shared project. Each runs Iteration1 locally with their own project checkout and Codex account. No provider API key is required.
 
 ## Connect
 
-1. Both people open a live project in Fourteenth.
+1. Both people open a live project in Iteration1.
 2. The first person opens **Team**, enters their name, selects their private network address, and clicks **Create invitation**.
 3. They privately share the invitation code, which expires after ten minutes.
 4. The second person opens **Team → Join teammate**, enters their own name and pastes the code.
 
-Use a trusted local network. The sharing listener uses HTTP on port `4414` by default (`PORT + 100`, or `OFFICE_TEAM_PORT`). Only this narrow pairing/status/handoff listener accepts network connections. The application and execution API remain bound to localhost. Windows Firewall may require allowing the sharing port on the private network; Fourteenth does not change firewall rules. For two instances on the same computer, choose the `127.0.0.1` sharing address.
+Use a trusted local network. The sharing listener uses HTTP on port `4414` by default (`PORT + 100`, or `OFFICE_TEAM_PORT`). Only this narrow pairing/status/handoff listener accepts network connections. The application and execution API remain bound to localhost. Windows Firewall may require allowing the sharing port on the private network; Iteration1 does not change firewall rules. For two instances on the same computer, choose the `127.0.0.1` sharing address.
 
 Invitations are capabilities: keep them private. Names are chosen by participants, not verified account identities. This first version pairs one teammate per project. It does not provide Internet relaying or a hosted team account service.
 

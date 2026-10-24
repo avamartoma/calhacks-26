@@ -60,7 +60,7 @@ export async function createTeam({state,dataDir,port,changed,persist,onReceive})
     const incoming=packetSchema.parse(raw),room=localRoom(link);
     if(!room)throw new Error('Office is unavailable.');
     if(link.remote && incoming.office.id!==link.remote.id)throw new Error('This connection belongs to another office.');
-    if(state.rooms.some(r=>r.id===incoming.office.id))throw new Error('Connect a different Fourteenth instance.');
+    if(state.rooms.some(r=>r.id===incoming.office.id))throw new Error('Connect a different Iteration1 instance.');
     link.remote=incoming.office; link.lastSeen=Date.now();delete link.error;
     for(const data of incoming.messages) {
       if(data.fromOfficeId!==incoming.office.id || data.toOfficeId!==room.id || !incoming.office.agents.some(a=>a.id===data.fromId))continue;
@@ -90,7 +90,7 @@ export async function createTeam({state,dataDir,port,changed,persist,onReceive})
     await persist();await save();changed();
   }
   const transport=express();transport.disable('x-powered-by');
-  transport.use((req,res,next)=>{if(req.headers.origin)return res.status(403).json({error:'Use the local Fourteenth app to pair.'});next();});
+  transport.use((req,res,next)=>{if(req.headers.origin)return res.status(403).json({error:'Use the local Iteration1 app to pair.'});next();});
   transport.use(express.json({limit:'2mb'}));
   const endpoint=fn=>async(req,res)=>{try{res.json(await fn(req));}catch(e){res.status(403).json({error:e instanceof z.ZodError?'Invalid office packet.':e.message});}};
   transport.post('/pair',endpoint(async req=>{
@@ -100,7 +100,7 @@ export async function createTeam({state,dataDir,port,changed,persist,onReceive})
     if(invite.clientId && invite.clientId!==body.clientId)throw new Error('Invitation already used.');
     let link=links.find(l=>l.roomId===invite.roomId);
     if(link && link.clientId!==body.clientId)throw new Error('This office already has a teammate.');
-    if(state.rooms.some(r=>r.id===body.packet.office.id))throw new Error('Connect a different Fourteenth instance.');
+    if(state.rooms.some(r=>r.id===body.packet.office.id))throw new Error('Connect a different Iteration1 instance.');
     if(!link){link={roomId:invite.roomId,owner:invite.owner,token:secret(),clientId:body.clientId,host:true};links.push(link);}
     invite.clientId=body.clientId;
     await accept(link,body.packet);
@@ -153,7 +153,7 @@ export async function createTeam({state,dataDir,port,changed,persist,onReceive})
       if(room.demo)throw new Error('Choose a live project before joining a teammate.');
       if(linkFor(room))throw new Error('Disconnect the current teammate first.');
       const {owner,code}=z.object({owner:z.string().trim().min(1).max(60),code:z.string().trim().max(3000)}).parse(body);
-      let invite;try{invite=z.object({v:z.literal(1),origin:z.string(),invitation:id,expiresAt:z.number()}).parse(JSON.parse(Buffer.from(code,'base64url').toString()));}catch{throw new Error('Paste a Fourteenth invitation code.');}
+      let invite;try{invite=z.object({v:z.literal(1),origin:z.string(),invitation:id,expiresAt:z.number()}).parse(JSON.parse(Buffer.from(code,'base64url').toString()));}catch{throw new Error('Paste a Iteration1 invitation code.');}
       if(invite.expiresAt<Date.now())throw new Error('Invitation expired. Ask for a new one.');
       const origin=peerOrigin(invite.origin);
       const pending=pendingJoins[room.id];

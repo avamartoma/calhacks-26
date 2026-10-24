@@ -14,8 +14,8 @@ export class Codex extends EventEmitter {
     return this.ready;
   }
   async start() {
-    // Separate auth store: signing into Fourteenth never switches the desktop/CLI account.
-    const codexHome = process.env.OFFICE_CODEX_HOME || path.join(homedir(), '.fourteenth', 'codex');
+    // Separate auth store: signing into Iteration1 never switches the desktop/CLI account.
+    const codexHome = process.env.OFFICE_CODEX_HOME || path.join(homedir(), '.iteration1', 'codex');
     mkdirSync(codexHome, { recursive: true });
     const localCli = fileURLToPath(new URL('../.office/runtime/node_modules/@openai/codex/bin/codex.js', import.meta.url));
     const globalCli = path.join(process.env.APPDATA || '', 'npm', 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
@@ -34,7 +34,7 @@ export class Codex extends EventEmitter {
         msg.error ? p.reject(new Error(msg.error.message)) : p.resolve(msg.result);
       } else if (msg.method) this.emit(msg.id != null ? 'request' : 'notification', msg);
     });
-    await this.call('initialize', { clientInfo: { name: 'fourteenth_office', title: 'Fourteenth', version: '0.1.0' }, capabilities: { experimentalApi: true } });
+    await this.call('initialize', { clientInfo: { name: 'iteration1_office', title: 'Iteration1', version: '0.1.0' }, capabilities: { experimentalApi: true } });
     this.notify('initialized', {});
   }
   fail(error) { this.ready = null; this.process = null; for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(error); } this.pending.clear(); this.emit('offline', error.message); }
@@ -53,7 +53,7 @@ export class Codex extends EventEmitter {
   async restart() {
     const child=this.process;
     if(child)await new Promise((resolve,reject)=>{
-      const timer=setTimeout(()=>reject(new Error('Codex is still closing. Restart the Fourteenth companion to finish sandbox setup.')),10000);
+      const timer=setTimeout(()=>reject(new Error('Codex is still closing. Restart the Iteration1 companion to finish sandbox setup.')),10000);
       child.once('exit',()=>{clearTimeout(timer);resolve();});
       child.stdin.end(); // EOF closes the native server behind the npm launcher too.
     });

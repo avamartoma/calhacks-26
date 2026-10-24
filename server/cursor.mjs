@@ -28,7 +28,7 @@ export function createCursorDesk({ state, changed, isStarting = () => false }) {
     room.agents.push(worker); claimIdentity(worker, room); room.workItems.push(item); room.goal ||= input.task;
     event(worker, 'user', input.task); event(worker, 'system', 'Execution stays in Cursor. Model, progress and evidence are reported through MCP; verify results before accepting the task.');
     record(room, 'Cursor took implementation ownership', 'work'); changed();
-    return { roomId: room.id, agentId: worker.id, workItemId: item.id, instruction: 'Publish concise progress with office_cursor_update. After execution has finished or stopped, call office_cursor_finish. Fourteenth cannot interrupt Cursor execution.' };
+    return { roomId: room.id, agentId: worker.id, workItemId: item.id, instruction: 'Publish concise progress with office_cursor_update. After execution has finished or stopped, call office_cursor_finish. Iteration1 cannot interrupt Cursor execution.' };
   }
   function owner(room, id) {
     const worker = room.agents.find(a => a.id === id && a.provider === 'cursor');

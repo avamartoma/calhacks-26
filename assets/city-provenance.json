@@ -1,5 +1,5 @@
 {
-  "name": "Fourteenth procedural city district",
+  "name": "Iteration1 procedural city district",
   "source": "src/CityEnvironment.ts",
   "authoring": "Original deterministic geometry and facade/road/water shader extensions authored for this project",
   "seed": 1400926,

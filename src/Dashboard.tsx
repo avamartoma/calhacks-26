@@ -9,7 +9,7 @@ import './dashboard.css';
 
 export function Dashboard({data,room,busy,action,onAgent,onMission,onConnect,onInbox}:{data:OfficeState;room:Room;busy:boolean;action:Action;onAgent:(roomId:string,id:string)=>void;onMission:(roomId:string)=>void;onConnect:()=>void;onInbox:()=>void}) {
   const detailRef=useRef<HTMLElement>(null),listRef=useRef<HTMLDivElement>(null);
-  const storageKey=`fourteenth-board:${room.id}`;
+  const storageKey=`iteration1-board:${room.id}`;
   const [saved]=useState(()=>{try{return JSON.parse(sessionStorage.getItem(storageKey)||'{}');}catch{return {};}});
   const [scope,setScope]=useState<string>(data.rooms.some(r=>r.id===saved.scope && !r.archived)||saved.scope==='all'?saved.scope:room.id);
   const [query,setQuery]=useState<string>(saved.query||''),[filter,setFilter]=useState<string>(saved.filter||'open'),[selected,setSelected]=useState<string|null>(data.rooms.some(r=>r.workItems.some(t=>t.id===saved.selected && (!!t.archived === (saved.filter==='archived'))))?saved.selected:null),[creating,setCreating]=useState(false);

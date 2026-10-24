@@ -13,15 +13,15 @@ export async function checkpoint(room,label,dataDir) {
     const top=await git(room.path,['rev-parse','--show-toplevel']);
     if(path.resolve(top)!==path.resolve(room.path))throw new Error('Use a repository root for code checkpoints.');
     const index=path.join(dataDir,`checkpoint-${point.id}.index`);
-    const env={GIT_INDEX_FILE:index,GIT_AUTHOR_NAME:'Fourteenth',GIT_AUTHOR_EMAIL:'fourteenth@localhost',GIT_COMMITTER_NAME:'Fourteenth',GIT_COMMITTER_EMAIL:'fourteenth@localhost'};
+    const env={GIT_INDEX_FILE:index,GIT_AUTHOR_NAME:'Iteration1',GIT_AUTHOR_EMAIL:'iteration1@localhost',GIT_COMMITTER_NAME:'Iteration1',GIT_COMMITTER_EMAIL:'iteration1@localhost'};
     try {
       const head=await git(room.path,['rev-parse','HEAD']);
       await git(room.path,['read-tree','HEAD'],env);
       // Track only files already under version control. Secrets/ignored and untracked files are excluded.
       await git(room.path,['add','-u','--','.'],env);
       const tree=await git(room.path,['write-tree'],env);
-      point.commit=await git(room.path,['commit-tree',tree,'-p',head,'-m',`Fourteenth checkpoint: ${label}`],env);
-      await git(room.path,['update-ref',`refs/fourteenth/${point.id}`,point.commit]);
+      point.commit=await git(room.path,['commit-tree',tree,'-p',head,'-m',`Iteration1 checkpoint: ${label}`],env);
+      await git(room.path,['update-ref',`refs/iteration1/${point.id}`,point.commit]);
     } finally { await rm(index,{force:true}); }
   }
   room.checkpoints.push(point);record(room,`Checkpoint: ${label}`,'checkpoint');return point;

@@ -144,7 +144,7 @@ async function startAgentReserved(room, a, prompt) {
     if (!a.threadId) {
       if(a.handoffPacket)prompt+=`\nSaved context (inspect current files before continuing):\n${JSON.stringify(a.handoffPacket)}`;
       const instructions = (room.skills || skillNames).map(n => skillText[n]).filter(Boolean).join('\n\n');
-      const result = await codex.call('thread/start', { cwd: room.path, model, sandbox: access.sandbox, approvalPolicy: access.approvalPolicy, developerInstructions: `${instructions}\nYou are ${a.name}${a.title ? `, ${a.title}` : ''}, ${a.role} in Fourteenth. Your id is ${a.id}. Refer to other agents by id. ${a.manager ? `${access.canWrite?'You are the sole file writer.':'You are a read-only manager. Inspect, plan and delegate reviews; do not edit files or claim implementation is complete.'} Use office_delegate proactively for independent read-only work at project kickoff; do not wait for the user to ask for subagents. Maximum ${room.budget} concurrent workers. Use office_message for handoffs. Use office_update_work to keep the mission board accurate and attach concrete verification before marking work done. Declare affected files through office_update_work before implementation and include file scopes in office_delegate. Set dependencies to sequence implementation and review; inspect queued blockers before resequencing. Do not use other agent spawning tools; the office manages the concurrency budget.` : 'You are a read-only specialist. Return evidence with file paths and concrete findings. Do not spawn additional agents or edit files. Report results to the manager.'}\n${peerInstructions}\nOnly show concise progress, actions, plans and results.`, dynamicTools: a.manager ? dynamicTools : dynamicTools.filter(t=>['office_status','office_message','office_acknowledge'].includes(t.name)), serviceName: 'fourteenth' });
+      const result = await codex.call('thread/start', { cwd: room.path, model, sandbox: access.sandbox, approvalPolicy: access.approvalPolicy, developerInstructions: `${instructions}\nYou are ${a.name}${a.title ? `, ${a.title}` : ''}, ${a.role} in Iteration1. Your id is ${a.id}. Refer to other agents by id. ${a.manager ? `${access.canWrite?'You are the sole file writer.':'You are a read-only manager. Inspect, plan and delegate reviews; do not edit files or claim implementation is complete.'} Use office_delegate proactively for independent read-only work at project kickoff; do not wait for the user to ask for subagents. Maximum ${room.budget} concurrent workers. Use office_message for handoffs. Use office_update_work to keep the mission board accurate and attach concrete verification before marking work done. Declare affected files through office_update_work before implementation and include file scopes in office_delegate. Set dependencies to sequence implementation and review; inspect queued blockers before resequencing. Do not use other agent spawning tools; the office manages the concurrency budget.` : 'You are a read-only specialist. Return evidence with file paths and concrete findings. Do not spawn additional agents or edit files. Report results to the manager.'}\n${peerInstructions}\nOnly show concise progress, actions, plans and results.`, dynamicTools: a.manager ? dynamicTools : dynamicTools.filter(t=>['office_status','office_message','office_acknowledge'].includes(t.name)), serviceName: 'iteration1' });
       if(result.sandbox?.type !== (access.canWrite?'workspaceWrite':'readOnly'))throw new Error('Codex did not grant the requested project permissions. Refresh Connect Codex and complete sandbox setup before resuming.');
       a.threadId = result.thread.id; a.protocolVersion=5;a.threadPermissionKey=accessKey; loadedThreads.add(a.threadId);
     } else if (!loadedThreads.has(a.threadId)) { const resumed=await codex.call('thread/resume', { threadId: a.threadId, sandbox:access.sandbox, approvalPolicy:access.approvalPolicy });if(resumed.sandbox?.type !== (access.canWrite?'workspaceWrite':'readOnly'))throw new Error('Resumed session permissions do not match this office. Reconnect before continuing.');loadedThreads.add(a.threadId); }
@@ -175,7 +175,7 @@ async function stopAgent(a) {
   a.status = 'paused';
 }
 async function sendTo(room, a, text) {
-  if (a.provider === 'cursor') throw new Error('Send this message in Cursor. Fourteenth tracks this worker but does not control its execution.');
+  if (a.provider === 'cursor') throw new Error('Send this message in Cursor. Iteration1 tracks this worker but does not control its execution.');
   if (a.status === 'ejected') throw new Error('Replace this agent before sending a message.');
   if (a.turnId) { await codex.call('turn/steer', { threadId: a.threadId, expectedTurnId: a.turnId, input: [{ type: 'text', text }] }); event(a, 'user', text); }
   else await startAgent(room, a, text);
@@ -204,7 +204,7 @@ async function handleNotification(msg) {
     }else{
       connection.sandboxSetupPending=false;
       connection.error=String(msg.params.error || '').includes('orchestrator_helper_incomplete')
-        ? 'Codex’s Windows setup helper stopped before completing setup. Update the Fourteenth Codex runtime, restart the companion, and retry setup. Your ticket is preserved.'
+        ? 'Codex’s Windows setup helper stopped before completing setup. Update the Iteration1 Codex runtime, restart the companion, and retry setup. Your ticket is preserved.'
         : msg.params.error || 'Windows sandbox setup failed. Try setup again.';
       changed();
     }
@@ -307,7 +307,7 @@ codex.on('request', async msg => {
     } catch (e) { codex.respond(msg.id, { contentItems: [{ type: 'inputText', text: e.message }], success: false }); }
   } else if (['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/tool/requestUserInput'].includes(msg.method)) {
     state.approvals.push({ id: String(msg.id), rpcId: msg.id, roomId: room.id, agentId: a.id, method: msg.method, command: p.command || p.reason || 'File change requested', questions: p.questions }); a.status = 'approval'; changed();
-  } else { codex.reject(msg.id, 'This interaction is not supported by Fourteenth yet. Ask the user in a normal message.'); event(a, 'error', `Unsupported interaction: ${msg.method}`); changed(); }
+  } else { codex.reject(msg.id, 'This interaction is not supported by Iteration1 yet. Ask the user in a normal message.'); event(a, 'error', `Unsupported interaction: ${msg.method}`); changed(); }
 });
 
 const app = express(); const port = Number(process.env.PORT || 4314); const secret = randomBytes(32).toString('hex');
@@ -546,7 +546,7 @@ app.post('/api/rooms/:id/install-skills', wrap(async req => { const r = roomBy(s
 app.get('/api/export/:id', wrap(async (req, res) => { const r = roomBy(state, req.params.id); res.setHeader('Content-Disposition', 'attachment; filename="office-handoff.json"'); res.json(r); }));
 if (process.argv.includes('--production')) app.use(express.static(path.join(root, 'dist')));
 else { const { createServer } = await import('vite'); const vite = await createServer({ server: { middlewareMode: true, hmr: { port: port + 1, host: '127.0.0.1' } }, appType: 'spa' }); app.use(vite.middlewares); }
-const server = app.listen(port, '127.0.0.1', () => console.log(`Fourteenth office: http://127.0.0.1:${port}`));
+const server = app.listen(port, '127.0.0.1', () => console.log(`Iteration1 office: http://127.0.0.1:${port}`));
 const expiring=new Set();
 setInterval(()=>{for(const room of state.rooms)if(!room.demo)for(const a of room.agents)if(a.turnId && a.deadline && a.deadline<Date.now() && !expiring.has(a.id)){
   expiring.add(a.id);stopAgent(a).then(()=>{setWorkStatus(room,a,'blocked','Turn time budget reached. Inspect the handoff and resume.');a.handoffPacket=handoffPacket(room,a);record(room,`${a.name} reached the turn time budget`,'pause');}).catch(e=>event(a,'error',e.message)).finally(()=>{expiring.delete(a.id);changed();});

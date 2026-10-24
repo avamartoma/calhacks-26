@@ -1,6 +1,6 @@
 # Project workbench starter
 
-This is the starting point for a real Fourteenth feature run, not a completed search demo.
+This is the starting point for a real Iteration1 feature run, not a completed search demo.
 
 Copy this folder to a separate local workspace, run `npm install`, initialize Git and commit the starter. Use `npm run dev` for the preview at http://127.0.0.1:4320. `npm test` and `npm run build` verify it.
 

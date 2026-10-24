@@ -6,12 +6,12 @@ import path from 'node:path';
 import os from 'node:os';
 
 test('local companion enforces its boundary and preserves room and agent lifecycle', {timeout:45000}, async t=>{
-  const root=path.resolve('.');const temp=await mkdtemp(path.join(os.tmpdir(),'fourteenth-test-'));
+  const root=path.resolve('.');const temp=await mkdtemp(path.join(os.tmpdir(),'iteration1-test-'));
   const port=44314;const base=`http://127.0.0.1:${port}`;
   const child=spawn(process.execPath,['server/index.mjs','--production'],{cwd:root,env:{...process.env,PORT:String(port),OFFICE_DATA_DIR:temp,OFFICE_CODEX_HOME:path.join(temp,'codex'),OFFICE_CODEX_BIN:process.execPath,OFFICE_CODEX_ARGS:JSON.stringify([path.join(root,'tests/fake-codex.mjs')])},windowsHide:true,stdio:['ignore','pipe','pipe']});
   let stderr='';child.stderr.on('data',d=>stderr+=d);
-  t.after(async()=>{ child.kill(); await new Promise(r=>child.once('exit',r)); if(path.resolve(temp).startsWith(path.resolve(os.tmpdir())+path.sep+'fourteenth-test-'))await rm(temp,{recursive:true,force:true}); });
-  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(stderr||'Server startup timed out')),12000);child.stdout.on('data',d=>{if(String(d).includes('Fourteenth office')){clearTimeout(timer);resolve();}});child.once('exit',()=>reject(new Error(stderr||'Server exited')));});
+  t.after(async()=>{ child.kill(); await new Promise(r=>child.once('exit',r)); if(path.resolve(temp).startsWith(path.resolve(os.tmpdir())+path.sep+'iteration1-test-'))await rm(temp,{recursive:true,force:true}); });
+  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(stderr||'Server startup timed out')),12000);child.stdout.on('data',d=>{if(String(d).includes('Iteration1 office')){clearTimeout(timer);resolve();}});child.once('exit',()=>reject(new Error(stderr||'Server exited')));});
   assert.equal((await fetch(base+'/api/state')).status,401);
   const page=await fetch(base);const cookie=page.headers.get('set-cookie').split(';')[0];assert.equal(page.status,200);
   const req=async(route,body,method='POST')=>{const r=await fetch(base+'/api'+route,{method:body===undefined?'GET':method,headers:{cookie,...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:r.status,data:await r.json()};};
