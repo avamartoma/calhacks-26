@@ -137,6 +137,26 @@ Iteration1 can also **launch** a Cursor agent itself through the Cursor SDK, as 
 
 A **Codex CLI** session you run yourself can report into the office over MCP too, on its own ChatGPT sign-in, which stays separate from the office's Codex profile. Open **Connections → Codex → Use an existing Codex CLI session**, copy the connect command (it runs `codex mcp add` and points the server at that project), then copy the start command. Its desk tools are `office_codex_start`, `office_codex_update` and `office_codex_finish`; reports are labeled `codex-reported`, and it shares the per-project writer lock with Cursor and Claude Code.
 
+## ASI:One (Fetch.ai) agent
+
+![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
+![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
+
+**iteration1-office** (`agent1q0r5evneykvtpltu348zc0nq6a32lwuaq4ywjt0twxw7kz9945y0qgxn6mk`) lets the office's owner run it from an ASI:One chat. It is a uAgent that implements the Agent Chat Protocol and is registered on Agentverse. Say `status` for tasks, blockers and who is working, `report on <task>` for a run doc that separates verified receipts from self-reported ones, `approvals` for commands waiting in the office, or `mission: <what to build>` to hand a new mission to the implementation manager, followed by `confirm`.
+
+It is another client of the local office, like the MCP servers. It runs on your computer and reaches Agentverse through its mailbox, an outbound connection, so the office stays on loopback and the agent's own server listens only on `127.0.0.1`. It holds no office credential, and missions publish under the account signed in to the office.
+
+- **Pairing.** Only paired sender addresses can use it. At startup the agent prints a single-use code in its terminal; send `pair <code>` from ASI:One. Pairing locks after five wrong codes until restart. Paired addresses and the agent's generated seed are kept in `.office/fetch-agent.json` (git-ignored). To check whether ASI:One gives each user their own sender address, chat from a second ASI:One account: the terminal logs each sender, and that account should be refused. The code is accepted anywhere in a message as its own word, since ASI:One may reword what you type, and the terminal logs the first 200 characters of every message it receives. To check pairing without ASI:One, run `agents/pair_test.py <code>` with the agent running: a second, local uAgent sends `pair <code>` and `status` and prints the replies. It stays paired until you remove its address from `.office/fetch-agent.json`.
+- **Limits.** Missions need an explicit `confirm` within ten minutes. Command approvals, stopping agents and pausing stay in the Iteration1 app; the agent cannot approve anything. Chat text and office content are treated as data.
+
+```sh
+python -m venv .office/runtime/agent-venv
+.office/runtime/agent-venv/Scripts/python -m pip install -r agents/requirements.txt   # bin/python on macOS and Linux
+.office/runtime/agent-venv/Scripts/python agents/office_agent.py
+```
+
+With the office running (`npm start`), open the `agentverse.ai/inspect` link the agent prints and choose **Connect → Mailbox** once. On Windows on ARM, uAgents needs `grpcio`, which has no ARM64 wheel; create the venv from an x64 Python (for example the `python` NuGet package unpacked under `.office/runtime/python-x64`), which runs under emulation. Tests: `python -m unittest discover agents`.
+
 ## Claude agents
 
 Claude agents are full office members, run through the Claude Agent SDK. Choose a Claude model (Claude Opus 5.5, Sonnet 5.5, Haiku 5.5 or Fable 5.1) as the manager when you start work, or when you replace any agent, and the office runs exactly as it does on Codex:

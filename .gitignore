@@ -24,6 +24,8 @@ credentials.json
 *.key
 .DS_Store
 Thumbs.db
+__pycache__/
+*.pyc
 
 # Design reference images (local only)
 inspo/
