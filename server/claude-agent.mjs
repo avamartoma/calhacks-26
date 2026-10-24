@@ -1,10 +1,11 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { z } from 'zod';
+import { pathToFileURL } from 'node:url';
 
-// Claude agents the office launches through the Claude Agent SDK. Like a launched Cursor
-// run, the office picks the model, records the stream as observed work, and can stop it.
-// The SDK is imported on first launch so the companion boots without it.
+// Claude as an office engine, through the Claude Agent SDK. A Claude agent is a full office
+// member: it takes the same instructions and office tools as a Codex agent, its stream is
+// recorded as observed work, it can be steered mid-turn, resumed later and stopped.
+// The SDK is imported on first use so the companion boots without it.
 export const claudeModels = [
   { id: 'claude-opus-5-5', name: 'Claude Opus 5.5' },
   { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5' },
@@ -12,14 +13,9 @@ export const claudeModels = [
   { id: 'claude-fable-5-1', name: 'Claude Fable 5.1' }
 ];
 
-export const claudeLaunchFields = z.object({
-  prompt: z.string().trim().min(1).max(12000),
-  model: z.enum(claudeModels.map(m => m.id)).default('claude-opus-5-5'),
-  access: z.enum(['read', 'edit']).default('edit'),
-  effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('high')
-}).strict();
+export const isClaudeModel = model => claudeModels.some(m => m.id === model);
 
-const READ_TOOLS = ['Read', 'Glob', 'Grep'];
+const READ_TOOLS = ['Read', 'Glob', 'Grep', 'TodoWrite'];
 const EDIT_TOOLS = [...READ_TOOLS, 'Edit', 'Write', 'Bash'];
 const FILE_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
 
@@ -27,13 +23,14 @@ const FILE_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
  * Tool access for one run. Read runs get read-only tools and are never asked anything.
  * Edit runs may change files, and Bash runs in the OS sandbox, which confines writes to the
  * project folder; if the sandbox is unavailable the run fails instead of running unconfined.
+ * `extraTools` names additional tools to allow, such as the office's MCP tools.
  */
-export function accessOptions(access) {
+export function accessOptions(access, extraTools = []) {
   const tools = access === 'edit' ? EDIT_TOOLS : READ_TOOLS;
-  const allowed = new Set(tools);
+  const allowed = new Set([...tools, ...extraTools]);
   return {
     tools,
-    allowedTools: tools,
+    allowedTools: [...allowed],
     permissionMode: access === 'edit' ? 'acceptEdits' : 'dontAsk',
     ...(access === 'edit' ? { sandbox: { enabled: true, failIfUnavailable: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false } } : {}),
     // Nobody is watching a terminal, so anything outside the grant is denied rather than prompted.
@@ -53,7 +50,7 @@ const resultText = content => typeof content === 'string' ? content : Array.isAr
  * published once its result arrives, so `pending` holds tool_use blocks by id until then.
  * Thinking blocks are dropped here: private reasoning must not reach a published run doc.
  */
-export function createTranslator() {
+export function createTranslator({ onToolUse, onToolResult } = {}) {
   const pending = new Map();
   return function publicMessages(message) {
     if (!message || typeof message !== 'object') return [];
@@ -62,7 +59,7 @@ export function createTranslator() {
       if (message.error) out.push({ kind: 'error', text: `Claude reported an error: ${message.error}` });
       const text = (message.message?.content || []).filter(b => b?.type === 'text').map(b => b.text).join('').trim();
       if (text) out.push({ kind: 'update', text });
-      for (const block of message.message?.content || []) if (block?.type === 'tool_use') pending.set(block.id, block);
+      for (const block of message.message?.content || []) if (block?.type === 'tool_use') { pending.set(block.id, block); onToolUse?.(block); }
       return out;
     }
     if (message.type === 'user' && Array.isArray(message.message?.content)) {
@@ -71,6 +68,7 @@ export function createTranslator() {
         if (block?.type !== 'tool_result') continue;
         const call = pending.get(block.tool_use_id); if (!call) continue;
         pending.delete(block.tool_use_id);
+        onToolResult?.(call, { output: resultText(block.content), isError: !!block.is_error });
         const kind = block.is_error ? 'error' : call.name === 'Bash' ? 'command' : FILE_TOOLS.has(call.name) ? 'file' : 'tool';
         const args = call.name === 'Bash' ? call.input?.command : describe(call.input);
         out.push({ kind, text: [`${call.name} · ${block.is_error ? 'error' : 'completed'}`, args, describe(resultText(block.content))].filter(Boolean).join('\n') });
@@ -105,14 +103,15 @@ function inputQueue(first) {
 }
 
 export function createClaudeRunner({
-  importSdk = () => import('@anthropic-ai/claude-agent-sdk'),
+  // OFFICE_CLAUDE_SDK points tests at a deterministic stand-in, as OFFICE_CODEX_BIN does for Codex.
+  importSdk = () => import(process.env.OFFICE_CLAUDE_SDK ? pathToFileURL(process.env.OFFICE_CLAUDE_SDK).href : '@anthropic-ai/claude-agent-sdk'),
   apiKey = () => process.env.ANTHROPIC_API_KEY,
   // Sessions are kept apart from the user's own Claude Code history, as Codex keeps its own home.
   configDir = () => process.env.OFFICE_CLAUDE_HOME || path.join(homedir(), '.iteration1', 'claude')
 } = {}) {
   const runs = new Map();
   /** Starts a run. With `resume`, it continues an earlier session, so the agent keeps its context. */
-  async function launch(id, input, { cwd, resume, onSession, onMessage, onDone }) {
+  async function launch(id, input, { cwd, resume, instructions, mcpServers, extraTools = [], onSession, onMessage, onToolUse, onToolResult, onDone }) {
     if (runs.has(id)) throw new Error('This desk already has a Claude run in flight. Stop it before launching another.');
     const key = apiKey();
     if (!key) throw new Error('Connect Claude first: open Tools → Integrations and add your Anthropic API key.');
@@ -125,21 +124,22 @@ export function createClaudeRunner({
       // Only the project folder and this office's instructions shape the run, never the user's own Claude settings.
       settingSources: [],
       env: { ...process.env, ANTHROPIC_API_KEY: key, CLAUDE_CONFIG_DIR: configDir() },
-      systemPrompt: { type: 'preset', preset: 'claude_code', append: input.access === 'edit'
-        ? 'You are working at a desk in Iteration1. Keep changes focused on the request, run the relevant checks, and finish with a short summary of what changed and how you verified it. The user may send follow-up messages; treat each as a continuation of the same work.'
-        : 'You are a read-only specialist at a desk in Iteration1. Inspect and report findings with file paths. Do not try to edit files. The user may send follow-up messages; treat each as a continuation of the same work.' },
-      ...accessOptions(input.access)
+      systemPrompt: { type: 'preset', preset: 'claude_code', append: instructions || (input.access === 'edit'
+        ? 'You are working at a desk in Iteration1. Keep changes focused on the request, run the relevant checks, and finish with a short summary of what changed and how you verified it.'
+        : 'You are a read-only specialist at a desk in Iteration1. Inspect and report findings with file paths. Do not try to edit files.') },
+      ...(mcpServers ? { mcpServers } : {}),
+      ...accessOptions(input.access, extraTools)
     };
     let run;
     try { run = query({ prompt, options }); }
     catch (error) { throw new Error(`Claude agent could not start: ${error.message}`); }
     const entry = { run, prompt, abortController, stopping: false, late: [], sessionId: resume || null };
     runs.set(id, entry);
-    void pump(id, entry, onSession, onMessage, onDone);
+    void pump(id, entry, { onSession, onMessage, onToolUse, onToolResult, onDone });
     return { model: input.model, access: input.access, resumed: !!resume };
   }
-  async function pump(id, entry, onSession, onMessage, onDone) {
-    const translate = createTranslator();
+  async function pump(id, entry, { onSession, onMessage, onToolUse, onToolResult, onDone }) {
+    const translate = createTranslator({ onToolUse, onToolResult });
     let result = null, failure = null;
     try {
       for await (const message of entry.run) {
@@ -162,6 +162,7 @@ export function createClaudeRunner({
       error: status === 'error' ? (result?.errors?.join('\n') || failure || (result ? `Claude run ended: ${result.subtype}` : 'The Claude run ended without a result.')) : '',
       costUsd: result?.total_cost_usd ?? null,
       turns: result?.num_turns ?? null,
+      tokens: result?.usage ? (result.usage.input_tokens || 0) + (result.usage.output_tokens || 0) + (result.usage.cache_read_input_tokens || 0) + (result.usage.cache_creation_input_tokens || 0) : null,
       sessionId: entry.sessionId,
       // Messages that arrived as the run was closing; the caller continues the session with them.
       unsent: entry.late
@@ -182,5 +183,5 @@ export function createClaudeRunner({
     entry.abortController.abort();
     return { stopping: true };
   }
-  return { launch, send, stop, running: id => runs.has(id), count: () => runs.size };
+  return { launch, send, stop, sdk: importSdk, running: id => runs.has(id), count: () => runs.size };
 }

@@ -1,12 +1,12 @@
 # Iteration1
 
-A spatial workspace for AI-assisted software development. Project folders become offices, agents occupy desks, and tickets connect their assignments, handoffs, code changes, and checks.
+A spatial workspace for AI-assisted software development. Project folders become offices, agents occupy desks, and tickets connect their assignments, handoffs, code changes, and checks. Agents run on **Codex** or **Claude**, side by side in the same office, and Cursor sessions can join too.
 
 ![The Iteration1 office](assets/blender-office-review.png)
 
 ## Run locally
 
-Requires Node.js 20.19+ and npm. Live agent work also requires the Codex CLI and a supported signed-in account.
+Requires Node.js 20.19+ and npm. Live agent work needs at least one engine: a ChatGPT account for Codex, or an Anthropic API key for Claude.
 
 ```sh
 npm ci
@@ -15,14 +15,17 @@ npm run dev
 
 Open **http://127.0.0.1:4314**. For a production build, run `npm run build`, then `npm start`.
 
-The sample office works without signing in and is explicitly simulated. For live work, connect Codex through the app and choose an existing local project folder. Iteration1 uses its own sign-in profile in `~/.iteration1/codex`; it does not switch the Codex desktop app's account. Account model availability and usage limits apply.
+The sample office works without signing in and is explicitly simulated. For live work, connect an engine from the top bar and choose an existing local project folder:
 
-On Windows, `npm run runtime:install` installs the pinned project-local Codex runtime. Restart Iteration1 after installation. Complete Windows sandbox setup from the connection panel before starting work if requested.
+- **Sign in to Codex** is one click. It installs the pinned Codex CLI into the project if it is missing, then opens ChatGPT sign-in in your browser; the page continues on its own when you finish. Iteration1 uses its own sign-in profile in `~/.iteration1/codex`; it does not switch the Codex desktop app's account. Account model availability and usage limits apply.
+- **Connect Claude** is one click and a paste. It opens Anthropic's API key page and puts the cursor in the key box; pasting a key checks it with Anthropic and connects. Anthropic does not allow third-party apps to sign in with a Claude.ai subscription, so Claude agents use an API key, billed by usage to that key's account.
+
+On Windows, complete the one-time Windows sandbox setup from the Codex panel before starting work if requested; Windows asks for administrator approval. `npm run runtime:install` installs the Codex runtime ahead of time if you prefer.
 
 ## Use it
 
 1. **Open a project.** Create an office for a local checkout.
-2. **Describe the work.** Start work applies a reusable workflow. The manager delegates bounded research and review for substantial tasks and remains the implementation owner. A new ticket can also stay in the backlog without running a model.
+2. **Describe the work.** Start work applies a reusable workflow. Choose the **Manager model**, from Codex or Claude. The manager delegates bounded research and review for substantial tasks and remains the implementation owner. A new ticket can also stay in the backlog without running a model.
 3. **Follow the office.** Desks show published progress, commands, changes, and task state. Tickets, the compact map, and Inbox provide direct access without moving the camera. Private reasoning is not displayed.
 4. **Coordinate.** Handoffs connect findings to assignments. Declared file scopes and dependencies help sequence work. Pair a teammate's office to exchange status and context across separate checkouts.
 5. **Inspect the result.** Open the diff, recorded checks, and feature URL. Verification requires acceptance checks and evidence; an agent's completion message alone is insufficient. The feature's development server must remain running.
@@ -55,7 +58,7 @@ Open **http://127.0.0.1:4351** and **http://127.0.0.1:4352**. Pair Alex and Blai
 | Esc | Close an inspector or return to overview |
 | Sidebar | Tickets, agents, handoffs, team, Inbox, history, tools, settings |
 
-Tools includes workflows, skills, Cursor setup, development modes, and presentation controls. The recording studio selects camera stops and a clean view; it does not record video.
+Tools includes workflows, skills, Cursor & Claude setup, development modes, and presentation controls. The recording studio selects camera stops and a clean view; it does not record video.
 
 ## Cursor and skills
 
@@ -67,7 +70,14 @@ Iteration1 can also **launch** a Cursor agent itself through the Cursor SDK, as 
 
 ## Claude agents
 
-Iteration1 can launch **Claude agents** through the Claude Agent SDK. Open **Tools → Cursor & Claude**, create an Anthropic API key from the link there, and paste it once: it is checked with Anthropic and saved only on this computer (`~/.iteration1/anthropic-key.json`, readable only by you). `ANTHROPIC_API_KEY` in the environment also works and takes precedence. Then describe the task and choose a model (Claude Opus 5.5 by default) and access. An editing agent may change files and run commands in an OS sandbox that confines writes to the project folder; if the sandbox is unavailable the run fails instead of running unconfined. A read-only agent can only read and search. Like a Codex desk, a Claude desk streams its observable work, takes messages while it works, and continues the same conversation when you message it after it finishes (sessions are kept in `~/.iteration1/claude`, apart from your own Claude Code history). It can be stopped from its desk. Usage is billed to the API key's account.
+Claude agents are full office members, run through the Claude Agent SDK. Choose a Claude model (Claude Opus 5.5, Sonnet 5.5, Haiku 5.5 or Fable 5.1) as the manager when you start work, or when you replace any agent, and the office runs exactly as it does on Codex:
+
+- **Same roles and permissions.** The manager is the only writer: it edits files and runs commands in an OS sandbox that confines writes to the project folder, and the run fails instead of running unconfined if that sandbox is unavailable. Workers are read-only. A **Read only** office keeps every Claude agent read-only.
+- **Same coordination.** Claude agents use the office tools Codex agents use (delegate, status, handoffs, acknowledgements and ticket updates), served to Claude as MCP tools by the same implementation. A Claude manager delegates to Claude workers; Crunch and Economy modes give workers Claude Haiku 5.5. Finished workers hand off to the manager, and messages and handoffs reach a Claude agent mid-turn.
+- **Same evidence.** Commands and file edits are recorded as observed evidence: test commands with the project version they ran against, and edits as a project diff. Plans published with TodoWrite show as the desk's plan. Development modes set Claude's effort and the turn time budget.
+- **Continuity.** A Claude agent continues its own conversation across turns and restarts; sessions are kept in `~/.iteration1/claude`, apart from your own Claude Code history. It can be stopped, steered and replaced like any desk.
+
+The API key is saved only on this computer (`~/.iteration1/anthropic-key.json`, readable only by you) and never sent back to the page. `ANTHROPIC_API_KEY` in the environment also works and takes precedence. Claude agents do not use Codex approval prompts or fast mode.
 
 Reusable manager, handoff, and review skills live in `skills/`. The app can install them into a project's `.agents/skills` without overwriting differing instructions.
 
@@ -79,7 +89,7 @@ npm test
 
 The test command builds the production assets first because the API tests exercise the production server.
 
-Tests cover lifecycle, delegation, dependencies, evidence, permissions, model replacement, checkpointing, and paired-office transport using isolated deterministic test adapters. They do not establish live model quality or headset performance.
+Tests cover lifecycle, delegation, dependencies, evidence, permissions, model replacement, checkpointing, paired-office transport, one-click Codex sign-in, and Claude office agents using isolated deterministic test adapters for Codex and the Claude Agent SDK. They do not establish live model quality or headset performance.
 
 `examples/project-starter` is a small React starting point. `examples/project-result` preserves a completed agent-built feature, with its own tests and setup. [Architecture and execution boundaries](docs/architecture.md).
 
@@ -87,7 +97,7 @@ Tests cover lifecycle, delegation, dependencies, evidence, permissions, model re
 
 State, checkpoints, and pairing credentials remain in ignored `.office/` storage. The app listens on loopback and validates requests. The separate team listener exposes only pairing/status/handoff operations on a trusted network; see the team guide before connecting. Do not expose the execution API publicly.
 
-Optional configuration: `PORT`, `OFFICE_DATA_DIR`, `OFFICE_CODEX_HOME`, `OFFICE_CODEX_BIN`, `OFFICE_CODEX_ARGS`, and `OFFICE_TEAM_PORT`. Credentials are never part of this repository.
+Optional configuration: `PORT`, `OFFICE_DATA_DIR`, `OFFICE_CODEX_HOME`, `OFFICE_CODEX_BIN`, `OFFICE_CODEX_ARGS`, `OFFICE_TEAM_PORT`, `ANTHROPIC_API_KEY`, `OFFICE_CLAUDE_HOME`, and `OFFICE_CLAUDE_KEY_FILE`. Credentials are never part of this repository.
 
 ## Assets and VR
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CheckCheck, ExternalLink, KeyRound, LoaderCircle, Play } from 'lucide-react';
+import { ArrowRight, CheckCheck, ExternalLink, KeyRound, LoaderCircle } from 'lucide-react';
 import type { Room } from './types';
 
 export interface ClaudeIntegration { configured: boolean; source: 'environment' | 'saved' | null; hint: string | null; models: { id: string; name: string }[] }
@@ -13,12 +13,9 @@ async function post(url: string, body: unknown) {
   return data;
 }
 
-/** Connects an Anthropic API key once, then launches Claude Agent SDK runs at new desks in this room. */
-export function ClaudePanel({ room, claude, onChange, focus = 0 }: { room: Room; claude: ClaudeIntegration | null; onChange: () => void; focus?: number }) {
+/** Connects an Anthropic API key once. Claude then runs office agents like Codex: choose a Claude model for the manager or any agent. */
+export function ClaudePanel({ room, claude, onChange, onStartWork, focus = 0 }: { room: Room; claude: ClaudeIntegration | null; onChange: () => void; onStartWork?: () => void; focus?: number }) {
   const [apiKey, setApiKey] = useState('');
-  const [prompt, setPrompt] = useState('');
-  const [model, setModel] = useState('claude-opus-5-5');
-  const [access, setAccess] = useState<'edit' | 'read'>('edit');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(''); const [notice, setNotice] = useState('');
   const keyInput = useRef<HTMLInputElement>(null); const section = useRef<HTMLHeadingElement>(null);
@@ -30,10 +27,6 @@ export function ClaudePanel({ room, claude, onChange, focus = 0 }: { room: Room;
   }
   const connect = (key = apiKey) => run(async () => { await post('/api/claude/key', { apiKey: key }); setApiKey(''); onChange(); return 'Claude connected.'; });
   const disconnect = () => run(async () => { await post('/api/claude/key/remove', {}); onChange(); return 'Claude disconnected. The key was removed from this computer.'; });
-  const launch = () => run(async () => {
-    const body = await post(`/api/rooms/${room.id}/claude/launch`, { prompt, model, access });
-    setPrompt(''); return `Launched on ${claude?.models.find(m => m.id === body.model)?.name || body.model}. Follow it at its desk.`;
-  });
 
   return <>
     <h2 ref={section}>Claude</h2>
@@ -51,16 +44,8 @@ export function ClaudePanel({ room, claude, onChange, focus = 0 }: { room: Room;
       </>
       : <>
         <div className="account-info"><CheckCheck size={22} /><div><b>Claude connected</b><small>{claude.source === 'environment' ? `Using ANTHROPIC_API_KEY (${claude.hint})` : `API key ${claude.hint}`}</small></div></div>
-        {room.demo ? <p className="notice">Open a live project room to launch Claude agents.</p> : <>
-          <p>Launch a Claude agent at a new desk. It works in <code>{room.path}</code>. Message it at its desk to steer or continue it.</p>
-          <label>Task<textarea rows={3} value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Describe the work" /></label>
-          <label>Model<select value={model} onChange={e => setModel(e.target.value)}>{claude.models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
-          <label>Access<select value={access} onChange={e => setAccess(e.target.value as 'edit' | 'read')}>
-            <option value="edit">Edit files and run sandboxed commands</option>
-            <option value="read">Read only</option>
-          </select></label>
-          <button className="primary full" disabled={busy || !prompt.trim()} onClick={() => void launch()}><Play size={16} /> {busy ? 'Launching…' : 'Launch Claude agent'}</button>
-        </>}
+        <p>Claude agents work in the office like Codex agents: a Claude manager plans, delegates to Claude workers, edits, runs checks and hands off through tickets. Choose a Claude model as the <b>Manager model</b> when you start work, or when you replace any agent.</p>
+        {!room.demo && onStartWork && <button className="primary full" onClick={onStartWork}><ArrowRight size={16} /> Start work with Claude</button>}
         {claude.source === 'saved' && <button className="text-button" disabled={busy} onClick={() => void disconnect()}>Disconnect Claude</button>}
       </>}
   </>;
