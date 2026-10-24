@@ -70,7 +70,7 @@ test('Claude exchanges a fresh PKCE grant into a private native profile, preserv
   const file = path.join(dir, '.credentials.json');
   const saved = JSON.parse(await readFile(file, 'utf8')).claudeAiOauth;
   assert.equal(saved.accessToken, 'access-secret'); assert.equal(saved.refreshToken, 'refresh-secret'); assert.equal(saved.expiresAt, 3601000);
-  assert.equal((await stat(file)).mode & 0o777, 0o600); assert.equal((await stat(dir)).mode & 0o777, 0o700);
+  if (process.platform !== 'win32') { assert.equal((await stat(file)).mode & 0o777, 0o600); assert.equal((await stat(dir)).mode & 0o777, 0o700); }
   assert.ok(!JSON.stringify(finished).includes('secret'));
   await assert.rejects(login.complete(`fixture-code#${state}`), /expired/);
   // A native runtime rotates these exact credentials in place, rather than refreshing a copied login.
@@ -123,7 +123,7 @@ test('Cursor stores a dedicated expiring SDK key, never returns it, and loads it
   for (let i = 0; i < 100 && !login.status().configured; i++) await new Promise(resolve => setTimeout(resolve, 5));
   assert.equal(login.status().configured, true); assert.equal(login.current(), 'cursor-private');
   assert.ok(!JSON.stringify(login.status()).includes('cursor-private'));
-  assert.equal((await stat(file)).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') assert.equal((await stat(file)).mode & 0o777, 0o600);
   const restarted = createCursorLogin({ file, env: () => '', now: () => time });
   assert.equal((await restarted.load()).configured, true); assert.equal(restarted.current(), 'cursor-private');
   time = 100001; assert.equal(restarted.current(), '');
