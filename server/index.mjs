@@ -7,7 +7,8 @@ import { Codex } from './codex.mjs';
 import { checkWorkspace } from './workspace-check.mjs';
 import { identifyEvidence, commandWorkspace, refreshReview, isTestCommand, trimEvidence, assertReviewVersion } from './evidence.mjs';
 import { createCursorDesk } from './cursor.mjs';
-import { initIdentities, issueAgentIdentity, revokeIdentity, identityBySub, publicIdentity, creditRun, verifyAgentToken, agentToken } from './identity.mjs';
+import { initIdentities, upsertIdentity, identityBySub, publicIdentity, creditRun } from './identity.mjs';
+import { createAuth, providerFields } from './oauth.mjs';
 import { runDoc, addComment, runFeed } from './run-doc.mjs';
 import { ticketFields, assignedTicket, focusTicket, editTicket, archiveTicket } from './tickets.mjs';
 import { peerTools, peerInstructions, inbox, queueHandoff, handoffEnvelope, presentHandoffs, delivered, acknowledge, transferInbox } from './peer-handoffs.mjs';
@@ -51,7 +52,19 @@ let connection = { connected: false, account: null, models: [], error: null };
 let saveTimer, broadcastTimer, writeQueue = Promise.resolve();
 const loadedThreads = new Set();
 const startingAgents = new Set();
-const cursor = createCursorDesk({ state, changed, isStarting: id => startingAgents.has(id) });
+const auth = createAuth({ dataDir, port: Number(process.env.PORT || 4314) });
+await auth.load();
+// The signed-in Auth0 account is the office's one identity, and every local reporter
+// inherits it. Refreshing a token is async, so routes resolve it before touching a desk
+// and the desk reads the resolved value synchronously.
+let liveIdentity = null;
+async function syncIdentity() {
+  const session = await auth.current();
+  liveIdentity = session && !session.stale ? upsertIdentity(state, auth.publicSession(session)) : null;
+  return liveIdentity;
+}
+await syncIdentity();
+const cursor = createCursorDesk({ state, changed, isStarting: id => startingAgents.has(id), currentIdentity: () => liveIdentity });
 const runner = createCursorRunner();
 function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates }; }
 function changed() {
@@ -361,10 +374,10 @@ app.post('/api/rooms/:id/team/message',wrap(async req=>{
   message.sentByOwner=true;changed();return {message};
 }));
 app.get('/api/integrations', (req, res) => res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}` } }));
-// The token is shown once at issue time; only its hash is kept, so a lost token is reissued, not recovered.
-app.post('/api/identities', wrap(async req => { const { token, identity } = issueAgentIdentity(state, req.body); changed(); return { token, identity: publicIdentity(identity) }; }));
-app.delete('/api/identities/:sub', wrap(async req => { const removed = revokeIdentity(state, req.params.sub); changed(); return { identity: publicIdentity(removed) }; }));
-app.post('/api/identities/verify', wrap(async req => { const identity = verifyAgentToken(state, z.object({ token: agentToken }).strict().parse(req.body).token); if (!identity) throw new Error('That agent token is not recognised. Issue a new identity in Iteration1.'); return { identity: publicIdentity(identity) }; }));
+app.get('/api/auth/session', wrap(async () => { const identity = await syncIdentity(); return { provider: auth.publicProvider(), signedIn: !!identity, identity: publicIdentity(identity), redirectUri: auth.redirectUri }; }));
+app.post('/api/auth/provider', wrap(async req => { const saved = await auth.configure(providerFields.parse(req.body)); changed(); return { provider: { domain: saved.domain, clientId: saved.clientId } }; }));
+app.post('/api/auth/login', wrap(async () => auth.begin()));
+app.post('/api/auth/logout', wrap(async () => { await auth.signOut(); liveIdentity = null; changed(); return { signedIn: false }; }));
 app.get('/api/feed', wrap(async () => ({ runs: runFeed(state) })));
 // A Cursor agent the office launches and owns: unlike an MCP session it can be stopped,
 // its model is the one chosen here, and its stream is recorded as observed work.
@@ -394,9 +407,9 @@ app.post('/api/rooms/:id/cursor/launch', wrap(async req => {
   try { const launched = await runner.launch(worker.id, input, { cwd: room.path, onMessage, onDone }); event(worker, 'system', `Cursor ${launched.runtime} run ${launched.runId}. Execution is owned by this office and can be stopped here.`); record(room, 'Cursor agent launched', 'work'); changed(); return { roomId: room.id, agentId: worker.id, workItemId: item.id, ...launched }; }
   catch (error) { worker.turnId = null; worker.status = 'error'; event(worker, 'error', error.message); item.status = 'blocked'; item.blocker = error.message; item.updatedAt = Date.now(); changed(); throw error; }
 }));
-app.post('/api/rooms/:id/cursor/start', wrap(async req => cursor.start(roomBy(state, req.params.id), req.body)));
-app.post('/api/rooms/:id/cursor/:aid/update', wrap(async req => cursor.update(roomBy(state, req.params.id), req.params.aid, req.body)));
-app.post('/api/rooms/:id/cursor/:aid/finish', wrap(async req => cursor.finish(roomBy(state, req.params.id), req.params.aid, req.body)));
+app.post('/api/rooms/:id/cursor/start', wrap(async req => { await syncIdentity(); return cursor.start(roomBy(state, req.params.id), req.body); }));
+app.post('/api/rooms/:id/cursor/:aid/update', wrap(async req => { await syncIdentity(); return cursor.update(roomBy(state, req.params.id), req.params.aid, req.body); }));
+app.post('/api/rooms/:id/cursor/:aid/finish', wrap(async req => { await syncIdentity(); return cursor.finish(roomBy(state, req.params.id), req.params.aid, req.body); }));
 app.post('/api/rooms/:id/cursor/:aid/release', wrap(async req => cursor.release(roomBy(state, req.params.id), req.params.aid, req.body)));
 app.post('/api/demo',wrap(async()=>{for(const old of state.rooms.filter(r=>r.demo && r.demoStep>=5 && !r.agents.some(a=>a.turnId)))old.archived=true;const room=createDemo(root);state.rooms.push(room);changed();return {room};}));
 app.post('/api/rooms/:id/demo/step',wrap(async req=>{const room=roomBy(state,req.params.id);stepDemo(room);changed();return {room};}));
@@ -592,6 +605,20 @@ app.post('/api/rooms/:id/agents/:aid/replace', wrap(async req => {
 app.post('/api/approvals/:id', wrap(async req => { const approval = state.approvals.find(x => x.id === req.params.id); if (!approval) throw new Error('This request has already been resolved.'); const b = z.object({ accept: z.boolean().optional(), answers: z.record(z.object({ answers: z.array(z.string()) })).optional() }).parse(req.body); const result = approval.method === 'item/tool/requestUserInput' ? { answers: b.answers || {} } : { decision: b.accept ? 'accept' : 'decline' }; codex.respond(approval.rpcId, result); state.approvals = state.approvals.filter(x => x !== approval); const a = agentBy(roomBy(state, approval.roomId), approval.agentId); a.status = 'working'; changed(); }));
 app.post('/api/rooms/:id/install-skills', wrap(async req => { const r = roomBy(state, req.params.id); const target = path.join(r.path, '.agents', 'skills'); for (const n of skillNames) { await mkdir(path.join(target, n), { recursive: true }); try { await copyFile(path.join(root, 'skills', n, 'SKILL.md'), path.join(target, n, 'SKILL.md'), 1); } catch(e) { if (e.code !== 'EEXIST') throw e; const existing = await readFile(path.join(target, n, 'SKILL.md'), 'utf8'); if (existing !== skillText[n]) throw new Error(`Existing ${n} differs. Review it before updating.`); } } return { installed: skillNames }; }));
 app.get('/api/export/:id', wrap(async (req, res) => { const r = roomBy(state, req.params.id); res.setHeader('Content-Disposition', 'attachment; filename="office-handoff.json"'); res.json(r); }));
+const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Outside /api on purpose: this redirect arrives from auth0.com, and the office session
+// cookie is sameSite=strict so it would not be sent. The `state` parameter is the CSRF
+// defence here, and the page below never echoes the query back into the document.
+app.get('/auth/callback', async (req, res) => {
+  const page = (title, detail) => res.status(detail ? 400 : 200).type('html').send(`<!doctype html><meta charset="utf-8"><title>${title}</title><body style="font:16px/1.5 system-ui;margin:4rem auto;max-width:34rem;color:#111"><h1 style="font-size:1.25rem">${title}</h1><p>${detail || 'You can close this tab and return to the office.'}</p><script>setTimeout(()=>window.close(),${detail ? 8000 : 1200})</script>`);
+  try {
+    if (req.query.error) throw new Error(String(req.query.error_description || req.query.error));
+    await auth.complete({ code: req.query.code, state: req.query.state });
+    await syncIdentity();
+    changed();
+    return page('Signed in');
+  } catch (error) { return page('Sign-in failed', escapeHtml(error.message)); }
+});
 if (process.argv.includes('--production')) app.use(express.static(path.join(root, 'dist')));
 else { const { createServer } = await import('vite'); const vite = await createServer({ server: { middlewareMode: true, hmr: { port: port + 1, host: '127.0.0.1' } }, appType: 'spa' }); app.use(vite.middlewares); }
 const server = app.listen(port, '127.0.0.1', () => console.log(`Iteration1 office: http://127.0.0.1:${port}`));

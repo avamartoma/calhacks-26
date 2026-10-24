@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { realpath } from 'node:fs/promises';
 
-export function createOfficeClient({ url = 'http://127.0.0.1:4314', project = process.cwd(), token, fetchImpl = fetch } = {}) {
+export function createOfficeClient({ url = 'http://127.0.0.1:4314', project = process.cwd(), fetchImpl = fetch } = {}) {
   const parsed = new URL(url);
   if (parsed.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(parsed.hostname) || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) throw new Error('Iteration1 URL must be a local HTTP origin.');
   const base = parsed.origin;
@@ -29,14 +29,14 @@ export function createOfficeClient({ url = 'http://127.0.0.1:4314', project = pr
     return state.rooms.filter(room => !room.demo && path.relative(actual, room.path) === '');
   }
   async function room(id) { const found = (await rooms()).find(r => r.id === id); if (!found) throw new Error('Choose a live office belonging to this Cursor workspace.'); return found; }
-  // The agent token travels with every report so the office can attribute it, never in a URL or log line.
-  const attributed = body => token ? { ...body, token } : body;
-  return { request, rooms, room, hasToken: !!token,
+  // No credential travels with a report. The office attributes it to whoever is signed in
+  // there, so nothing secret belongs in .cursor/mcp.json.
+  return { request, rooms, room,
     async open(name) { const existing = await rooms(); return existing[0] || (await request('/rooms', { name, path: await realpath(project), demo: false })).room; },
-    async identify() { if (!token) throw new Error('No agent identity configured. Issue one in Iteration1 under Tools, then set ITERATION1_AGENT_TOKEN in .cursor/mcp.json.'); return request('/identities/verify', { token }); },
+    async identify() { return request('/auth/session'); },
     async dispatch(id, body) { await room(id); return request(`/rooms/${encodeURIComponent(id)}/dispatch`, body); },
-    async cursorStart(id, body) { await room(id); return request(`/rooms/${encodeURIComponent(id)}/cursor/start`, attributed(body)); },
-    async cursorReport(id, agentId, operation, body) { await room(id); if (!['update', 'finish'].includes(operation)) throw new Error('Invalid Cursor operation'); return request(`/rooms/${encodeURIComponent(id)}/cursor/${encodeURIComponent(agentId)}/${operation}`, attributed(body)); },
+    async cursorStart(id, body) { await room(id); return request(`/rooms/${encodeURIComponent(id)}/cursor/start`, body); },
+    async cursorReport(id, agentId, operation, body) { await room(id); if (!['update', 'finish'].includes(operation)) throw new Error('Invalid Cursor operation'); return request(`/rooms/${encodeURIComponent(id)}/cursor/${encodeURIComponent(agentId)}/${operation}`, body); },
     async runDoc(id, workId) { await room(id); return request(`/rooms/${encodeURIComponent(id)}/work/${encodeURIComponent(workId)}/doc`); }
   };
 }

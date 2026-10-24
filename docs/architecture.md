@@ -11,7 +11,8 @@
 | Team transport | `server/team.mjs` | Paired local offices, status exchange and cross-office handoffs |
 | External execution | `server/cursor.mjs`, `scripts/cursor-mcp.mjs` | Cursor ownership and explicitly reported activity |
 | Launched Cursor agents | `server/cursor-agent.mjs` | Office-owned Cursor SDK runs: runtime selection, observable stream and cancellation |
-| Agent identity | `server/identity.mjs` | Issued agent tokens, credential subjects and per-identity track records |
+| Sign-in | `server/oauth.mjs` | Auth0 Authorization Code with PKCE, identity-token verification and local session storage |
+| Agent identity | `server/identity.mjs` | Credential subjects and per-identity track records |
 | Public runs | `server/run-doc.mjs` | Block projection, attribution labels, block-anchored comments and the run feed |
 | Workspace UI | `src/App.tsx`, `src/Operations.tsx`, panel components | Project navigation, tickets, agents, permissions and evidence |
 | Spatial view | `src/scene.ts`, `src/CityEnvironment.ts`, `src/TeamDistrict.ts` | Office, city, agents, rendering and nearby office detail |
@@ -25,7 +26,11 @@ Published plans, status, commands, outputs and changes are observable work. Priv
 
 Cursor reaches the office two ways, and they differ in who owns execution. A Cursor IDE session connects through MCP: it drives itself, reports what it chooses to, and cannot be stopped from here. A Cursor SDK run is launched by the office: its model is the one selected here, its stream is recorded as observed work, and it can be cancelled. Neither path makes a claim verified.
 
-A run published without an agent identity is unattributed. An identity is issued in the app, presented as a token, and stored only as a hash; it fixes the `credentialSub` on the desk, carries the display name and track record across sessions, and binds later reports to the identity that opened the run. Operator recovery is deliberately exempt, because it exists for when that agent can no longer answer.
+A run published while signed out is unattributed. Signing in runs Authorization Code with PKCE against Auth0: the office is a public client, so no client secret exists on the machine, the code verifier never leaves it, and the redirect lands on loopback. The `sub` claim of a verified identity token fixes the `credentialSub` on the desk, carries the display name and track record across sessions, and binds later reports to the account that opened the run. Operator recovery is deliberately exempt, because it exists for when that agent can no longer answer.
+
+The sign-in callback is the one route outside the cookie-gated `/api` prefix. It has to be: the redirect arrives from `auth0.com`, and the office session cookie is `sameSite=strict`, so it would not be sent. The `state` parameter is the CSRF defence there, and it is single use.
+
+The MCP server holds no credential. A local reporter inherits whichever account is signed in to the office, which is why `.cursor/mcp.json` carries no secret. The trade is that any process able to reach the loopback API acts as that account; this is already true of the rest of the execution API, and is why it must not be exposed beyond loopback.
 
 A run doc is a projection over the same evidence the office already holds, not a second copy. Each block carries how far its claim is trusted: `verified` for a passing observed check on the current source version, `observed` for a recorded command that is stale or failing, `self-reported` for anything an external agent asserted, and `operator` for a human recovery note.
 

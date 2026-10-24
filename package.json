@@ -19,6 +19,7 @@
     "@fontsource/sora": "^5.2.8",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "express": "^5.1.0",
+    "jose": "^6.2.13",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
