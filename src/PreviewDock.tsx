@@ -1,18 +1,18 @@
-import type { CloudPreview } from './types';
+import type { SandboxState } from './types';
 
 const labels = { starting: 'Starting', live: 'Live', error: 'Error' };
 
-export function PreviewDock({ cloud }: { cloud?: CloudPreview }) {
-  const status = cloud?.status ?? 'starting';
+export function PreviewDock({ sandbox }: { sandbox?: SandboxState }) {
+  const status = sandbox?.status ?? 'starting';
   return (
     <aside className="preview-dock" aria-label="Live preview">
       <header>
         <b>Live preview</b>
         <span className={`preview-status preview-${status}`}>{labels[status]}</span>
       </header>
-      {status === 'live' && cloud?.previewUrl
-        ? <iframe title="Live preview" src={cloud.previewUrl} />
-        : <p>{cloud?.detail || 'Opening the cloud environment…'}</p>}
+      {status === 'live' && sandbox?.previewUrl
+        ? <iframe title="Live preview" src={sandbox.previewUrl} />
+        : <p>{sandbox?.detail || 'Opening the cloud environment…'}</p>}
     </aside>
   );
 }

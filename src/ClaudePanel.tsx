@@ -24,9 +24,6 @@ async function post(url: string, body: unknown) {
  */
 export function ClaudePanel({ room, claude, code, onChange, onStartWork }: { room: Room; claude: ClaudeIntegration | null; code: ClaudeCodeIntegration | null; onChange: () => void; onStartWork?: () => void }) {
   const [apiKey, setApiKey] = useState('');
-  const [prompt, setPrompt] = useState('');
-  const [model, setModel] = useState('claude-opus-5-5');
-  const [access, setAccess] = useState<'edit' | 'read'>('edit');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(''); const [notice, setNotice] = useState(''); const [copied, setCopied] = useState('');
   async function run(fn: () => Promise<string | void>) {
@@ -36,10 +33,6 @@ export function ClaudePanel({ room, claude, code, onChange, onStartWork }: { roo
   async function copy(text: string, kind: string) { try { await navigator.clipboard.writeText(text); setCopied(kind); setError(''); } catch { setError('Clipboard unavailable. Copy the command from Connection setup instead.'); } }
   const connect = (key = apiKey) => run(async () => { await post('/api/claude/key', { apiKey: key }); setApiKey(''); onChange(); return 'Claude connected.'; });
   const disconnect = () => run(async () => { await post('/api/claude/key/remove', {}); onChange(); return 'Claude disconnected. The key was removed from this computer.'; });
-  const launch = () => run(async () => {
-    const body = await post(`/api/rooms/${room.id}/claude/launch`, { prompt, model, access });
-    setPrompt(''); return `Launched on ${claude?.models.find(m => m.id === body.model)?.name || body.model}. Follow it at its desk.`;
-  });
 
   const outcome = sessionStorage.getItem(`iteration1-mission:${room.id}`)?.trim();
   const sessionPrompt = `Use Iteration1 for ${room.path}. ${room.demo ? 'Call office_open and office_status to inspect the live workspace.' : `Call office_status with roomId ${room.id} to inspect this office.`} Show existing work and blockers before starting. When I ask you to implement, claim ownership with office_claude_start, publish progress with office_claude_update, and call office_claude_finish after execution ends. Report your model id only if your environment states it. Do not edit alongside an active office writer.${outcome ? ` Requested outcome: ${outcome}` : ''}`;
