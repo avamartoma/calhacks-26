@@ -1,0 +1,97 @@
+/* The workspace sky. Colors for labels come from the time of day (--sky-ink, --sky-glow). */
+.sky-view{position:absolute;inset:0;z-index:6;overflow:hidden;cursor:grab;touch-action:none;outline:none;background:linear-gradient(#2a78de,#bfe2ff)}
+.sky-view.dragging{cursor:grabbing}
+.sky-view.over-project{cursor:pointer}
+.sky-view:focus-visible{box-shadow:inset 0 0 0 3px #ffffffaa}
+.sky-view canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.sky-labels{position:absolute;inset:0;pointer-events:none}
+.sky-label{position:absolute;left:0;top:0;width:210px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px 6px;text-align:center;background:none;border:0;color:var(--sky-ink);text-shadow:0 0 14px var(--sky-glow),0 0 4px var(--sky-glow),0 0 1px var(--sky-glow);transform-origin:center;will-change:transform,opacity;visibility:hidden;opacity:0;pointer-events:none}
+.sky-label b{font:600 19px/1.2 Sora,sans-serif;letter-spacing:-.01em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.sky-label span{font:500 12.5px/1.42 Manrope,sans-serif;opacity:.88;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.sky-label small{font:700 10px/1.3 Manrope,sans-serif;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+.sky-label.mine{cursor:pointer;pointer-events:auto}
+.sky-label.mine:focus-visible{outline:2px solid var(--sky-ink);outline-offset:4px;border-radius:10px}
+.sky-label.other b{font-size:16px}
+.sky-label.other span{font-size:12px}
+.sky-whiteout{position:absolute;inset:0;z-index:2;background:var(--sky-cloud,#fff);opacity:0;pointer-events:none}
+/* Without WebGL the sky is a plain gradient and labels stay readable in place. */
+.sky-fallback .sky-label{position:static;visibility:visible;opacity:1;transform:none!important}
+.sky-fallback .sky-labels{display:flex;flex-wrap:wrap;align-content:center;justify-content:center;gap:24px;pointer-events:auto}
+.sky-label{width:150px}
+.sky-label.compact span,.sky-label.compact small{display:none}
+/* On balloons the text sits on the cream panel on the fabric. */
+.balloon-sky .sky-label{color:#2a2f3f;text-shadow:none;gap:2px;padding:2px 4px}
+.balloon-sky .sky-label b{font-size:16px}
+.balloon-sky .sky-label span{font-size:11px;opacity:.78;-webkit-line-clamp:3}
+.balloon-sky .sky-label small{font-size:9px;color:#8a6a40;opacity:1}
+.balloon-sky .sky-label.you b{font-size:18px}
+.sky-shell-view{position:absolute;inset:0;z-index:6}
+.sky-style-switch{position:absolute;top:16px;right:16px;z-index:7;display:flex;gap:2px;padding:3px;border-radius:99px;background:#ffffffd0;border:1px solid #ffffff;box-shadow:0 6px 18px rgba(20,32,60,.12);backdrop-filter:blur(8px)}
+.sky-style-switch button{padding:6px 14px;border-radius:99px;font:600 12px Manrope,sans-serif;color:#46506a}
+.sky-style-switch button.active{background:#26324a;color:#fff}
+.sky-controls{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:3;margin:0;padding:7px 14px;border-radius:99px;background:#ffffffc4;color:#3c4660;font:600 11.5px Manrope,sans-serif;white-space:nowrap;pointer-events:none;box-shadow:0 4px 14px rgba(20,32,60,.1)}
+/* Vector clouds: crisp white shapes, so text is dark and needs no glow. */
+.vector-sky .sky-label{color:#26324a;text-shadow:none;gap:2px}
+.vector-sky .sky-label b{font-size:17px}
+.vector-sky .sky-label span{font-size:11.5px;opacity:.78;-webkit-line-clamp:2}
+.vector-sky .sky-label small{font-size:9.5px;color:#7b5c3a;opacity:1}
+.sky-search{position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:4;width:min(380px,calc(100% - 240px))}
+.sky-search input{width:100%;box-sizing:border-box;padding:10px 16px;border-radius:99px;border:1px solid #fff;background:#ffffffe0;box-shadow:0 6px 18px rgba(20,32,60,.12);font:500 13px Manrope,sans-serif;color:#26324a;backdrop-filter:blur(8px)}
+.sky-search input:focus{outline:2px solid #26324a55;outline-offset:1px}
+.sky-results{margin-top:6px;padding:6px;border-radius:12px;background:#fffffff2;box-shadow:0 10px 28px rgba(20,32,60,.16)}
+.sky-results button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;padding:8px 10px;border-radius:8px;text-align:left}
+.sky-results button:hover{background:#eef2f7}
+.sky-results b{font:600 13px Manrope,sans-serif;color:#26324a}
+.sky-results span{font:500 11px Manrope,sans-serif;color:#6a7488}
+.sky-results p{margin:6px 10px;font:500 12px Manrope,sans-serif;color:#6a7488}
+.sky-results .sky-results-note{font-size:10.5px;color:#8a93a4;border-top:1px solid #edf0f4;padding-top:6px;margin-top:4px}
+/* Agent dots: one per agent, colored by type; working agents pulse gently. */
+.agent-dots{display:inline-flex;flex-wrap:wrap;justify-content:center;gap:5px}
+.agent-dots{gap:3px}
+.agent-blob{width:19px;height:20px;overflow:visible}
+.agent-blob.working{animation:agent-bob 1.6s ease-in-out infinite}
+@keyframes agent-bob{50%{transform:translateY(-2.5px)}}
+@media(prefers-reduced-motion:reduce){.agent-blob.working{animation:none}}
+.sky-agent-row{position:absolute;left:0;top:0;width:200px;display:flex;justify-content:center;transform-origin:center;visibility:hidden;opacity:0;will-change:transform,opacity}
+/* Smaller text inside vector clouds, leaving room for the agent dots below. */
+.vector-sky .sky-label b{font-size:15px}
+.vector-sky .sky-label span{font-size:10.5px}
+.vector-sky .sky-label small{font-size:9px}
+/* You are a marker in the middle of your projects, not a cloud. */
+.vector-sky .sky-label.you{width:auto;flex-direction:row;gap:7px;padding:6px 12px 6px 6px;border-radius:99px;background:#26324a;color:#fff;box-shadow:0 6px 16px rgba(20,32,60,.25)}
+.vector-sky .sky-label.you b{font-size:13px;display:flex;align-items:center;gap:7px}
+.vector-sky .sky-label.you b::before{content:'';width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ffe2a0,#e0a526)}
+.vector-sky .sky-label.you small{color:#f0cf87}
+.sky-legend{position:absolute;right:16px;bottom:16px;z-index:3;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px 10px;max-width:300px;padding:7px 11px;border-radius:12px;background:#ffffffc8;font:600 10.5px Manrope,sans-serif;color:#46506a;pointer-events:none}
+.sky-legend span{display:flex;align-items:center;gap:4px}
+.sky-legend i{width:8px;height:8px;border-radius:50%}
+.sky-corner{position:absolute;left:16px;bottom:16px;z-index:8;display:flex;align-items:center;gap:8px}
+.sky-home-button{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#26324a;color:#fff;box-shadow:0 6px 18px rgba(20,32,60,.22)}
+.sky-home-button:hover{background:#34426a}
+.sky-view-toggle{display:flex;gap:2px;padding:3px;border-radius:99px;background:#ffffffd8;box-shadow:0 6px 18px rgba(20,32,60,.12)}
+.sky-view-toggle button{padding:6px 13px;border-radius:99px;font:600 12px Manrope,sans-serif;color:#46506a}
+.sky-view-toggle button.active{background:#26324a;color:#fff}
+.sky-controls{bottom:22px}
+/* The folder view: every project as a card. */
+.project-folders{position:absolute;inset:0;z-index:7;overflow:auto;padding:32px 32px 84px;background:#f5f7fa;animation:folders-in .2s ease-out}
+@keyframes folders-in{from{opacity:0}}
+.project-folders section{max-width:1100px;margin:0 auto 28px}
+.project-folders h2{display:flex;align-items:baseline;gap:8px;margin:0 0 12px;font:600 17px Sora,sans-serif;color:#24304a}
+.project-folders h2 small{font:500 12px Manrope,sans-serif;color:#7a8396}
+.folder-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.folder-card{display:flex;flex-direction:column;gap:8px;padding:14px 15px 12px;border-radius:10px;background:#fff;border:1px solid #e3e8ef;border-bottom:4px solid #e3e8ef}
+.folder-card.mine{border-bottom-color:#f7dc94}
+.folder-card header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.folder-card b{font:600 14px Manrope,sans-serif;color:#24304a}
+.folder-tag{padding:2px 7px;border-radius:99px;background:#fdf1d2;color:#8a6414;font:700 9.5px Manrope,sans-serif;letter-spacing:.04em;text-transform:uppercase}
+.folder-card p{margin:0;font:500 12px/1.45 Manrope,sans-serif;color:#5b6578;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.folder-card footer{display:flex;align-items:center;gap:8px}
+.folder-card footer .agent-dots{justify-content:flex-start}
+.folder-card footer .agent-blob{width:17px;height:18px}
+.folder-card small{font:500 11px Manrope,sans-serif;color:#7a8396}
+.folder-actions{display:flex;gap:6px;margin-top:2px}
+.folder-actions button{padding:6px 11px;font-size:12px}
+.folder-empty{margin:0;font:500 13px Manrope,sans-serif;color:#7a8396}
+@media(max-width:750px){.sky-legend{display:none}.sky-controls{display:none}.project-folders{padding:20px 14px 84px}}
+.sky-only-mine{display:inline-flex;align-items:center;gap:6px;margin:7px 0 0 12px;padding:4px 10px 4px 8px;border-radius:99px;background:#ffffffc8;font:600 11.5px Manrope,sans-serif;color:#3c4660;cursor:pointer;box-shadow:0 3px 10px rgba(20,32,60,.08)}
+.sky-only-mine input{width:14px;height:14px;margin:0;accent-color:#26324a}
