@@ -1,0 +1,1363 @@
+{
+  "currentUserId": "u-ava",
+  "users": [
+    {
+      "id": "u-ava",
+      "name": "Ava Martoma",
+      "email": "ava@northwind.dev",
+      "color": "#ff7a3c"
+    },
+    {
+      "id": "u-maya",
+      "name": "Maya Chen",
+      "email": "maya@northwind.dev",
+      "color": "#3ec4e6"
+    },
+    {
+      "id": "u-leo",
+      "name": "Leo Park",
+      "email": "leo@northwind.dev",
+      "color": "#f2c22e"
+    },
+    {
+      "id": "u-priya",
+      "name": "Priya Shah",
+      "email": "priya@northwind.dev",
+      "color": "#c47af2"
+    },
+    {
+      "id": "u-sam",
+      "name": "Sam Rivera",
+      "email": "sam@northwind.dev",
+      "color": "#2fce8a"
+    },
+    {
+      "id": "u-jordan",
+      "name": "Jordan Blake",
+      "email": "jordan@northwind.dev",
+      "color": "#f08ab4"
+    },
+    {
+      "id": "u-zoe",
+      "name": "Zoe Okafor",
+      "email": "zoe@example.com",
+      "color": "#7a8cff"
+    },
+    {
+      "id": "u-kai",
+      "name": "Kai Nakamura",
+      "email": "kai@example.com",
+      "color": "#ffb347"
+    },
+    {
+      "id": "u-nina",
+      "name": "Nina Petrova",
+      "email": "nina@example.com",
+      "color": "#4fd1c5"
+    }
+  ],
+  "workspaces": [
+    {
+      "id": "ws-northwind",
+      "name": "Northwind Labs",
+      "kind": "company",
+      "joinPolicy": "email-domain",
+      "emailDomain": "northwind.dev",
+      "description": "Northwind's engineering workspace. Only northwind.dev accounts can join.",
+      "members": [
+        {
+          "userId": "u-ava",
+          "role": "admin"
+        },
+        {
+          "userId": "u-maya",
+          "role": "member"
+        },
+        {
+          "userId": "u-leo",
+          "role": "member"
+        },
+        {
+          "userId": "u-priya",
+          "role": "member"
+        },
+        {
+          "userId": "u-sam",
+          "role": "member"
+        },
+        {
+          "userId": "u-jordan",
+          "role": "member"
+        }
+      ]
+    },
+    {
+      "id": "ws-open",
+      "name": "Open Build Club",
+      "kind": "public",
+      "joinPolicy": "open",
+      "description": "A public workspace for side projects. Anyone can join and browse.",
+      "members": [
+        {
+          "userId": "u-ava",
+          "role": "member"
+        },
+        {
+          "userId": "u-zoe",
+          "role": "admin"
+        },
+        {
+          "userId": "u-kai",
+          "role": "member"
+        },
+        {
+          "userId": "u-nina",
+          "role": "member"
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "p-checkout",
+      "workspaceId": "ws-northwind",
+      "name": "Checkout v3",
+      "description": "Rebuilding checkout as a single page with saved carts, Apple Pay and clearer error states.",
+      "ownerId": "u-ava",
+      "status": "active",
+      "generalAccess": {
+        "level": "viewer",
+        "code": false,
+        "copyAgents": true
+      },
+      "grants": [
+        {
+          "userId": "u-maya",
+          "level": "collaborator",
+          "code": true,
+          "copyAgents": true
+        },
+        {
+          "userId": "u-leo",
+          "level": "commenter",
+          "code": true,
+          "copyAgents": true
+        }
+      ],
+      "shareSlug": "checkout-fc395e",
+      "repo": {
+        "url": "https://git.example.com/northwind/checkout",
+        "branch": "main"
+      },
+      "tags": [
+        "payments",
+        "frontend",
+        "react"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-24T09:40:00Z"
+    },
+    {
+      "id": "p-search",
+      "workspaceId": "ws-northwind",
+      "name": "Instant Product Search",
+      "description": "Type-ahead product search with typo tolerance and an accessible empty state.",
+      "ownerId": "u-ava",
+      "status": "active",
+      "generalAccess": {
+        "level": "viewer",
+        "code": false,
+        "copyAgents": true
+      },
+      "grants": [
+        {
+          "userId": "u-sam",
+          "level": "commenter",
+          "code": false,
+          "copyAgents": true
+        }
+      ],
+      "shareSlug": "search-4744a1",
+      "repo": {
+        "url": "https://git.example.com/northwind/search",
+        "branch": "main"
+      },
+      "tags": [
+        "search",
+        "frontend",
+        "backend"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-23T18:05:00Z"
+    },
+    {
+      "id": "p-onboard",
+      "workspaceId": "ws-northwind",
+      "name": "Onboarding Emails",
+      "description": "A five-email welcome sequence with per-plan copy and send-time tests.",
+      "ownerId": "u-ava",
+      "status": "archived",
+      "generalAccess": {
+        "level": "viewer",
+        "code": false,
+        "copyAgents": true
+      },
+      "grants": [],
+      "shareSlug": "onboard-683a1c",
+      "repo": {
+        "url": "https://git.example.com/northwind/onboard",
+        "branch": "main"
+      },
+      "tags": [
+        "email",
+        "growth"
+      ],
+      "createdAt": "2026-06-10T12:00:00Z",
+      "updatedAt": "2026-08-15T10:00:00Z"
+    },
+    {
+      "id": "p-billing",
+      "workspaceId": "ws-northwind",
+      "name": "Billing Service Migration",
+      "description": "Moving invoices and subscriptions from the legacy monolith to the new billing service with zero downtime.",
+      "ownerId": "u-maya",
+      "status": "active",
+      "generalAccess": {
+        "level": "viewer",
+        "code": false,
+        "copyAgents": true
+      },
+      "grants": [
+        {
+          "userId": "u-ava",
+          "level": "collaborator",
+          "code": true,
+          "copyAgents": true
+        },
+        {
+          "userId": "u-jordan",
+          "level": "commenter",
+          "code": true,
+          "copyAgents": true
+        }
+      ],
+      "shareSlug": "billing-4d2bc8",
+      "repo": {
+        "url": "https://git.example.com/northwind/billing",
+        "branch": "main"
+      },
+      "tags": [
+        "backend",
+        "migration",
+        "payments"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-24T08:15:00Z"
+    },
+    {
+      "id": "p-mobile",
+      "workspaceId": "ws-northwind",
+      "name": "Mobile Accessibility Audit",
+      "description": "Auditing the iOS and Android apps against WCAG 2.2 and fixing the top issues.",
+      "ownerId": "u-leo",
+      "status": "active",
+      "generalAccess": {
+        "level": "viewer",
+        "code": false,
+        "copyAgents": true
+      },
+      "grants": [
+        {
+          "userId": "u-ava",
+          "level": "commenter",
+          "code": true,
+          "copyAgents": true
+        }
+      ],
+      "shareSlug": "mobile-5cad20",
+      "repo": {
+        "url": "https://git.example.com/northwind/mobile",
+        "branch": "main"
+      },
+      "tags": [
+        "mobile",
+        "accessibility"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-22T16:30:00Z"
+    },
+    {
+      "id": "p-pricing",
+      "workspaceId": "ws-northwind",
+      "name": "Dynamic Pricing Experiments",
+      "description": "Testing price elasticity models for seasonal products. Confidential.",
+      "ownerId": "u-priya",
+      "status": "active",
+      "generalAccess": {
+        "level": "none",
+        "code": false,
+        "copyAgents": false
+      },
+      "grants": [
+        {
+          "userId": "u-ava",
+          "level": "commenter",
+          "code": false,
+          "copyAgents": false
+        }
+      ],
+      "shareSlug": "pricing-30774a",
+      "repo": {
+        "url": "https://git.example.com/northwind/pricing",
+        "branch": "main"
+      },
+      "tags": [
+        "data-science",
+        "pricing"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-21T11:00:00Z"
+    },
+    {
+      "id": "p-docs",
+      "workspaceId": "ws-northwind",
+      "name": "Internal Docs Assistant",
+      "description": "An agent that answers questions about internal docs with links to its sources.",
+      "ownerId": "u-sam",
+      "status": "active",
+      "generalAccess": {
+        "level": "viewer",
+        "code": false,
+        "copyAgents": true
+      },
+      "grants": [],
+      "shareSlug": "docs-420e45",
+      "repo": {
+        "url": "https://git.example.com/northwind/docs",
+        "branch": "main"
+      },
+      "tags": [
+        "ai",
+        "docs",
+        "search"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-20T14:00:00Z"
+    },
+    {
+      "id": "p-incident",
+      "workspaceId": "ws-northwind",
+      "name": "Incident Triage Bot",
+      "description": "Summarizes alerts, finds the likely owning service and drafts the first incident update.",
+      "ownerId": "u-jordan",
+      "status": "active",
+      "generalAccess": {
+        "level": "viewer",
+        "code": false,
+        "copyAgents": true
+      },
+      "grants": [],
+      "shareSlug": "incident-fa1351",
+      "repo": {
+        "url": "https://git.example.com/northwind/incident",
+        "branch": "main"
+      },
+      "tags": [
+        "sre",
+        "ai",
+        "on-call"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-24T07:20:00Z"
+    },
+    {
+      "id": "p-warehouse",
+      "workspaceId": "ws-northwind",
+      "name": "Warehouse Forecasting",
+      "description": "Forecasting weekly stock levels per warehouse to cut stockouts.",
+      "ownerId": "u-priya",
+      "status": "active",
+      "generalAccess": {
+        "level": "viewer",
+        "code": false,
+        "copyAgents": false
+      },
+      "grants": [],
+      "shareSlug": "warehouse-cc7d0a",
+      "repo": {
+        "url": "https://git.example.com/northwind/warehouse",
+        "branch": "main"
+      },
+      "tags": [
+        "data-science",
+        "forecasting"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-19T09:00:00Z"
+    },
+    {
+      "id": "p-secrets",
+      "workspaceId": "ws-northwind",
+      "name": "Secrets Rotation",
+      "description": "Rotating production credentials and moving them into the vault.",
+      "ownerId": "u-jordan",
+      "status": "active",
+      "generalAccess": {
+        "level": "none",
+        "code": false,
+        "copyAgents": false
+      },
+      "grants": [
+        {
+          "userId": "u-sam",
+          "level": "collaborator",
+          "code": true,
+          "copyAgents": true
+        }
+      ],
+      "shareSlug": "secrets-34e996",
+      "repo": {
+        "url": "https://git.example.com/northwind/secrets",
+        "branch": "main"
+      },
+      "tags": [
+        "security"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-23T22:00:00Z"
+    },
+    {
+      "id": "p-tokens",
+      "workspaceId": "ws-northwind",
+      "name": "Design System Tokens",
+      "description": "One set of color, type and spacing tokens shared by web and mobile.",
+      "ownerId": "u-leo",
+      "status": "active",
+      "generalAccess": {
+        "level": "commenter",
+        "code": false,
+        "copyAgents": true
+      },
+      "grants": [],
+      "shareSlug": "tokens-e39b71",
+      "repo": {
+        "url": "https://git.example.com/northwind/tokens",
+        "branch": "main"
+      },
+      "tags": [
+        "design",
+        "frontend"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-18T15:00:00Z"
+    },
+    {
+      "id": "p-payroll",
+      "workspaceId": "ws-northwind",
+      "name": "Payroll Integration",
+      "description": "Syncing HR records with the payroll provider. Restricted to people ops.",
+      "ownerId": "u-maya",
+      "status": "active",
+      "generalAccess": {
+        "level": "none",
+        "code": false,
+        "copyAgents": false
+      },
+      "grants": [],
+      "shareSlug": "payroll-0845a6",
+      "repo": null,
+      "tags": [
+        "hr",
+        "integrations"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-17T10:00:00Z"
+    },
+    {
+      "id": "p-judging",
+      "workspaceId": "ws-open",
+      "name": "Hackathon Judging Helper",
+      "description": "Collects project submissions, checks the demo links work, and builds a judging schedule.",
+      "ownerId": "u-ava",
+      "status": "active",
+      "generalAccess": {
+        "level": "viewer",
+        "code": false,
+        "copyAgents": true
+      },
+      "grants": [
+        {
+          "userId": "u-kai",
+          "level": "collaborator",
+          "code": true,
+          "copyAgents": true
+        }
+      ],
+      "shareSlug": "judging-0e277f",
+      "repo": {
+        "url": "https://git.example.com/open/judging",
+        "branch": "main"
+      },
+      "tags": [
+        "hackathon",
+        "scheduling"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-24T10:10:00Z"
+    },
+    {
+      "id": "p-recipes",
+      "workspaceId": "ws-open",
+      "name": "Recipe Remixer",
+      "description": "Turns any recipe into vegan, gluten-free or high-protein versions with swaps explained.",
+      "ownerId": "u-zoe",
+      "status": "active",
+      "generalAccess": {
+        "level": "viewer",
+        "code": true,
+        "copyAgents": true
+      },
+      "grants": [],
+      "shareSlug": "recipes-61a228",
+      "repo": {
+        "url": "https://git.example.com/open/recipes",
+        "branch": "main"
+      },
+      "tags": [
+        "food",
+        "ai"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-22T20:00:00Z"
+    },
+    {
+      "id": "p-study",
+      "workspaceId": "ws-open",
+      "name": "Study Group Matcher",
+      "description": "Matches students into study groups by course, schedule and learning style.",
+      "ownerId": "u-kai",
+      "status": "active",
+      "generalAccess": {
+        "level": "viewer",
+        "code": false,
+        "copyAgents": true
+      },
+      "grants": [],
+      "shareSlug": "study-770db6",
+      "repo": {
+        "url": "https://git.example.com/open/study",
+        "branch": "main"
+      },
+      "tags": [
+        "education",
+        "matching"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-21T17:45:00Z"
+    },
+    {
+      "id": "p-climate",
+      "workspaceId": "ws-open",
+      "name": "Climate Data Explorer",
+      "description": "Interactive maps of local temperature and rainfall trends from public datasets.",
+      "ownerId": "u-zoe",
+      "status": "active",
+      "generalAccess": {
+        "level": "viewer",
+        "code": true,
+        "copyAgents": true
+      },
+      "grants": [
+        {
+          "userId": "u-ava",
+          "level": "commenter",
+          "code": false,
+          "copyAgents": true
+        }
+      ],
+      "shareSlug": "climate-a82f46",
+      "repo": {
+        "url": "https://git.example.com/open/climate",
+        "branch": "main"
+      },
+      "tags": [
+        "climate",
+        "data-viz"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-20T13:30:00Z"
+    },
+    {
+      "id": "p-platformer",
+      "workspaceId": "ws-open",
+      "name": "Pixel Platformer",
+      "description": "A small browser platformer with hand-drawn levels.",
+      "ownerId": "u-kai",
+      "status": "active",
+      "generalAccess": {
+        "level": "viewer",
+        "code": false,
+        "copyAgents": false
+      },
+      "grants": [],
+      "shareSlug": "platformer-c70db0",
+      "repo": {
+        "url": "https://git.example.com/open/platformer",
+        "branch": "main"
+      },
+      "tags": [
+        "games"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-16T22:00:00Z"
+    },
+    {
+      "id": "p-portfolio",
+      "workspaceId": "ws-open",
+      "name": "Portfolio Site Generator",
+      "description": "Builds a personal portfolio site from a resume and GitHub profile.",
+      "ownerId": "u-nina",
+      "status": "active",
+      "generalAccess": {
+        "level": "viewer",
+        "code": false,
+        "copyAgents": true
+      },
+      "grants": [],
+      "shareSlug": "portfolio-5e2ee2",
+      "repo": {
+        "url": "https://git.example.com/open/portfolio",
+        "branch": "main"
+      },
+      "tags": [
+        "web",
+        "ai"
+      ],
+      "createdAt": "2026-09-02T12:00:00Z",
+      "updatedAt": "2026-10-23T12:00:00Z"
+    }
+  ],
+  "agents": [
+    {
+      "id": "a-checkout-atlas",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-checkout",
+      "name": "Atlas",
+      "role": "Manager",
+      "instructions": "Plan checkout work as small tickets, delegate research and UI tasks, and review every change against the acceptance criteria before handing off.",
+      "skills": [
+        "planning",
+        "code-review"
+      ],
+      "tools": [
+        "git",
+        "test-runner",
+        "office-delegate"
+      ],
+      "engine": "claude",
+      "model": "claude-opus-5-5",
+      "status": "working",
+      "summary": "Splitting saved-cart support into API and UI tickets.",
+      "updatedAt": "2026-10-24T09:40:00Z"
+    },
+    {
+      "id": "a-checkout-pixel",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-checkout",
+      "name": "Pixel",
+      "role": "Frontend",
+      "instructions": "Build accessible React components for checkout. Match the design tokens, keep bundle size flat, and add Playwright tests for every flow you touch.",
+      "skills": [
+        "react",
+        "accessibility",
+        "playwright"
+      ],
+      "tools": [
+        "git",
+        "browser",
+        "test-runner"
+      ],
+      "engine": "codex",
+      "model": "gpt-6-sol",
+      "status": "working",
+      "summary": "Wiring Apple Pay button states and error banners.",
+      "updatedAt": "2026-10-24T09:40:00Z"
+    },
+    {
+      "id": "a-checkout-ledger",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-checkout",
+      "name": "Ledger",
+      "role": "Payments QA",
+      "instructions": "Write and run test cases for payment edge cases: declines, retries, currency rounding and idempotent submits. Report failures with reproduction steps.",
+      "skills": [
+        "testing",
+        "payments"
+      ],
+      "tools": [
+        "test-runner",
+        "http"
+      ],
+      "engine": "claude",
+      "model": "claude-sonnet-5-5",
+      "status": "waiting",
+      "summary": "Waiting for the retry endpoint before testing double submits.",
+      "updatedAt": "2026-10-24T09:40:00Z"
+    },
+    {
+      "id": "a-search-scout",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-search",
+      "name": "Scout",
+      "role": "Research",
+      "instructions": "Survey the current search endpoint, measure latency, and list where results are ranked. Read-only: report findings with file paths.",
+      "skills": [
+        "research",
+        "profiling"
+      ],
+      "tools": [
+        "git",
+        "http"
+      ],
+      "engine": "claude",
+      "model": "claude-haiku-5-5",
+      "status": "done",
+      "summary": "Found ranking happens in two places; recommended merging them.",
+      "updatedAt": "2026-10-23T18:05:00Z"
+    },
+    {
+      "id": "a-search-quill",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-search",
+      "name": "Quill",
+      "role": "Implementation",
+      "instructions": "Implement debounced type-ahead search with keyboard navigation and screen reader announcements. Keep changes behind the search_v2 flag.",
+      "skills": [
+        "react",
+        "accessibility"
+      ],
+      "tools": [
+        "git",
+        "test-runner",
+        "browser"
+      ],
+      "engine": "cursor",
+      "model": "composer-2.5",
+      "status": "working",
+      "summary": "Adding arrow-key navigation to the results list.",
+      "updatedAt": "2026-10-23T18:05:00Z"
+    },
+    {
+      "id": "a-onboard-echo",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-onboard",
+      "name": "Echo",
+      "role": "Copywriter",
+      "instructions": "Draft lifecycle emails in Northwind's voice: short, specific, one call to action each. Produce plain-text and HTML versions.",
+      "skills": [
+        "writing",
+        "email"
+      ],
+      "tools": [
+        "docs"
+      ],
+      "engine": "claude",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "summary": "Sequence shipped; all five emails approved.",
+      "updatedAt": "2026-08-15T10:00:00Z"
+    },
+    {
+      "id": "a-billing-bridge",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-billing",
+      "name": "Bridge",
+      "role": "Migration Lead",
+      "instructions": "Plan and execute data migrations in reversible steps. Every step needs a dry run, a row-count check and a rollback script before it runs.",
+      "skills": [
+        "migrations",
+        "sql",
+        "planning"
+      ],
+      "tools": [
+        "git",
+        "database",
+        "test-runner"
+      ],
+      "engine": "codex",
+      "model": "gpt-6-sol",
+      "status": "working",
+      "summary": "Dry-running the invoices backfill on a staging snapshot.",
+      "updatedAt": "2026-10-24T08:15:00Z"
+    },
+    {
+      "id": "a-billing-audit",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-billing",
+      "name": "Audit",
+      "role": "Verifier",
+      "instructions": "Compare old and new billing outputs for the same accounts and flag any mismatch in totals, tax or dates.",
+      "skills": [
+        "data-validation",
+        "sql"
+      ],
+      "tools": [
+        "database"
+      ],
+      "engine": "claude",
+      "model": "claude-sonnet-5-5",
+      "status": "idle",
+      "summary": "Ready to diff the next batch of 500 accounts.",
+      "updatedAt": "2026-10-24T08:15:00Z"
+    },
+    {
+      "id": "a-mobile-lumen",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-mobile",
+      "name": "Lumen",
+      "role": "Auditor",
+      "instructions": "Audit screens for contrast, touch target size, focus order and screen reader labels. Produce a ranked list of issues with screenshots.",
+      "skills": [
+        "accessibility",
+        "mobile"
+      ],
+      "tools": [
+        "browser",
+        "screenshots"
+      ],
+      "engine": "claude",
+      "model": "claude-opus-5-5",
+      "status": "done",
+      "summary": "Ranked 41 issues; 9 are blockers.",
+      "updatedAt": "2026-10-22T16:30:00Z"
+    },
+    {
+      "id": "a-mobile-patch",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-mobile",
+      "name": "Patch",
+      "role": "Fixer",
+      "instructions": "Fix accessibility issues one ticket at a time in the React Native codebase, with a before and after screenshot for each.",
+      "skills": [
+        "react-native",
+        "accessibility"
+      ],
+      "tools": [
+        "git",
+        "test-runner"
+      ],
+      "engine": "cursor",
+      "model": "composer-2.5",
+      "status": "working",
+      "summary": "Fixing missing labels on the order history screen.",
+      "updatedAt": "2026-10-22T16:30:00Z"
+    },
+    {
+      "id": "a-pricing-delta",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-pricing",
+      "name": "Delta",
+      "role": "Analyst",
+      "instructions": "Fit and compare elasticity models on historical sales. Never write to production tables. Report confidence intervals with every estimate.",
+      "skills": [
+        "statistics",
+        "python"
+      ],
+      "tools": [
+        "notebook",
+        "database"
+      ],
+      "engine": "codex",
+      "model": "gpt-6-sol",
+      "status": "working",
+      "summary": "Comparing log-log and Bayesian models on fall data.",
+      "updatedAt": "2026-10-21T11:00:00Z"
+    },
+    {
+      "id": "a-docs-sage",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-docs",
+      "name": "Sage",
+      "role": "Docs Q&A",
+      "instructions": "Answer questions using only the indexed internal docs. Cite every claim with a link, and say when the docs do not cover it.",
+      "skills": [
+        "retrieval",
+        "writing"
+      ],
+      "tools": [
+        "search",
+        "docs"
+      ],
+      "engine": "claude",
+      "model": "claude-sonnet-5-5",
+      "status": "idle",
+      "summary": "Answering questions in #eng-help.",
+      "updatedAt": "2026-10-20T14:00:00Z"
+    },
+    {
+      "id": "a-docs-indexer",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-docs",
+      "name": "Indexer",
+      "role": "Ingestion",
+      "instructions": "Crawl the docs site nightly, split pages into sections, and flag pages that have not been updated in a year.",
+      "skills": [
+        "crawling",
+        "data-pipelines"
+      ],
+      "tools": [
+        "http",
+        "storage"
+      ],
+      "engine": "codex",
+      "model": "gpt-6-sol",
+      "status": "done",
+      "summary": "Indexed 1,240 pages; flagged 86 as stale.",
+      "updatedAt": "2026-10-20T14:00:00Z"
+    },
+    {
+      "id": "a-incident-siren",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-incident",
+      "name": "Siren",
+      "role": "Triage",
+      "instructions": "Read new alerts, group duplicates, find the owning service from the service catalog, and draft a status update for a human to approve.",
+      "skills": [
+        "incident-response",
+        "summarization"
+      ],
+      "tools": [
+        "logs",
+        "http",
+        "chat"
+      ],
+      "engine": "claude",
+      "model": "claude-haiku-5-5",
+      "status": "working",
+      "summary": "Grouping 12 latency alerts from the checkout API.",
+      "updatedAt": "2026-10-24T07:20:00Z"
+    },
+    {
+      "id": "a-incident-scribe",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-incident",
+      "name": "Scribe",
+      "role": "Postmortem Writer",
+      "instructions": "Turn incident timelines into blameless postmortems with impact, root cause, and follow-up tickets.",
+      "skills": [
+        "writing",
+        "sre"
+      ],
+      "tools": [
+        "docs",
+        "tickets"
+      ],
+      "engine": "claude",
+      "model": "claude-sonnet-5-5",
+      "status": "idle",
+      "summary": "Waiting for the next resolved incident.",
+      "updatedAt": "2026-10-24T07:20:00Z"
+    },
+    {
+      "id": "a-warehouse-tide",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-warehouse",
+      "name": "Tide",
+      "role": "Forecaster",
+      "instructions": "Train weekly demand forecasts per SKU and warehouse, backtest against the last 12 weeks, and explain the biggest misses.",
+      "skills": [
+        "forecasting",
+        "python"
+      ],
+      "tools": [
+        "notebook",
+        "database"
+      ],
+      "engine": "codex",
+      "model": "gpt-6-sol",
+      "status": "working",
+      "summary": "Backtesting the holiday-season model.",
+      "updatedAt": "2026-10-19T09:00:00Z"
+    },
+    {
+      "id": "a-secrets-vault",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-secrets",
+      "name": "Vault",
+      "role": "Security",
+      "instructions": "Rotate credentials one service at a time and verify each service still starts. Never print secret values.",
+      "skills": [
+        "security",
+        "devops"
+      ],
+      "tools": [
+        "vault",
+        "deploy"
+      ],
+      "engine": "codex",
+      "model": "gpt-6-sol",
+      "status": "working",
+      "summary": "Rotating database credentials for the orders service.",
+      "updatedAt": "2026-10-23T22:00:00Z"
+    },
+    {
+      "id": "a-tokens-swatch",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-tokens",
+      "name": "Swatch",
+      "role": "Design Engineer",
+      "instructions": "Convert Figma variables to design tokens, generate CSS and React Native outputs, and check contrast for every color pair.",
+      "skills": [
+        "design-systems",
+        "accessibility"
+      ],
+      "tools": [
+        "figma",
+        "git"
+      ],
+      "engine": "cursor",
+      "model": "composer-2.5",
+      "status": "done",
+      "summary": "Shipped tokens v1 for color and spacing.",
+      "updatedAt": "2026-10-18T15:00:00Z"
+    },
+    {
+      "id": "a-payroll-clerk",
+      "workspaceId": "ws-northwind",
+      "projectId": "p-payroll",
+      "name": "Clerk",
+      "role": "Integration",
+      "instructions": "Sync employee records to the payroll provider nightly and report mismatches. Never log personal data.",
+      "skills": [
+        "integrations"
+      ],
+      "tools": [
+        "http",
+        "database"
+      ],
+      "engine": "claude",
+      "model": "claude-haiku-5-5",
+      "status": "idle",
+      "summary": "Nightly sync finished with no mismatches.",
+      "updatedAt": "2026-10-17T10:00:00Z"
+    },
+    {
+      "id": "a-judging-gavel",
+      "workspaceId": "ws-open",
+      "projectId": "p-judging",
+      "name": "Gavel",
+      "role": "Scheduler",
+      "instructions": "Build a judging schedule that gives every team a fair slot, keeps judges' tracks together, and leaves buffer time.",
+      "skills": [
+        "scheduling",
+        "optimization"
+      ],
+      "tools": [
+        "spreadsheet",
+        "calendar"
+      ],
+      "engine": "claude",
+      "model": "claude-sonnet-5-5",
+      "status": "working",
+      "summary": "Balancing 140 teams across 12 judges.",
+      "updatedAt": "2026-10-24T10:10:00Z"
+    },
+    {
+      "id": "a-judging-linky",
+      "workspaceId": "ws-open",
+      "projectId": "p-judging",
+      "name": "Linky",
+      "role": "Link Checker",
+      "instructions": "Open every submission's demo and repo links and report broken or private ones to the team.",
+      "skills": [
+        "web",
+        "testing"
+      ],
+      "tools": [
+        "browser",
+        "http"
+      ],
+      "engine": "claude",
+      "model": "claude-haiku-5-5",
+      "status": "done",
+      "summary": "Checked 140 submissions; 11 links need fixing.",
+      "updatedAt": "2026-10-24T10:10:00Z"
+    },
+    {
+      "id": "a-recipes-saffron",
+      "workspaceId": "ws-open",
+      "projectId": "p-recipes",
+      "name": "Saffron",
+      "role": "Chef",
+      "instructions": "Rewrite recipes for a dietary goal. Explain each ingredient swap and keep cooking times realistic.",
+      "skills": [
+        "writing",
+        "nutrition"
+      ],
+      "tools": [
+        "search"
+      ],
+      "engine": "claude",
+      "model": "claude-sonnet-5-5",
+      "status": "idle",
+      "summary": "Remixed 30 recipes for the launch post.",
+      "updatedAt": "2026-10-22T20:00:00Z"
+    },
+    {
+      "id": "a-study-match",
+      "workspaceId": "ws-open",
+      "projectId": "p-study",
+      "name": "Match",
+      "role": "Matcher",
+      "instructions": "Group students into balanced study groups of four by course, free time and preferred format. Explain each grouping.",
+      "skills": [
+        "optimization",
+        "scheduling"
+      ],
+      "tools": [
+        "spreadsheet"
+      ],
+      "engine": "codex",
+      "model": "gpt-6-sol",
+      "status": "working",
+      "summary": "Matching 320 students for midterms.",
+      "updatedAt": "2026-10-21T17:45:00Z"
+    },
+    {
+      "id": "a-study-nudge",
+      "workspaceId": "ws-open",
+      "projectId": "p-study",
+      "name": "Nudge",
+      "role": "Reminders",
+      "instructions": "Send friendly reminders before each study session and collect quick feedback afterwards.",
+      "skills": [
+        "messaging"
+      ],
+      "tools": [
+        "email",
+        "calendar"
+      ],
+      "engine": "cursor",
+      "model": "composer-2.5",
+      "status": "idle",
+      "summary": "Next reminders go out Sunday.",
+      "updatedAt": "2026-10-21T17:45:00Z"
+    },
+    {
+      "id": "a-climate-strata",
+      "workspaceId": "ws-open",
+      "projectId": "p-climate",
+      "name": "Strata",
+      "role": "Data Engineer",
+      "instructions": "Download public climate datasets, clean them into one tidy table per region, and document every source.",
+      "skills": [
+        "data-pipelines",
+        "python"
+      ],
+      "tools": [
+        "http",
+        "storage"
+      ],
+      "engine": "codex",
+      "model": "gpt-6-sol",
+      "status": "done",
+      "summary": "Cleaned 40 years of NOAA station data.",
+      "updatedAt": "2026-10-20T13:30:00Z"
+    },
+    {
+      "id": "a-climate-contour",
+      "workspaceId": "ws-open",
+      "projectId": "p-climate",
+      "name": "Contour",
+      "role": "Visualization",
+      "instructions": "Build accessible map visualizations with color scales that work for color-blind readers.",
+      "skills": [
+        "data-viz",
+        "accessibility"
+      ],
+      "tools": [
+        "browser",
+        "git"
+      ],
+      "engine": "claude",
+      "model": "claude-opus-5-5",
+      "status": "working",
+      "summary": "Adding a rainfall anomaly layer.",
+      "updatedAt": "2026-10-20T13:30:00Z"
+    },
+    {
+      "id": "a-judging-herald",
+      "workspaceId": "ws-open",
+      "projectId": "p-judging",
+      "name": "Herald",
+      "role": "Announcer",
+      "instructions": "Write clear announcements for schedule changes and judging results, adapted from the incident update format.",
+      "skills": [
+        "writing",
+        "summarization"
+      ],
+      "tools": [
+        "chat"
+      ],
+      "engine": "claude",
+      "model": "claude-haiku-5-5",
+      "status": "idle",
+      "summary": "Drafted the judging kickoff announcement.",
+      "updatedAt": "2026-10-24T10:10:00Z",
+      "copiedFromAgentId": "a-study-nudge"
+    },
+    {
+      "id": "a-platformer-sprite",
+      "workspaceId": "ws-open",
+      "projectId": "p-platformer",
+      "name": "Sprite",
+      "role": "Game Dev",
+      "instructions": "Build levels and physics for a canvas platformer. Keep each level beatable in under two minutes.",
+      "skills": [
+        "games",
+        "canvas"
+      ],
+      "tools": [
+        "git",
+        "browser"
+      ],
+      "engine": "cursor",
+      "model": "composer-2.5",
+      "status": "idle",
+      "summary": "Level 3 is playable.",
+      "updatedAt": "2026-10-16T22:00:00Z"
+    },
+    {
+      "id": "a-portfolio-folio",
+      "workspaceId": "ws-open",
+      "projectId": "p-portfolio",
+      "name": "Folio",
+      "role": "Site Builder",
+      "instructions": "Turn a resume and GitHub profile into a fast, accessible one-page portfolio. Ask before publishing anything.",
+      "skills": [
+        "web",
+        "writing"
+      ],
+      "tools": [
+        "git",
+        "browser"
+      ],
+      "engine": "claude",
+      "model": "claude-sonnet-5-5",
+      "status": "working",
+      "summary": "Generating project cards from pinned repos.",
+      "updatedAt": "2026-10-23T12:00:00Z"
+    }
+  ],
+  "activity": [
+    {
+      "id": "act-1",
+      "projectId": "p-checkout",
+      "agentId": "a-checkout-pixel",
+      "userId": "u-ava",
+      "kind": "upload",
+      "text": "Uploaded Apple Pay button states and error banners.",
+      "time": "2026-10-24T09:40:00Z",
+      "files": [
+        "src/checkout/PayButton.tsx",
+        "src/checkout/Errors.tsx"
+      ]
+    },
+    {
+      "id": "act-2",
+      "projectId": "p-checkout",
+      "agentId": "a-checkout-atlas",
+      "userId": "u-ava",
+      "kind": "run",
+      "text": "Split saved carts into API and UI tickets.",
+      "time": "2026-10-24T09:10:00Z"
+    },
+    {
+      "id": "act-3",
+      "projectId": "p-checkout",
+      "agentId": "a-checkout-ledger",
+      "userId": "u-maya",
+      "kind": "run",
+      "text": "Ran 48 payment edge-case tests: 46 passing, 2 waiting on the retry endpoint.",
+      "time": "2026-10-23T17:20:00Z"
+    },
+    {
+      "id": "act-4",
+      "projectId": "p-search",
+      "agentId": "a-search-scout",
+      "userId": "u-ava",
+      "kind": "handoff",
+      "text": "Handed off: ranking happens in search/rank.ts and api/products.ts.",
+      "time": "2026-10-23T18:05:00Z"
+    },
+    {
+      "id": "act-5",
+      "projectId": "p-billing",
+      "agentId": "a-billing-bridge",
+      "userId": "u-maya",
+      "kind": "upload",
+      "text": "Uploaded the invoices backfill script and its rollback.",
+      "time": "2026-10-24T08:15:00Z",
+      "files": [
+        "migrations/0042_invoices_backfill.sql",
+        "migrations/0042_rollback.sql"
+      ]
+    },
+    {
+      "id": "act-6",
+      "projectId": "p-mobile",
+      "agentId": "a-mobile-patch",
+      "userId": "u-leo",
+      "kind": "upload",
+      "text": "Fixed labels on order history; added before and after screenshots.",
+      "time": "2026-10-22T16:30:00Z",
+      "files": [
+        "app/screens/OrderHistory.tsx"
+      ]
+    },
+    {
+      "id": "act-7",
+      "projectId": "p-judging",
+      "agentId": "a-judging-linky",
+      "userId": "u-ava",
+      "kind": "run",
+      "text": "Checked 140 submissions; 11 links need fixing.",
+      "time": "2026-10-24T10:10:00Z"
+    },
+    {
+      "id": "act-8",
+      "projectId": "p-recipes",
+      "agentId": "a-recipes-saffron",
+      "userId": "u-zoe",
+      "kind": "upload",
+      "text": "Added 30 remixed recipes.",
+      "time": "2026-10-22T20:00:00Z",
+      "files": [
+        "recipes/remixed/"
+      ]
+    }
+  ],
+  "comments": [
+    {
+      "id": "c-1",
+      "projectId": "p-checkout",
+      "userId": "u-leo",
+      "text": "Can the error banner reuse the alert tokens from the design system?",
+      "time": "2026-10-24T09:55:00Z"
+    },
+    {
+      "id": "c-2",
+      "projectId": "p-pricing",
+      "userId": "u-ava",
+      "text": "Would love to reuse the elasticity model for checkout discounts.",
+      "time": "2026-10-21T15:00:00Z"
+    },
+    {
+      "id": "c-3",
+      "projectId": "p-study",
+      "userId": "u-nina",
+      "text": "Could groups also match on time zone?",
+      "time": "2026-10-22T09:00:00Z"
+    }
+  ]
+}

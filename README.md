@@ -4,6 +4,38 @@ A spatial workspace for AI-assisted software development. Project folders become
 
 ![The Iteration1 office](assets/blender-office-review.png)
 
+## Where this is going: cloud workspaces (in progress)
+
+Iteration1 is becoming a cloud workspace for agent projects, a shared drive crossed with Slack. The 3D office below is the current app and keeps working until the new view replaces it.
+
+- **Workspaces.** A sidebar lists every workspace you belong to. A workspace is a separate world: company workspaces are joined by invite or company email, public ones by anyone. Nothing is shared or searchable across workspaces.
+- **Projects as clouds.** Each workspace is a canvas you can pan and zoom. Your active projects sit in front with a name and short description; other people's projects you can see are faint clouds in the background, with details when you move over to them.
+- **Project documents.** Zooming into a cloud opens the project as a document: its agents and what each is doing. Open an agent to see its work and chat with it on Codex, Claude or Cursor. Every project has a share link that opens this document for people with access.
+- **Work runs locally.** Each person runs their own agent on their own account and computer, and the work is uploaded to the workspace. The cloud stores and shares projects; it does not run agents.
+- **Copying agents.** An agent you can see in another project can be copied into yours: its name, role, instructions, skills, tools and engine, never its history or the project's code.
+- **Search (later).** Find agents and projects in your workspace that do similar things.
+
+### Access
+
+Each project has a default level for everyone in its workspace, and the owner can share it with individual people, as in Google Docs. A person gets the higher of the two, with each switch on if either has it on.
+
+| Level | Can |
+|---|---|
+| None | See nothing: the project is not on the canvas or in search, and its share link refuses |
+| Viewer | See the name, description and agents |
+| Commenter | View and comment |
+| Collaborator | Comment, run agents and upload work |
+| Owner | Everything, plus sharing and transferring ownership |
+
+Two switches apply to viewers and commenters: **code and history**, and **copy agents**. Collaborators and owners always have both.
+
+### Build on the shared model
+
+- `src/cloud/model.ts` defines workspaces, projects, agents, activity and comments, and `accessFor()`, the access rule. The UI, the workspace and permission backend, and search all use this shape; change it here so everyone stays in sync. The backend must apply the same rule and return only what the signed-in person may see.
+- `src/cloud/seed.json` is placeholder data in that shape: two workspaces (Northwind Labs, a company, and Open Build Club, public), 18 projects and 29 agents covering every access level, including projects hidden from the signed-in user. Real projects replace it once the backend and uploads exist.
+- `src/cloud/data.ts` loads the placeholder data. It becomes a call to the workspace API when that is ready.
+
+
 ## Run locally
 
 Requires Node.js 20.19+ and npm. Live agent work needs at least one engine: a ChatGPT account for Codex, or an Anthropic API key for Claude.
