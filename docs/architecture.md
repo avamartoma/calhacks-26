@@ -10,6 +10,7 @@
 | Continuity | `server/checkpoints.mjs`, `server/peer-handoffs.mjs` | Checkpoints, replacement context and persistent messages |
 | Team transport | `server/team.mjs` | Paired local offices, status exchange and cross-office handoffs |
 | External execution | `server/cursor.mjs`, `server/office-mcp.mjs`, `scripts/cursor-mcp.mjs`, `scripts/claude-mcp.mjs`, `scripts/codex-mcp.mjs` | Cursor, Claude Code and Codex CLI session ownership and explicitly reported activity over MCP |
+| ASI:One agent | `agents/office_agent.py`, `agents/office_core.py` | Fetch.ai uAgent over the Agentverse mailbox: paired owners read status and run docs and dispatch confirmed missions through the loopback API |
 | Launched Cursor agents | `server/cursor-agent.mjs` | Office-owned Cursor SDK runs: runtime selection, observable stream and cancellation |
 | Claude engine | `server/claude-agent.mjs`, `server/claude-office.mjs`, `server/claude-key.mjs` | Office agents run on Claude through the Claude Agent SDK: same instructions, office tools (as MCP), permissions, evidence and handoffs as Codex agents; sessions, steering, cancellation and the locally stored API key |
 | Sign-in | `server/oauth.mjs` | Auth0 Authorization Code with PKCE, identity-token verification and local session storage |
