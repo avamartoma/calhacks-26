@@ -315,7 +315,7 @@ export class OfficeScene {
     // Central pinboard and arrival mat.
     this.box(this.world, 8.2, 1.6, .5, 3.7, 2.1, .18, '#bc9f72', .035);
     for (const x of [6.8, 9.6]) this.box(this.world, x, .65, .5, .065, 1.3, .065, '#536c59');
-    const board = new THREE.Mesh(new THREE.PlaneGeometry(3.48, 1.88), new THREE.MeshBasicMaterial({ map: this.textTexture('THE OFFICE BOARD', room.demo ? 'DEMO OFFICE · FLOOR 14' : 'LIVE OFFICE · FLOOR 14', '#d8a466', true, room.goal || 'Your next big idea starts here. Assign a mission to the manager.') })); board.position.set(8.2, 1.6, .6); this.world.add(board);
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(3.48, 1.88), new THREE.MeshBasicMaterial({ map: this.textTexture('THE OFFICE BOARD', room.demo ? 'DEMO OFFICE · ITERATION1' : 'LIVE OFFICE · ITERATION1', '#d8a466', true, room.goal || 'Your next big idea starts here. Assign a mission to the manager.') })); board.position.set(8.2, 1.6, .6); this.world.add(board);
     this.box(this.world, 6.1, .06, 6.2, 4.4, .04, 2.1, '#687f66');
     this.sign('14 / ITERATION1', 'A place for your agents to do their thing.', 6.1, .55, 7.3, 3.4);
     } else {
@@ -337,11 +337,11 @@ export class OfficeScene {
         if (material.transparent) material.depthWrite = false;
         this.world.add(mesh);
       }
-      this.sign('MANAGER’S OFFICE', 'PROJECT DIRECTION / FLOOR 14', -6.1, 3.9, -7.8, 3.8);
+      this.sign('MANAGER’S OFFICE', 'PROJECT DIRECTION / ITERATION1', -6.1, 3.9, -7.8, 3.8);
       this.sign('BREAK ROOM', 'CONVERSATIONS & HANDOFFS', 5.8, 3.8, -7.5, 3.7);
       this.box(this.world, 8.2, 1.6, .5, 3.7, 2.1, .12, '#303936', .025);
       for (const x of [6.8, 9.6]) this.box(this.world, x, .65, .5, .045, 1.3, .045, '#505957');
-      const board = new THREE.Mesh(new THREE.PlaneGeometry(3.48, 1.88), new THREE.MeshBasicMaterial({ map: this.textTexture('THE OFFICE BOARD', room.demo ? 'DEMO OFFICE / FLOOR 14' : 'LIVE OFFICE / FLOOR 14', '#d8a466', true, room.goal || 'Assign a mission to your manager.') })); board.position.set(8.2, 1.6, .571); this.world.add(board);
+      const board = new THREE.Mesh(new THREE.PlaneGeometry(3.48, 1.88), new THREE.MeshBasicMaterial({ map: this.textTexture('THE OFFICE BOARD', room.demo ? 'DEMO OFFICE / ITERATION1' : 'LIVE OFFICE / ITERATION1', '#d8a466', true, room.goal || 'Assign a mission to your manager.') })); board.position.set(8.2, 1.6, .571); this.world.add(board);
       // Lounge furniture and the front suite glass participate in walking collision.
       this.obstacles.push(new THREE.Box3(new THREE.Vector3(4.05,0,-7.4),new THREE.Vector3(8.15,2,-5.95)),new THREE.Box3(new THREE.Vector3(4.8,0,-5.6),new THREE.Vector3(7.2,1,-3.2)),new THREE.Box3(new THREE.Vector3(7.6,0,2.7),new THREE.Vector3(9.3,2,5.9)),new THREE.Box3(new THREE.Vector3(-10.5,0,-2.4),new THREE.Vector3(-6.6,4,-1.85)),new THREE.Box3(new THREE.Vector3(-3.55,0,-2.4),new THREE.Vector3(-1.6,4,-1.85)));
     }

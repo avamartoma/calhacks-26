@@ -155,13 +155,13 @@ export default function App() {
   useEffect(()=>{scene.current?.setPanelWidth(tool==='office' || cinematic || recording || !spatial?0:440); if(scene.current)scene.current.onSelect=id=>{if(!replayRoom)select(id);};},[tool,replayRoom,sceneReady,select,cinematic,recording,spatial]);
   const roomEndpoint = `/rooms/${room?.id}`;
   const approvalCount = data ? data.approvals.length + attentionTickets(data).length : 0;
-  if (!data || !room) return <main className="loading"><div className="brand-mark">14</div><h1>{error?'The office is offline':'Loading project'}</h1><p>{error || ''}</p>{error?<button className="primary" onClick={()=>window.location.reload()}>Retry connection</button>:<LoaderCircle className="spin" size={20} />}</main>;
+  if (!data || !room) return <main className="loading"><div className="brand-mark">i1</div><h1>{error?'The office is offline':'Loading project'}</h1><p>{error || ''}</p>{error?<button className="primary" onClick={()=>window.location.reload()}>Retry connection</button>:<LoaderCircle className="spin" size={20} />}</main>;
   const floorRoom = displayRoom || room;
 
-  if(room.archived)return <main className="empty-projects"><span className="brand-mark">14</span>{tool==='newroom'?<NewRoom defaultPath="" connected={!!data.connection.account} busy={busy} onSubmit={(name,path,demo)=>action(async()=>{const result=await api('/rooms',{name,path,demo});switchRoom(result.room.id);})}/>:<ProjectRooms rooms={data.rooms} current="" busy={busy} action={action} onRoom={switchRoom} onNew={()=>setTool('newroom')}/>}<p role={error?'alert':undefined}>{error || toast}</p></main>;
+  if(room.archived)return <main className="empty-projects"><span className="brand-mark">i1</span>{tool==='newroom'?<NewRoom defaultPath="" connected={!!data.connection.account} busy={busy} onSubmit={(name,path,demo)=>action(async()=>{const result=await api('/rooms',{name,path,demo});switchRoom(result.room.id);})}/>:<ProjectRooms rooms={data.rooms} current="" busy={busy} action={action} onRoom={switchRoom} onNew={()=>setTool('newroom')}/>}<p role={error?'alert':undefined}>{error || toast}</p></main>;
   return <div className={`app quiet-office ${!spatial && !cinematic && !recording?'workbench':'spatial-shell'} ${tool!=='office'?'has-panel':''} ${walk ? 'walk-mode' : ''} ${compact?'compact-mode':''} ${cinematic?'cinema-mode':''} ${recording?'recording-mode':''}`}>
     <header className="topbar" inert={cinematic || recording}>
-      <button className="brand" onClick={() => { setTool('office'); setWhip(false); scene.current?.setWalk(false); }} aria-label="Iteration1 home"><span className="brand-mark">14</span><span className="brand-name">Iteration1</span></button>
+      <button className="brand" onClick={() => { setTool('office'); setWhip(false); scene.current?.setWalk(false); }} aria-label="Iteration1 home"><span className="brand-mark">i1</span><span className="brand-name">Iteration1</span></button>
       <button className="project-picker" onClick={() => setTool('rooms')}><span>{room.name}</span><ChevronDown size={14} /></button>
       {room.demo && <span className="demo-label">Demo</span>}
       {!room.demo && data.connection.testAgents && <span className="demo-label" title="Real office transport; simulated agent execution">Test agents</span>}
