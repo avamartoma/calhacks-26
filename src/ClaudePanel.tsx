@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CheckCheck, ExternalLink, KeyRound, LoaderCircle, Play } from 'lucide-react';
 import type { Room } from './types';
 
 export interface ClaudeIntegration { configured: boolean; source: 'environment' | 'saved' | null; hint: string | null; models: { id: string; name: string }[] }
 
-const KEYS_URL = 'https://platform.claude.com/settings/keys';
+export const CLAUDE_KEYS_URL = 'https://platform.claude.com/settings/keys';
+const looksLikeKey = (text: string) => /^sk-ant-[A-Za-z0-9_-]{20,}$/.test(text.trim());
 
 async function post(url: string, body: unknown) {
   const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -13,18 +14,21 @@ async function post(url: string, body: unknown) {
 }
 
 /** Connects an Anthropic API key once, then launches Claude Agent SDK runs at new desks in this room. */
-export function ClaudePanel({ room, claude, onChange }: { room: Room; claude: ClaudeIntegration | null; onChange: () => void }) {
+export function ClaudePanel({ room, claude, onChange, focus = 0 }: { room: Room; claude: ClaudeIntegration | null; onChange: () => void; focus?: number }) {
   const [apiKey, setApiKey] = useState('');
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState('claude-opus-5-5');
   const [access, setAccess] = useState<'edit' | 'read'>('edit');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(''); const [notice, setNotice] = useState('');
+  const keyInput = useRef<HTMLInputElement>(null); const section = useRef<HTMLHeadingElement>(null);
+  // Arriving from the top bar: bring Claude into view and put the cursor where the key goes.
+  useEffect(() => { if (!focus) return; section.current?.scrollIntoView({ block: 'start' }); keyInput.current?.focus(); }, [focus, claude?.configured]);
   async function run(fn: () => Promise<string | void>) {
     setBusy(true); setError(''); setNotice('');
     try { const message = await fn(); if (message) setNotice(message); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
-  const connect = () => run(async () => { await post('/api/claude/key', { apiKey }); setApiKey(''); onChange(); return 'Claude connected.'; });
+  const connect = (key = apiKey) => run(async () => { await post('/api/claude/key', { apiKey: key }); setApiKey(''); onChange(); return 'Claude connected.'; });
   const disconnect = () => run(async () => { await post('/api/claude/key/remove', {}); onChange(); return 'Claude disconnected. The key was removed from this computer.'; });
   const launch = () => run(async () => {
     const body = await post(`/api/rooms/${room.id}/claude/launch`, { prompt, model, access });
@@ -32,15 +36,15 @@ export function ClaudePanel({ room, claude, onChange }: { room: Room; claude: Cl
   });
 
   return <>
-    <h2>Claude</h2>
+    <h2 ref={section}>Claude</h2>
     {error && <p className="notice error" role="alert">{error}</p>}
     {notice && <p className="notice" role="status">{notice}</p>}
     {!claude ? <p>Loading…</p>
       : !claude.configured ? <>
-        <p>Claude agents use an Anthropic API key, billed to that account. Create one, paste it here once, and you’re set.</p>
-        <a className="secondary full" href={KEYS_URL} target="_blank" rel="noreferrer"><KeyRound size={16} /> Create an API key <ExternalLink size={14} /></a>
+        <p>Claude agents use an Anthropic API key, billed to that account. Copy a key and paste it below; it connects as soon as you paste.</p>
+        <a className="secondary full" href={CLAUDE_KEYS_URL} target="_blank" rel="noreferrer"><KeyRound size={16} /> Create an API key <ExternalLink size={14} /></a>
         <form onSubmit={e => { e.preventDefault(); void connect(); }}>
-          <label>API key<input type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-ant-…" /></label>
+          <label>API key<input ref={keyInput} type="password" autoComplete="off" spellCheck={false} value={apiKey} disabled={busy} onChange={e => setApiKey(e.target.value)} onPaste={e => { const text = e.clipboardData.getData('text').trim(); if (looksLikeKey(text)) { e.preventDefault(); setApiKey(text); void connect(text); } }} placeholder="Paste your key (sk-ant-…)" /></label>
           <button className="primary full" disabled={busy || !apiKey.trim()}>{busy ? <LoaderCircle size={16} className="spin" /> : <CheckCheck size={16} />} {busy ? 'Checking key…' : 'Connect Claude'}</button>
         </form>
         <p className="muted small">The key is checked with Anthropic, then saved only on this computer. It is never shown again.</p>
