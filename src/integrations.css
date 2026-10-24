@@ -9,3 +9,25 @@
 .claude-steps { padding-left: 20px; margin: 0 0 14px; }
 .claude-steps li { margin-bottom: 12px; line-height: 1.55; }
 .claude-steps li button { margin-top: 8px; }
+
+.provider-connection { margin-block: 12px 24px; min-width: 0; }
+.provider-connection p { margin-block: 10px; }
+.provider-connection .account-info > span { min-width: 0; overflow-wrap: anywhere; }
+.provider-connection .account-info small { display: block; }
+.provider-callback { margin-block: 18px; }
+.provider-callback input { font-size: 16px; }
+.provider-callback .small { margin-block: 8px 12px; }
+.provider-connection a { overflow-wrap: anywhere; }
+
+.connections-panel .connections-intro { color: color-mix(in srgb, var(--ink) 78%, var(--paper)); margin-bottom: 20px; }
+.provider-tabs { display: flex; border-bottom: 1px solid var(--line); gap: 4px; }
+.provider-tabs > button { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; padding: 12px 6px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); font-size: 14px; }
+.provider-tabs > button small { font-size: 12px; font-weight: 400; color: color-mix(in srgb, var(--ink) 78%, var(--paper)); }
+.provider-tabs > button[aria-selected="true"] { border-bottom-color: var(--forest); color: var(--ink); }
+.provider-tabs > button:hover { color: var(--ink); background: color-mix(in srgb, var(--forest) 6%, transparent); }
+.provider-tabs > button:focus-visible { outline: 2px solid var(--forest); outline-offset: -2px; }
+.provider-content { padding-block: 20px 8px; min-width: 0; }
+.provider-content:focus-visible { outline: 2px solid var(--forest); outline-offset: 4px; }
+.provider-title { font-size: 18px; margin-block: 0 12px; }
+.office-identity { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 16px; }
+.quiet-office .topbar .connections-button > span { display: inline; }

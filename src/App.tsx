@@ -20,7 +20,7 @@ import { ManagerInbox, ProjectRooms, attentionTickets } from './ManagerPanels';
 import './manager.css';
 import { Dashboard } from './Dashboard';
 import { HandoffsPanel } from './HandoffsPanel';
-import { IntegrationsPanel } from './IntegrationsPanel';
+import { IntegrationsPanel, type ConnectionProvider } from './IntegrationsPanel';
 import { TeamPanel } from './TeamPanel';
 import { TeamMap } from './TeamMap';
 import { createDemoTeammate, demoTeammateNames, withDemoTeammate } from './demo-teammates';
@@ -67,8 +67,8 @@ export default function App() {
   const [data, setData] = useState<OfficeState | null>(null);
   const [roomId, setRoomId] = useState(localStorage.getItem('iteration1-live-room') || localStorage.getItem('iteration1-room') || '');
   const [allowDemo,setAllowDemo]=useState(false);
-  const [connectReturn,setConnectReturn]=useState<Tool>('templates');
-  const [claudeFocus,setClaudeFocus]=useState(0);
+  const [connectReturn,setConnectReturn]=useState<Tool | null>(null);
+  const [connectionFocus,setConnectionFocus]=useState<{provider:ConnectionProvider;request:number}|null>(null);
   const [tool, setTool] = useState<Tool>('office'); const [selection, setSelection] = useState<string | null>(null);
   const [markers,setMarkers]=useState<{id:string;x:number;y:number;status:string}[]>([]);
   const [replayRoom,setReplayRoom]=useState<Room|null>(null);
@@ -135,9 +135,12 @@ export default function App() {
     window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
   }, [cinematic,recording,tool,sceneReady,sceneError]);
   async function action(fn: () => Promise<unknown>, success?: string) { setBusy(true); setError(''); try { await fn(); if (success) setToast(success); } catch(e) { setError((e as Error).message); } finally { setBusy(false); } }
-  // Claude Code connects over MCP with its own sign-in, so this opens the Claude section rather than a key page.
-  function connectClaude(){setTool('integrations');setClaudeFocus(n=>n+1);}
-  function openConnect(from:Tool='templates'){setConnectReturn(from);setTool('connect');if(data && !data.connection.account && !data.connection.signIn)void action(()=>api('/codex/sign-in',{}));}
+  function openConnections(provider?:ConnectionProvider, from:Tool|null=null) {
+    setConnectReturn(from);
+    setConnectionFocus(current=>provider?{provider,request:(current?.request || 0)+1}:null);
+    setTool('integrations');
+  }
+  function openConnect(from:Tool='templates'){openConnections('codex',from);}
   function switchRoom(id: string) { setAllowDemo(true);setReplayRoom(null); setWhip(false); setRoomId(id); setSelection(null); setSelectedWork(null); setTool('office'); scene.current?.setWalk(false); }
   function modelOptions() { return <>{!data?.connection.models.some(m=>m.id==='gpt-6-sol') && <option value="gpt-6-sol">GPT-6 Sol</option>}<option value="Account default">Account default</option>{data?.connection.models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</>; }
   useEffect(() => {
@@ -168,8 +171,7 @@ export default function App() {
       <div className="header-spacer"/>
       {tool==='office' && <><button className={`mode-chip ${room.mode}`} onClick={()=>setTool('modes')}><Zap size={12}/>{data.modes?.[room.mode || 'balanced']?.name || 'Balanced'}</button><div className="view-switch" aria-label="Office view"><button aria-label="Overview" className={!walk && !compact?'active':''} onClick={()=>{setCompact(false);scene.current?.setWalk(false);}}><LayoutGrid size={15}/><span>Overview</span></button><button aria-label="Compact map" aria-pressed={compact} className={compact?'active':''} onClick={()=>{setCompact(true);setWhip(false);scene.current?.setWalk(false);}}><GitBranch size={15}/><span>Map</span></button><button aria-label="Walk around" className={walk?'active':''} onClick={()=>{setCompact(false);scene.current?.setWalk(true);}}><DoorOpen size={15}/><span>Walk</span></button></div></>}
       {!room.demo && <button className="mode-chip permission-chip" aria-label="Office permissions" onClick={()=>setTool('settings')}><ShieldCheck size={13}/><span>{room.permissionMode==='read-only'?'Read only':'Project edits'}</span></button>}
-      <button aria-label={data.connection.account ? 'Codex connected' : 'Connect Codex'} className="connection-button" onClick={() => openConnect()}><span>{data.connection.account ? 'Codex connected' : data.connection.signIn ? 'Signing in…' : 'Sign in to Codex'}</span><ArrowUpRight size={15} /></button>
-      <button aria-label={data.claude?.configured ? 'Claude connected' : 'Connect Claude'} className="connection-button" onClick={connectClaude}><span>{data.claude?.configured ? 'Claude connected' : 'Connect Claude'}</span><ArrowUpRight size={15} /></button>
+      <button aria-label="Connections" aria-pressed={tool==='integrations'} className="connection-button connections-button" onClick={() => openConnections()}><span>Connections</span><ArrowUpRight size={15} /></button>
     </header>
     <main className="workspace">
       <div ref={container} className="world" />
@@ -192,20 +194,19 @@ export default function App() {
           {tool==='team' && <TeamPanel key={room.id} room={room} onFloor={()=>{setTool('office');setCompact(!!sceneError);scene.current?.focusTeam();}} onHandoffs={()=>setTool('messages')}/>}
           {tool === 'agent' && selected && <AgentPanel agent={selected} room={room} connected={!!data.connection.account} onConnect={()=>openConnect(tool)} busy={busy} action={action} modelOptions={modelOptions} onSelect={select} onTask={id=>{setSelectedWork(id);setTool('work');}} onBack={()=>setTool('dashboard')} onFocus={() => {setTool('office');setCompact(false);scene.current?.focus(selected.id);}} />}
           {tool === 'agents' && <AgentRoster room={room} onSelect={select}/>}
-          {tool === 'templates' && <MissionControl onCursor={()=>setTool('integrations')} onConnect={()=>openConnect(tool)} onTask={id=>{setSelectedWork(id);setTool('work');}} initialCompose onCancel={()=>setTool('dashboard')} room={room} data={data} busy={busy} action={action} onSelect={select} onRoom={switchRoom} onStarted={()=>setTool('dashboard')}/>}
-          {tool === 'integrations' && <IntegrationsPanel key={room.id} room={room} focusClaude={claudeFocus}/>}
+          {tool === 'templates' && <MissionControl onCursor={()=>openConnections('cursor')} onConnect={()=>openConnect(tool)} onTask={id=>{setSelectedWork(id);setTool('work');}} initialCompose onCancel={()=>setTool('dashboard')} room={room} data={data} busy={busy} action={action} onSelect={select} onRoom={switchRoom} onStarted={()=>setTool('dashboard')}/>}
+          {tool === 'integrations' && <IntegrationsPanel key={room.id} room={room} connection={data.connection} focus={connectionFocus} onContinue={connectReturn?()=>setTool(room.demo?'newroom':connectReturn):undefined}/>}
           {tool === 'recording' && <RecordingStudio unavailable={!!sceneError || !sceneReady} onStop={stop=>{setCompact(false);setWhip(false);setReplayRoom(null);scene.current?.tourStop(stop);}} onClean={()=>{setCompact(false);setWhip(false);setHelp(false);setRecording(true);}}/>}
           {tool === 'work' && <><button className="text-button" onClick={()=>setTool('dashboard')}>Back to tickets</button><TaskWorkspace key={selectedWork} room={room} itemId={selectedWork} connected={!!data.connection.account} busy={busy} action={action} onAgent={select} onTask={setSelectedWork} onConnect={()=>openConnect(tool)} onInbox={()=>setTool('approvals')}/></>}
-          {tool === 'mission' && <MissionControl onCursor={()=>setTool('integrations')} onConnect={()=>openConnect(tool)} onTask={id=>{setSelectedWork(id);setTool('work');}} room={room} data={data} busy={busy} action={action} onSelect={select} onRoom={switchRoom}/>}
+          {tool === 'mission' && <MissionControl onCursor={()=>openConnections('cursor')} onConnect={()=>openConnect(tool)} onTask={id=>{setSelectedWork(id);setTool('work');}} room={room} data={data} busy={busy} action={action} onSelect={select} onRoom={switchRoom}/>}
           {tool === 'modes' && <ModesPanel room={room} data={data} busy={busy} action={action}/>}
           {tool === 'replay' && <ReplayPanel spatial={historySpatial} onSpatial={()=>setHistorySpatial(v=>!v)} room={room} busy={busy} action={action} onFrame={setReplayRoom} onRoom={switchRoom}/>}
           {tool === 'messages' && <HandoffsPanel room={room} onAgent={select} onTask={id=>{setSelectedWork(id);setTool('work');}}/>}
           {tool === 'dashboard' && <Dashboard key={room.id} onConnect={()=>openConnect(tool)} onInbox={()=>setTool('approvals')} data={data} room={room} busy={busy} action={action} onAgent={(rid,id)=>{if(rid!==room.id)switchRoom(rid);select(id);}} onMission={rid=>{if(rid!==room.id)switchRoom(rid);setTool('templates');}}/>}
           {tool === 'skills' && <><h2>Skills</h2>{Object.entries(skillDescriptions).map(([id, s]) => <div className="skill-row" key={id}><s.icon size={22} /><div><h3>{s.title}</h3><p>{s.description}</p></div><button role="switch" aria-checked={room.skills.includes(id)} aria-label={`Enable ${s.title}`} className={`switch ${room.skills.includes(id) ? 'on' : ''}`} disabled={busy} onClick={() => action(() => api(roomEndpoint, { skills: room.skills.includes(id) ? room.skills.filter(x => x !== id) : [...room.skills, id] }, 'PATCH'))}><i /></button></div>)}<p className="small muted">Applies to new agents.</p><button className="primary full" disabled={busy} onClick={() => action(() => api(`${roomEndpoint}/install-skills`, {}), 'Three skills installed in this project’s .agents/skills folder')}><ArrowDownToLine size={16} /> Install into project</button><a className="text-link" href="https://github.com/openai/skills" target="_blank" rel="noreferrer">Explore OpenAI’s skill library <ExternalLink size={13} /></a></>}
-          {tool === 'tools' && <><ToolsPanel room={room} connected={!!data.connection.account} action={action} onConnect={() => openConnect(tool)} onTool={setTool} onDemo={()=>{setCompact(false);setTool('office');setCinematic(true);}} onWhip={()=>{setCompact(false);setTool('office');setWhip(true);}} onHelp={()=>setHelp(v=>!v)} /></>}
+          {tool === 'tools' && <><ToolsPanel room={room} connected={!!data.connection.account} action={action} onConnect={() => openConnect(tool)} onTool={next=>next==='integrations'?openConnections():setTool(next)} onDemo={()=>{setCompact(false);setTool('office');setCinematic(true);}} onWhip={()=>{setCompact(false);setTool('office');setWhip(true);}} onHelp={()=>setHelp(v=>!v)} /></>}
           {tool === 'approvals' && <ManagerInbox data={data} busy={busy} action={action} onTask={(rid,id)=>{if(rid!==room.id)switchRoom(rid);setSelectedWork(id);setTool('work');}}/>}
           {tool === 'settings' && <><h2>Settings</h2><PermissionsPanel room={room} busy={busy} action={action} onConnect={()=>openConnect('settings')}/><label>Concurrent workers <span className="value-pill">{room.budget}</span><input type="range" min="1" max="6" value={room.budget} onChange={e => action(() => api(roomEndpoint, { budget: Number(e.target.value) }, 'PATCH'))} /></label><p className="muted small">{room.permissionMode==='read-only'?'Agents research and review in parallel. File edits are disabled.':'Workers research and review in parallel. The manager owns implementation, keeping file edits coordinated.'}</p><div className="setting-line"><div><b>Office activity</b><p>{cursorOwner ? `Managed in ${reporterName(cursorOwner)}` : room.paused ? 'Currently paused' : 'Accepting assignments'}</p></div>{cursorOwner ? <button className="secondary" onClick={()=>select(cursorOwner.id)}>Open desk</button> : <button className="secondary" disabled={busy} onClick={() => action(() => api(`${roomEndpoint}/${room.paused ? 'resume' : 'pause'}`, {}))}>{room.paused ? <Play size={15} /> : <Pause size={15} />}{room.paused ? 'Resume' : 'Pause all'}</button>}</div><details className="compact-disclosure"><summary>Virtual reality</summary><p className="quiet-copy">WebXR headset required. Task editing uses desktop controls.</p><button className="secondary" onClick={()=>action(async()=>{if(!scene.current){setTool('office');setToast('Open Settings again after the office loads to enter VR.');return;}await scene.current.enterVR();})}><Glasses size={16}/> Enter VR</button></details><label>Project folder<input readOnly value={room.path} /></label>{!room.demo && <button className="secondary" disabled={busy || !data.connection.account} onClick={()=>action(()=>officeApi(`/rooms/${room.id}/check`,{}),'Project folder is accessible in the Codex sandbox')}>Check project access</button>}</>}
-          {tool === 'connect' && <ConnectPanel connection={data.connection} busy={busy} action={action} onNewRoom={() => setTool(room.demo?'newroom':connectReturn)} />}
           {tool === 'rooms' && <ProjectRooms rooms={data.rooms} current={room.id} busy={busy} action={action} onRoom={switchRoom} onNew={()=>setTool('newroom')}/>}
           {tool === 'newroom' && <NewRoom defaultPath="" connected={!!data.connection.account} busy={busy} onSubmit={(name, path, demo) => action(async () => { const result = await api('/rooms', { name, path, demo }); switchRoom(result.room.id); }, 'Your new office is ready')} />}
         </div>
@@ -261,27 +262,13 @@ function AgentPanel({ agent: a, room, connected, onConnect, busy, action, modelO
 function NewRoom({ defaultPath, connected, busy, onSubmit }: { defaultPath: string; connected: boolean; busy: boolean; onSubmit: (name: string, path: string, demo: boolean) => void }) {
   return <><h2>New project</h2><form onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); onSubmit(String(f.get('name')), String(f.get('path')), false); }}><label>Name<input name="name" required maxLength={60} autoFocus placeholder="e.g. Customer portal" /></label><label>Existing project folder<input name="path" required defaultValue={defaultPath} placeholder="C:\Projects\my-project" /></label>{!connected && <p className="notice">Use Cursor here, or connect Codex to run the office manager.</p>}<button className="primary full" disabled={busy}><Plus size={16} /> Create project</button></form></>;
 }
-function ConnectPanel({ connection, busy, action, onNewRoom }: { connection: OfficeState['connection']; busy: boolean; action: Action; onNewRoom: () => void }) {
-  // Return to where the user was as soon as a sign-in started here completes.
-  const waiting = useRef(false);
-  useEffect(() => { if (connection.signIn) waiting.current = true; else if (connection.account && waiting.current) { waiting.current = false; onNewRoom(); } }, [connection.signIn, connection.account, onNewRoom]);
-  const signIn = () => action(() => api('/codex/sign-in', {}));
-  const step = connection.signIn?.step;
-  return <><h2>Codex</h2>{connection.account ? <><div className="account-info"><CheckCheck size={22} /><div><b>{connection.account.email || 'Account connected'}</b><small>{connection.account.planType || connection.account.type}</small></div></div><button className="primary full" onClick={onNewRoom}><ArrowRight size={16} /> Continue to project</button></>
-    : step === 'installing' ? <p className="notice"><LoaderCircle size={16} className="spin" /> Installing Codex. This happens once and takes about a minute.</p>
-    : step === 'browser' ? <><p className="notice"><LoaderCircle size={16} className="spin" /> Finish signing in with ChatGPT in your browser. This page continues on its own.</p>{connection.signIn?.authUrl && <a className="auth-link secondary full" href={connection.signIn.authUrl} target="_blank" rel="noreferrer">{connection.signIn.opened ? 'Sign-in page didn’t open? Open it' : 'Open sign-in page'} <ExternalLink size={16} /></a>}<button className="text-button" disabled={busy} onClick={signIn}><RotateCcw size={14} /> Start sign-in again</button></>
-    : <><p className="muted">Sign in with your ChatGPT account to run agents in your project folders.{connection.installed === false ? ' Codex is installed automatically.' : ''}</p><button className="primary full" disabled={busy} onClick={signIn}>{busy ? <LoaderCircle size={16} className="spin" /> : <ArrowUpRight size={16} />} Sign in with ChatGPT</button></>}
-    {connection.account && connection.sandboxStatus && connection.sandboxStatus!=='ready' && <div className="notice"><b>Enable project editing</b><p>Set up the Windows sandbox. Windows may ask for administrator approval.</p><button className="secondary full" disabled={busy || connection.sandboxSetupPending} onClick={()=>action(()=>api('/sandbox/setup',{}),'Complete the Windows setup prompt')}>{connection.sandboxSetupPending?'Setting up sandbox…':'Set up Windows sandbox'}</button></div>}
-    {connection.error && <p className="notice error">{connection.error}</p>}
-    {connection.account && <button className="text-button" disabled={busy} onClick={() => action(() => api('/connect', {}), 'Connection refreshed')}><RotateCcw size={14} /> Refresh connection</button>}</>;
-}
 function ToolsPanel({ room, connected, action, onConnect, onTool, onDemo, onWhip, onHelp }: { room: Room; connected: boolean; action: Action; onConnect: () => void; onTool: (tool: Tool) => void; onDemo:()=>void; onWhip:()=>void; onHelp:()=>void }) {
   const [catalog, setCatalog] = useState<{ skills?: unknown; mcp?: unknown; errors?: string[] } | null>(null);
   const tools = [
     {name:'Workflows',icon:Layers,target:'templates'},
     {name:'Run mode',icon:Zap,target:'modes'},
     {name:'Skills',icon:Sparkles,target:'skills'},
-    {name:'Cursor & Claude',icon:ArrowUpRight,target:'integrations'}
+    {name:'Connections',icon:ArrowUpRight,target:'integrations'}
   ];
   return <><h2>Tools</h2>{tools.map(t=><button className="tool-row" key={t.target} onClick={()=>onTool(t.target as Tool)}><t.icon size={19}/><span><b>{t.name}</b></span><ChevronRight size={14}/></button>)}
     <details className="compact-disclosure"><summary>Presentation</summary><button className="tool-row" onClick={onDemo}><Play size={19}/><span>Watch demo</span></button><button className="tool-row" onClick={()=>onTool('recording')}><Monitor size={19}/><span>Recording studio</span></button><button className="tool-row" onClick={onWhip}><Zap size={19}/><span>Whip · Crunch mode</span></button></details>

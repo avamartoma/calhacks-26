@@ -1,6 +1,7 @@
 import { createInterface } from 'node:readline';
 import {existsSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
+import { createServer } from 'node:http';
 let signedOut=!!process.env.OFFICE_FIXTURE_SIGNED_OUT;
 const threads=new Map(); let count=0;
 const sandboxMarker=path.join(process.env.CODEX_HOME,'fixture-sandbox-ready');
@@ -8,6 +9,7 @@ const sandboxReady=!process.env.OFFICE_FIXTURE_SANDBOX_MISSING || existsSync(san
 const send=x=>process.stdout.write(JSON.stringify(x)+'\n');
 const notify=(method,params)=>send({method,params});
 const toolReplies=new Map();
+let loginServer = null, loginTimer = null;
 const toolCall=(threadId,tool,args)=>new Promise(resolve=>{const id='tool-'+ ++count;toolReplies.set(id,resolve);send({id,method:'item/tool/call',params:{threadId,tool,arguments:args}});});
 async function exerciseTool(threadId,text) {
   if(!text?.startsWith('FIXTURE_TOOL '))return;
@@ -25,7 +27,25 @@ createInterface({input:process.stdin}).on('line',line=>{
   if(m.method==='initialize')return result({userAgent:'test-only'});
   if(m.method==='account/read')return result({account:signedOut?null:{type:'chatgpt',email:'fixture@example.invalid',planType:'test'}});
   // Not https, so the companion never launches a real browser for the fixture; sign-in completes shortly after.
-  if(m.method==='account/login/start'){result({type:'chatgpt',loginId:'fixture-login',authUrl:'http://127.0.0.1/fixture-sign-in'});setTimeout(()=>{signedOut=false;notify('account/login/completed',{loginId:'fixture-login',success:true,error:null});},50);return;}
+  if(m.method==='account/login/start'){
+    if (process.env.OFFICE_FIXTURE_MANUAL_SIGN_IN) {
+      loginServer?.close();
+      loginServer=createServer((req,res)=>{
+        const url=new URL(req.url,'http://127.0.0.1');
+        if(url.pathname!=='/auth/callback' || url.searchParams.get('state')!=='fixture-state' || url.searchParams.get('code')!=='fixture-code'){res.writeHead(400);res.end('Rejected');return;}
+        signedOut=false;res.end('Signed in');loginServer.close();
+        notify('account/login/completed',{loginId:'fixture-login',success:true,error:null});
+      });
+      loginServer.listen(0,'127.0.0.1',()=>{
+        const uri=`http://127.0.0.1:${loginServer.address().port}/auth/callback`;
+        result({type:'chatgpt',loginId:'fixture-login',authUrl:`http://127.0.0.1/fixture-sign-in?redirect_uri=${encodeURIComponent(uri)}&state=fixture-state`});
+      });return;
+    }
+    result({type:'chatgpt',loginId:'fixture-login',authUrl:'http://127.0.0.1/fixture-sign-in'});
+    loginTimer=setTimeout(()=>{signedOut=false;notify('account/login/completed',{loginId:'fixture-login',success:true,error:null});},50);return;
+  }
+  if(m.method==='account/login/cancel'){clearTimeout(loginTimer);loginServer?.close();return result({status:'canceled'});}
+  if(m.method==='account/logout'){signedOut=true;return result({});}
   if(m.method==='model/list')return result({data:[{model:'fixture-model',displayName:'Fixture model',hidden:false,isDefault:true},{model:'gpt-6-sol',displayName:'GPT-6 Sol',hidden:false,isDefault:false,supportedReasoningEfforts:[{reasoningEffort:'medium'}]}]});
   if(m.method==='windowsSandbox/readiness')return result({status:sandboxReady?'ready':'notConfigured'});
   if(m.method==='windowsSandbox/setupStart'){
