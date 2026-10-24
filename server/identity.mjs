@@ -1,12 +1,6 @@
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { z } from 'zod';
-
-// An agent identity is the durable subject a run is attributed to. The office issues
-// the token once; only its hash is stored. Auth0 replaces issue/verify later without
-// changing `credentialSub`, which is the field every attributed report is keyed on.
-const PREFIX = 'iteration1_agent_';
-const digest = token => createHash('sha256').update(String(token)).digest();
-export const agentToken = z.string().trim().min(PREFIX.length + 16).max(200);
+// An agent identity is the durable subject a run is attributed to. It is the Auth0
+// account that signed in: `sub` comes from a verified ID token, never from the caller,
+// so a published run is attributable rather than merely asserted.
 const blankRecord = () => ({ started: 0, review: 0, blocked: 0, verified: 0 });
 
 export function initIdentities(state) {
@@ -15,37 +9,26 @@ export function initIdentities(state) {
   return state.identities;
 }
 
-export function issueAgentIdentity(state, body) {
-  const { label, provider } = z.object({ label: z.string().trim().min(1).max(60), provider: z.enum(['cursor']).default('cursor') }).strict().parse(body);
+/** Record the signed-in account, preserving the desk name and history it already earned. */
+export function upsertIdentity(state, profile) {
+  if (!profile?.sub) return null;
   const identities = initIdentities(state);
-  if (identities.length >= 50) throw new Error('Identity limit reached. Revoke an unused agent identity first.');
-  const token = PREFIX + randomBytes(32).toString('base64url');
-  const identity = { sub: `${provider}|${randomUUID()}`, label, provider, hash: digest(token).toString('hex'), createdAt: Date.now(), record: blankRecord() };
-  identities.push(identity);
-  return { token, identity };
-}
-
-export function verifyAgentToken(state, token) {
-  if (typeof token !== 'string' || !token.startsWith(PREFIX)) return null;
-  const presented = digest(token);
-  for (const identity of initIdentities(state)) {
-    const stored = Buffer.from(identity.hash, 'hex');
-    if (stored.length === presented.length && timingSafeEqual(stored, presented)) return identity;
+  const existing = identities.find(i => i.sub === profile.sub);
+  if (existing) {
+    existing.label = profile.name || existing.label;
+    existing.email = profile.email || existing.email;
+    existing.picture = profile.picture || existing.picture;
+    existing.lastSeenAt = Date.now();
+    return existing;
   }
-  return null;
-}
-
-export function revokeIdentity(state, sub) {
-  const identities = initIdentities(state);
-  const index = identities.findIndex(i => i.sub === sub);
-  if (index < 0) throw new Error('Unknown agent identity.');
-  return identities.splice(index, 1)[0];
+  const identity = { sub: profile.sub, label: profile.name || profile.email || profile.sub, email: profile.email || '', picture: profile.picture || '', provider: 'auth0', createdAt: Date.now(), lastSeenAt: Date.now(), record: blankRecord() };
+  identities.push(identity);
+  return identity;
 }
 
 export function identityBySub(state, sub) { return sub ? initIdentities(state).find(i => i.sub === sub) || null : null; }
 
-/** Safe to broadcast: the token hash never leaves the server. */
-export function publicIdentity({ hash, ...identity }) { return identity; }
+export function publicIdentity(identity) { return identity || null; }
 
 /** Display name, title and colour persist across sessions so a profile accrues a history. */
 export function claimDisplay(identity, worker) {

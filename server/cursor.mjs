@@ -5,22 +5,21 @@ import { agent, event, workItem, uid } from './domain.mjs';
 import { claimIdentity } from './names.mjs';
 import { record } from './orchestration.mjs';
 import { trimEvidence, identifyEvidence } from './evidence.mjs';
-import { agentToken, claimDisplay, creditRun, identityBySub, rememberDisplay, verifyAgentToken } from './identity.mjs';
+import { claimDisplay, creditRun, identityBySub, rememberDisplay } from './identity.mjs';
 
 const text = z.string().trim().min(1).max(12000);
-const progress = z.object({ previewUrl: featureUrl.optional(), token: agentToken.optional(), summary: text, files: z.array(z.string().trim().min(1).max(500)).max(20).optional(), diff: z.string().max(16000).optional(), tests: z.string().max(16000).optional() }).strict();
+const progress = z.object({ previewUrl: featureUrl.optional(), summary: text, files: z.array(z.string().trim().min(1).max(500)).max(20).optional(), diff: z.string().max(16000).optional(), tests: z.string().max(16000).optional() }).strict();
 const finished = progress.extend({ outcome: z.enum(['review', 'blocked']) });
 
-export function createCursorDesk({ state, changed, isStarting = () => false }) {
+export function createCursorDesk({ state, changed, isStarting = () => false, currentIdentity = () => null }) {
   const sameProject = room => state.rooms.filter(r => !r.demo && path.relative(r.path, room.path) === '');
   function assertAvailable(room) {
     if (room.demo) return;
     if (sameProject(room).some(r => r.agents.some(a => a.provider === 'cursor' && a.turnId))) throw new Error('This project is owned by a Cursor assignment. Finish or stop it in Cursor, then call office_cursor_finish before starting another writer.');
   }
   function start(room, body) {
-    const input = z.object({ task: text, token: agentToken.optional(), model: z.string().trim().min(1).max(120).default('Cursor · model not reported'), acceptanceCriteria: z.array(z.string().trim().min(1).max(1000)).min(1).max(8) }).strict().parse(body);
-    const identity = input.token ? verifyAgentToken(state, input.token) : null;
-    if (input.token && !identity) throw new Error('That agent token is not recognised. Issue a new identity in Iteration1 and update ITERATION1_AGENT_TOKEN.');
+    const input = z.object({ task: text, model: z.string().trim().min(1).max(120).default('Cursor · model not reported'), acceptanceCriteria: z.array(z.string().trim().min(1).max(1000)).min(1).max(8) }).strict().parse(body);
+    const identity = currentIdentity();
     if (room.demo) throw new Error('Choose a live project room for Cursor work.');
     if (sameProject(room).some(r => r.capturing)) throw new Error('Wait for the checkpoint to finish before assigning work.');
     assertAvailable(room);
@@ -34,17 +33,18 @@ export function createCursorDesk({ state, changed, isStarting = () => false }) {
     record(room, 'Cursor took implementation ownership', 'work'); changed();
     return { roomId: room.id, agentId: worker.id, workItemId: item.id, instruction: 'Publish concise progress with office_cursor_update. After execution has finished or stopped, call office_cursor_finish. Iteration1 cannot interrupt Cursor execution.' };
   }
-  // An attributed run only accepts reports from the identity that opened it. Operator
-  // recovery is exempt: it exists precisely for when that agent can no longer answer.
-  function owner(room, id, token, enforce = true) {
+  // An attributed run only accepts reports from the account that opened it, so signing
+  // out mid-run cannot hand it to someone else. Operator recovery is exempt: it exists
+  // precisely for when that agent can no longer answer.
+  function owner(room, id, enforce = true) {
     const worker = room.agents.find(a => a.id === id && a.provider === 'cursor');
     const item = room.workItems.find(t => t.agentId === id);
     if (!worker || !item || !worker.turnId) throw new Error('No open Cursor assignment for this agent. Start a new assignment or inspect its saved evidence.');
-    if (enforce && worker.credentialSub && verifyAgentToken(state, token)?.sub !== worker.credentialSub) throw new Error('This assignment belongs to another agent identity. Report with the token that started the run.');
+    if (enforce && worker.credentialSub && currentIdentity()?.sub !== worker.credentialSub) throw new Error('This assignment belongs to another signed-in account. Sign back in as its owner, or release the desk from the office.');
     return { worker, item };
   }
   function publish(room, id, input, enforce = true) {
-    const { worker, item } = owner(room, id, input.token, enforce);
+    const { worker, item } = owner(room, id, enforce);
     event(worker, 'update', input.summary);
     if (input.files) item.files = input.files;
     if (input.previewUrl!==undefined) item.previewUrl=input.previewUrl;
