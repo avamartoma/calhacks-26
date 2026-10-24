@@ -15,9 +15,22 @@
 | Sign-in | `server/oauth.mjs` | Auth0 Authorization Code with PKCE, identity-token verification and local session storage |
 | Agent identity | `server/identity.mjs` | Credential subjects and per-identity track records |
 | Public runs | `server/run-doc.mjs` | Block projection, attribution labels, block-anchored comments and the run feed |
-| Workspace UI | `src/App.tsx`, `src/Operations.tsx`, panel components | Project navigation, tickets, agents, permissions and evidence |
-| Spatial view | `src/scene.ts`, `src/CityEnvironment.ts`, `src/TeamDistrict.ts` | Office, city, agents, rendering and nearby office detail |
+| Workspace UI | `src/App.tsx`, `src/Operations.tsx`, panel components | Workspace picker, sky/project altitude, tickets, agents, permissions and evidence |
+| Workspace model | `server/workspaces.mjs` | Workspace CRUD, ring-placed cloud spots, migration of older rooms, never-orphan removal |
+| Spatial view | `src/CloudField.ts`, `src/scene.ts`, `src/CityEnvironment.ts`, `src/TeamDistrict.ts` | Cloud sky as the default shell, office desks as the expanded project, city/district hidden on that path |
 | Alternative view | `src/CompactOffice.tsx`, `src/TeamMap.tsx` | Searchable project and team maps |
+
+## Why the sky replaced the city
+
+The city and office-block metaphor put every project in one implied downtown. That made an unrelated checkout look like a neighbor, and it hid the fact that a person usually wants one working set at a time. A **workspace** is that working set. Its canvas only lists its own projects, so a side quest cannot drift into the sky you are using for the launch.
+
+A **room is a project, and a project is a cloud**. The cloud’s position is stored on the room (`cloud.x`, `cloud.y`, `cloud.depth`) so a drag survives reload and a move between workspaces can be re-spotted instead of stacking on an existing cloud. Depth is only for parallax; it is not a second map.
+
+The clouds are meshes in the existing three.js scene, not a second engine and not an HTML overlay. Zoom is cursor-anchored and unbounded in pan because a sky has no edge. Crossing a height threshold on the hovered or nearest cloud is what opens the project: that is the same camera, interpolating into the office desks that already existed. Zooming out, or Esc, reverses it. The city and team district stay compiled so recording and paired-office framing are not deleted; they are simply not the default shell.
+
+Older saved state has no workspaces. `initWorkspaces` gathers every existing room into “My workspace” and gives each a cloud spot, so nothing disappears when the file format grows this field. Removing a workspace rehomes its projects; the last workspace is refused because there would be nowhere to put them.
+
+What is still rough: puff lighting and scale, empty-sky composition, opening a project from a URL, and showing a teammate district without leaving the sky.
 
 ## Execution boundaries
 

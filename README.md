@@ -1,6 +1,6 @@
 # Iteration1
 
-A spatial workspace for AI-assisted software development. Project folders become offices, agents occupy desks, and tickets connect their assignments, handoffs, code changes, and checks.
+A spatial workspace for AI-assisted software development. Workspaces hold projects. Each project is a cloud on that workspace’s sky; zooming into a cloud opens the agents, tickets, and desks for that project only.
 
 ![The Iteration1 office](assets/blender-office-review.png)
 
@@ -23,9 +23,9 @@ On Windows, `npm run runtime:install` installs the pinned project-local Codex ru
 
 ## Use it
 
-1. **Open a project.** Create an office for a local checkout.
+1. **Pick a workspace, then a project.** The default view is the sky for the selected workspace. Each cloud is one project in that workspace — not every project you have ever opened. Scroll toward a cloud to open it; scroll back out or press Esc to return.
 2. **Describe the work.** Start work applies a reusable workflow. The manager delegates bounded research and review for substantial tasks and remains the implementation owner. A new ticket can also stay in the backlog without running a model.
-3. **Follow the office.** Desks show published progress, commands, changes, and task state. Tickets, the compact map, and Inbox provide direct access without moving the camera. Private reasoning is not displayed.
+3. **Follow the project.** The expanded view is still the office desks: published progress, commands, changes, and task state. The sidebar keeps tickets, agents, start work, connections, and settings next to that view. Private reasoning is not displayed.
 4. **Coordinate.** Handoffs connect findings to assignments. Declared file scopes and dependencies help sequence work. Pair a teammate's office to exchange status and context across separate checkouts.
 5. **Inspect the result.** Open the diff, recorded checks, and feature URL. Verification requires acceptance checks and evidence; an agent's completion message alone is insufficient. The feature's development server must remain running.
 
@@ -50,12 +50,12 @@ Open **http://127.0.0.1:4351** and **http://127.0.0.1:4352**. Pair Alex and Blai
 
 | Control | Action |
 | --- | --- |
-| Drag / wheel | Orbit and zoom |
-| Overview / Map / Walk | Change the project view |
+| Drag / wheel on the sky | Pan infinitely, and zoom toward the cursor. Crossing the zoom threshold on a nearby cloud opens that project |
+| Esc / zoom out | Leave a project and return to its workspace sky |
+| Overview / Map / Walk | Change the expanded project view |
 | WASD / arrows | Move in walk mode |
 | E | Inspect the focused desk |
-| Esc | Close an inspector or return to overview |
-| Sidebar | Tickets, agents, handoffs, team, Inbox, history, tools, settings |
+| Sidebar | Tickets, agents, start work, connections, settings, plus handoffs, team, Inbox, history, and tools |
 
 Tools includes workflows, skills, Cursor setup, development modes, and presentation controls. The recording studio selects camera stops and a clean view; it does not record video.
 
@@ -101,6 +101,8 @@ Optional configuration: `PORT`, `OFFICE_DATA_DIR`, `OFFICE_CODEX_HOME`, `OFFICE_
 
 ## Assets and VR
 
-The office geometry and procedural city were created for this project. The runtime model is included at `public/models/office-shell.glb`; asset provenance is in `assets/`. Blender is optional for authoring and is not started by the app. From the repository root, an explicitly launched Blender session can run `scripts/build_office_assets.py`; `ITERATION1_ROOT` overrides its output root. That script replaces the active scene, so use a fresh Blender file.
+The default shell is a three.js cloud field in the same scene as the office. The city and district metaphor is no longer the starting view; those objects stay in the renderer for team and recording paths but are hidden on the sky and on a normal project open. The office geometry is still the expanded project. The runtime model is included at `public/models/office-shell.glb`; asset provenance is in `assets/`. Blender is optional for authoring and is not started by the app. From the repository root, an explicitly launched Blender session can run `scripts/build_office_assets.py`; `ITERATION1_ROOT` overrides its output root. That script replaces the active scene, so use a fresh Blender file.
+
+Cloud layout and workspace membership persist in `.office/state.json`. Dragging a cloud writes its position; removing a workspace rehomes its projects instead of orphaning them. The last workspace cannot be removed. Semantic zoom and the puff meshes are real but still rough: puff lighting, empty-sky composition, and team-district framing from the sky are unfinished.
 
 Three.js WebXR provides an initial headset path. Headset comfort, controller behavior, and production VR performance are unverified; the supported demonstration is the desktop walkthrough.

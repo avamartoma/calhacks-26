@@ -44,6 +44,22 @@
 @media(max-width:750px){.app.quiet-office{grid-template-columns:1fr}.workspace-nav{width:100%;padding:5px}.workspace-nav button{padding:5px 10px;font-size:9px;gap:3px}.quiet-office .brand{min-width:0}.quiet-office.spatial-shell .detail-panel{inset:28% 0 0;width:100%;max-width:none;border:0;border-top:1px solid #d7ded8}.quiet-office.spatial-shell .panel-body{padding:16px}.quiet-office.workbench .panel-window-actions{padding:6px 12px}.quiet-office .office-pulse{left:12px;bottom:16px;max-width:calc(100% - 24px)}.quiet-office.cinema-mode,.quiet-office.recording-mode{grid-template-columns:0 minmax(0,1fr)}.quiet-office.cinema-mode .workspace,.quiet-office.recording-mode .workspace{grid-column:2}}
 
 @media(max-width:750px){.quiet-office .topbar{gap:6px}.quiet-office .project-picker span{max-width:112px}.quiet-office .view-switch button{width:26px;height:28px;padding:4px}.quiet-office .mode-chip:not(.permission-chip){font-size:0;padding:4px;gap:0}.quiet-office .mode-chip:not(.permission-chip) svg{width:14px;height:14px}.quiet-office.cinema-mode,.quiet-office.recording-mode{grid-template-rows:0 minmax(0,1fr)}}
+.workspace-picker{position:relative}
+.workspace-picker .project-picker{gap:8px}
+.workspace-menu{position:absolute;top:calc(100% + 8px);left:0;z-index:40;min-width:240px;padding:10px;border:1px solid #d7ded8;border-radius:8px;background:#fafbf9;box-shadow:0 10px 30px #1b2c3818}
+.workspace-row{display:flex;align-items:center;gap:4px}
+.workspace-row>button:first-child{flex:1;display:flex;align-items:center;gap:8px;padding:8px;border-radius:5px;font-size:12px;text-align:left}
+.workspace-row>button:first-child:hover,.workspace-row>button.active{background:#e7eee9}
+.workspace-row i{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.workspace-menu form{display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid #e2e6e3}
+.workspace-menu input{margin:0;padding:8px}
+.sky-hint{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;background:#f7fafce8;border:1px solid #d5e2ea;color:#355066;font-size:12px;z-index:8}
+.project-rail{position:absolute;top:20px;right:20px;z-index:12;width:196px;display:flex;flex-direction:column;gap:4px;padding:12px;border:1px solid #d7ded8;border-radius:8px;background:#fafbf9f2}
+.project-rail p{font:600 13px/1.4 Manrope,sans-serif;padding:4px 8px 10px;color:#24362d}
+.project-rail button{display:flex;align-items:center;gap:8px;padding:8px;border-radius:5px;font-size:12px;color:#536158;text-align:left}
+.project-rail button:hover,.project-rail button[aria-current]{background:#e7eee9;color:#254b35}
+.app.sky-shell{background:#6fa0c6}
+.sky-shell .workspace{background:#6fa0c6}
 .quiet-office .desk-badge b { max-width: 116px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media(max-width:750px) {
   .quiet-office .desk-badge:not(.selected) b { display: none; }
