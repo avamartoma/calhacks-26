@@ -20,6 +20,7 @@ from urllib.parse import quote, urlsplit
 LOOPBACK = {"127.0.0.1", "localhost"}
 CONFIRM_TTL = 600
 PAIR_ATTEMPTS = 5
+INBOX = 20
 
 
 class OfficeError(Exception):
@@ -112,6 +113,20 @@ class OfficeClient:
     def identify(self):
         return self.request("/auth/session")
 
+    def stream(self, opener: Callable = urllib.request.urlopen, timeout: float = 90):
+        """Open the office's live state stream (server-sent events). The server pings, so a quiet stream stays open."""
+        for attempt in (0, 1):
+            if not self.cookie or attempt:
+                self._session()
+            request = urllib.request.Request(self.base + "/api/events", headers={"Cookie": self.cookie, "Origin": self.base, "Accept": "text/event-stream"})
+            try:
+                return opener(request, timeout=timeout)
+            except urllib.error.HTTPError as e:
+                if e.code != 401 or attempt:
+                    raise OfficeError(f"Office stream failed ({e.code})") from None
+            except OSError:
+                raise OfficeError(f"Iteration1 is unavailable at {self.base}. Start it with npm start, then retry.") from None
+
 
 # --- What the person asked for -------------------------------------------------------------
 
@@ -144,6 +159,8 @@ def parse(text: str) -> Intent:
         return Intent("cancel")
     if re.search(r"\b(?:confirm(?:s|ed)?|go ahead|dispatch it)\b", low) or low.strip(EDGE) in {"yes", "y", "go", "do it"}:
         return Intent("confirm")
+    if re.search(r"\b(?:alerts?|notifications?|what did i miss|missed)\b", low):
+        return Intent("alerts")
     if re.search(r"\b(?:approvals?|permissions?|waiting on me|needs? (?:my )?approval)\b", low):
         return Intent("approvals")
     if m := re.search(r"\b(?:run ?doc|report|receipts?|evidence|how did)\b\s*(?:for|on|of|about)?\s*(?:task\s*)?#?(?P<arg>.*)$", t, re.I | re.S):
@@ -208,6 +225,7 @@ HELP = """I'm the Iteration1 office agent. I watch a local office where coding a
 - **status**: tasks, blockers and who is working
 - **report on <task>**: the run doc for a task: what was done and what is verified versus only self-reported
 - **approvals**: commands waiting for you in the office
+- **alerts**: what the watcher noticed recently (blocked tasks, work ready for review, new approvals)
 - **mission: <what to build>**: hand a new mission to the office's implementation manager (I'll ask you to confirm first)
 
 Command approvals and stopping agents stay in the Iteration1 app on the owner's computer."""
@@ -298,6 +316,19 @@ class OfficeAgent:
     office_name: str = "Fetch.ai office"
     pending: dict[str, tuple[str, float]] = field(default_factory=dict)
     clock: Callable[[], float] = time.time
+    inbox: list[tuple[float, str]] = field(default_factory=list)
+
+    def remember(self, lines: list[str]) -> None:
+        """Keep the watcher's latest alerts, in case a pushed message never reaches the chat."""
+        now = self.clock()
+        self.inbox = (self.inbox + [(now, line) for line in lines])[-INBOX:]
+
+    def alerts_text(self) -> str:
+        if not self.inbox:
+            return "No alerts yet. When the watcher agent is running, I'll message you when tasks block, finish or need approval."
+        now = self.clock()
+        ago = lambda t: "just now" if now - t < 60 else f"{int((now - t) // 60)} min ago" if now - t < 3600 else f"{int((now - t) // 3600)} h ago"
+        return "Recent alerts, newest last:\n" + "\n".join(f"- {line} ({ago(t)})" for t, line in self.inbox[-10:])
 
     def handle(self, sender: str, text: str) -> str:
         if not self.gate.allowed(sender):
@@ -319,6 +350,8 @@ class OfficeAgent:
     def _owner(self, sender: str, intent: Intent) -> str:
         if intent.kind == "help":
             return HELP
+        if intent.kind == "alerts":
+            return self.alerts_text()
         if intent.kind == "cancel":
             return "Cancelled. Nothing was sent to the office." if self.pending.pop(sender, None) else "Nothing to cancel."
         if intent.kind == "mission":

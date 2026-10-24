@@ -298,14 +298,7 @@
         "code": false,
         "copyAgents": false
       },
-      "grants": [
-        {
-          "userId": "u-ava",
-          "level": "commenter",
-          "code": false,
-          "copyAgents": false
-        }
-      ],
+      "grants": [],
       "shareSlug": "pricing-30774a",
       "repo": {
         "url": "https://git.example.com/northwind/pricing",

@@ -8,7 +8,7 @@ A spatial workspace for AI-assisted software development. A **workspace** is a w
 
 There are two layers here, and they are easy to mix up.
 
-**What is live** is a local workspace sky in the companion. Pick a workspace, see only that workspace’s projects as 3D clouds, zoom into a cloud to open its office desks. Codex, Claude, Cursor, tickets, and pairing all still run against those desks.
+**What is live** is a local workspace sky in the companion. Pick a workspace, see only that workspace’s projects as clouds, zoom into a cloud to open its project page. Codex, Claude, Cursor, tickets, and pairing all still run against those desks.
 
 **What is not live** is sharing those workspaces — a shared drive crossed with Slack, with invites, per-project access, and search. That contract lives in `src/cloud/` so sharing and search can be built against one shape. Do not route companion traffic through it.
 
@@ -16,27 +16,32 @@ Why the city went away: the office-block downtown put every checkout in one impl
 
 ### The live sky
 
-Before this change, `tag: "WORKSPACE 01"` on a room was a label. There was no workspace entity, and every project lived in one flat list. A workspace is now a real record on saved state (`state.workspaces` in `.office/state.json`). Each room has a `workspaceId`. The sky only draws rooms in the selected workspace.
+The left rail lists your workspaces, as in Slack or Discord: one circle each, with a badge counting agents working there. Click one to enter it; right-click to rename it, change or remove its picture, or remove it. **+** creates a workspace. A workspace is a real record on saved state (`state.workspaces` in `.office/state.json`), each room has a `workspaceId`, and the sky only shows that workspace.
 
-The picker in the top bar creates, renames, and removes workspaces. Switching one changes which clouds you see. New projects take an optional `workspaceId` and otherwise land in the current workspace.
+The sky is a 2D canvas with parallax layers, painted for the local time of day (`?hour=19` previews another hour). Each project is a simple vector cloud:
 
-Older save files have no workspaces. On load, `initWorkspaces` in `server/workspaces.mjs` gathers every existing room into **My workspace** and gives each a cloud spot, so nothing disappears. Saved state stays `version: 1` and is migrated in place: bumping the version would make the server reject the file and reseed, which would destroy existing projects.
+- **Your projects** sit in front in a tight cluster, with a light yellow band along the base. **Projects shared with you** sit on layers further back and come into focus as you zoom toward them. For now these are placeholder projects from `src/cloud/seed.json`.
+- Every cloud shows its title; a cloud is sized to its title, so the title always fits. Zooming in shows the description and the agents, drawn as small blob people colored by type (the legend is bottom right). Your clouds show these at the home view.
+- Drag, swipe or use the arrow keys to move; pinch or scroll to zoom. Zoomed out, clouds pack closer together. Click a cloud to go to it. Zooming into one of yours fills the screen with white and opens its project page; pinch out, or scroll up past the top of the page, to return.
+- Bottom left: **Home** returns to your projects, and **Sky | Folders** switches to a folder view of every project as a card.
+- The search bar is a placeholder that matches names and descriptions; semantic search replaces the matching. **Only show my projects** hides everyone else's clouds.
 
-Projects are never orphaned. Removing a workspace moves its rooms to another workspace and re-spots those clouds so they do not land on one already in that sky. The last workspace cannot be removed, because there would be nowhere to put them. There is a cap of 24 workspaces.
+Older save files have no workspaces. On load, `initWorkspaces` in `server/workspaces.mjs` gathers every existing room into **My workspace**, so nothing disappears. Saved state stays `version: 1` and is migrated in place: bumping the version would make the server reject the file and reseed, which would destroy existing projects. Removing a workspace moves its projects to another one; the last workspace cannot be removed; there is a cap of 24.
 
-A **room is a project, and a project is a cloud**. Position (`cloud.x`, `cloud.y`, `cloud.depth`) is stored on the room, so a drag survives reload. Depth is only for parallax when you pan; it is not a second map. New projects land on a ring that widens as the workspace fills (`cloudSpot`), so a new cloud never stacks on an old one.
+Files to touch: `src/sky/` (the sky: `SkyView.tsx`, renderers, shaders, time of day), `src/WorkspaceRail.tsx`, `src/ProjectDoc.tsx`, `src/App.tsx`, and `server/workspaces.mjs`. Routes: `GET/POST /api/workspaces`, `PATCH/DELETE /api/workspaces/:id`, `POST /api/workspaces/:id/rooms`, `POST /api/rooms/:id/workspace`. [Why the sky replaced the city](docs/architecture.md#why-the-sky-replaced-the-city).
 
-The clouds are meshes in the existing three.js scene (`src/CloudField.ts`), not a second engine and not an HTML overlay. Pan is unbounded. Zoom is anchored to the cursor, not the view center, so the cloud you are pointing at stays under the pointer.
+### Hidden sky looks: ask before deleting
 
-Zooming is semantic, not just a scale. Crossing a height threshold on the hovered or nearest cloud interpolates the same camera into the office desks that already existed. That expanded view is still the agent office: published progress, commands, changes, and task state, with a sidebar of tickets, agents, start work, connections, and settings. Zooming out, or Esc, returns you to that workspace’s sky.
+Other looks for the sky are kept in the code but hidden from the interface. Each still opens from the address bar:
 
-This is the gesture language taken from [SyncHub](https://github.com/gtiosclub/SyncHub), and three things were deliberately not copied. SyncHub’s zoom is two discrete SwiftUI views with a spring that fakes depth; ours stays in one three.js camera. SyncHub anchors pinch to the view center, so content drifts off the pointer; ours follows the cursor. SyncHub lays cards out from eight hardcoded offsets plus random jitter and persists neither pan nor zoom; our spots are stable and written back to state.
+| Address | Look |
+| --- | --- |
+| `?sky=balloons` | Projects as hot air balloons in a 3D sky you can fly through (`src/sky/renderer-balloons.ts`) |
+| `?sky=clouds3d` | The vector clouds in 3D (`renderer-vector.ts`) |
+| `?sky=soft` | Soft, fluffy 3D clouds (`renderer-3d.ts`) |
+| `?sky=2d` | Soft clouds on a flat canvas (`renderer.ts`) |
 
-The city and team district stay compiled so recording and paired-office framing are not deleted. They are hidden on the sky and on a normal project open. They are not the starting metaphor anymore.
-
-What is still rough on the live sky: puff lighting and scale, empty-sky composition, opening a project from a URL, and showing a teammate district without leaving the sky.
-
-Files to touch for the live sky: `server/workspaces.mjs`, `src/CloudField.ts`, `src/scene.ts`, `src/App.tsx`, `src/types.ts` (`Workspace`, `CloudSpot`, `Altitude`). Routes: `GET/POST /api/workspaces`, `PATCH/DELETE /api/workspaces/:id`, `POST /api/workspaces/:id/rooms`, `POST /api/rooms/:id/workspace`, `POST /api/rooms/:id/cloud`. [Why this is shaped this way](docs/architecture.md#why-the-sky-replaced-the-city).
+**Before the final deploy, ask the team whether to delete these for good**, the balloon view especially. Nothing depends on them. The 3D camera and puff-cloud code in `renderer-3d.ts` is shared by the balloon and 3D views, so delete those together.
 
 ### Shared access (planned)
 
@@ -87,7 +92,7 @@ On Windows, `npm run runtime:install` installs the pinned project-local Codex ru
 
 ## Use it
 
-1. **Pick a workspace, then a project.** The default view is the sky for the selected workspace. Each cloud is one project in that workspace — not every project you have ever opened. Scroll toward a cloud to open it; scroll back out or press Esc to return.
+1. **Pick a workspace, then a project.** Choose a workspace in the left rail; its sky shows your projects up front and projects shared with you behind. Click or zoom into one of your clouds to open its project page; press Esc, or pinch out, to return.
 2. **Describe the work.** Start work applies a reusable workflow. Choose the **Manager model**, from Codex or Claude. The manager delegates bounded research and review for substantial tasks and remains the implementation owner. A new ticket can also stay in the backlog without running a model.
 3. **Follow the project.** The expanded view is still the office desks: published progress, commands, changes, and task state. The sidebar keeps tickets, agents, start work, connections, and settings next to that view. Private reasoning is not displayed.
 4. **Coordinate.** Handoffs connect findings to assignments. Declared file scopes and dependencies help sequence work. Pair a teammate's office to exchange status and context across separate checkouts.
@@ -114,7 +119,9 @@ Open **http://127.0.0.1:4351** and **http://127.0.0.1:4352**. Pair Alex and Blai
 
 | Control | Action |
 | --- | --- |
-| Drag / wheel on the sky | Pan infinitely, and zoom toward the cursor. Crossing the zoom threshold on a nearby cloud opens that project |
+| Drag / swipe / arrow keys on the sky | Move around |
+| Pinch / scroll on the sky | Zoom toward the cursor. Zooming far into one of your clouds opens that project |
+| Home (bottom left) | Back to your projects |
 | Esc / zoom out | Leave a project and return to its workspace sky |
 | Overview / Map / Walk | Change the expanded project view |
 | WASD / arrows | Move in walk mode |
@@ -142,7 +149,7 @@ A **Codex CLI** session you run yourself can report into the office over MCP too
 ![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
 ![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
 
-**iteration1-office** (`agent1q0r5evneykvtpltu348zc0nq6a32lwuaq4ywjt0twxw7kz9945y0qgxn6mk`) lets the office's owner run it from an ASI:One chat. It is a uAgent that implements the Agent Chat Protocol and is registered on Agentverse. Say `status` for tasks, blockers and who is working, `report on <task>` for a run doc that separates verified receipts from self-reported ones, `approvals` for commands waiting in the office, or `mission: <what to build>` to hand a new mission to the implementation manager, followed by `confirm`.
+**iteration1-office** (`agent1q0r5evneykvtpltu348zc0nq6a32lwuaq4ywjt0twxw7kz9945y0qgxn6mk`) lets the office's owner run it from an ASI:One chat. It is a uAgent that implements the Agent Chat Protocol and is registered on Agentverse. Say `status` for tasks, blockers and who is working, `report on <task>` for a run doc that separates verified receipts from self-reported ones, `approvals` for commands waiting in the office, `alerts` for what the watcher noticed, or `mission: <what to build>` to hand a new mission to the implementation manager, followed by `confirm`.
 
 It is another client of the local office, like the MCP servers. It runs on your computer and reaches Agentverse through its mailbox, an outbound connection, so the office stays on loopback and the agent's own server listens only on `127.0.0.1`. It holds no office credential, and missions publish under the account signed in to the office.
 
@@ -156,6 +163,12 @@ python -m venv .office/runtime/agent-venv
 ```
 
 With the office running (`npm start`), open the `agentverse.ai/inspect` link the agent prints and choose **Connect → Mailbox** once. On Windows on ARM, uAgents needs `grpcio`, which has no ARM64 wheel; create the venv from an x64 Python (for example the `python` NuGet package unpacked under `.office/runtime/python-x64`), which runs under emulation. Tests: `python -m unittest discover agents`.
+
+**iteration1-watcher** is a second, local uAgent that follows the office's live state stream and tells the office agent, agent to agent, when a task blocks, becomes ready for review or finishes (with whether it was verified), when an approval is waiting, when a new mission starts and when the office pauses or goes offline. The office agent forwards each batch to its paired owners in ASI:One and keeps the last 20 for `alerts`, in case a message the agent starts doesn't appear in the chat. The office agent accepts alerts only from the watcher whose seed sits beside its own in `.office/fetch-watcher.json`. The watcher reconnects with backoff when the office restarts, compares against the last state it saw so nothing is missed meanwhile, and drops repeats within a minute. Run it beside the office agent:
+
+```sh
+.office/runtime/agent-venv/Scripts/python agents/watcher_agent.py
+```
 
 ## Claude agents
 
@@ -192,8 +205,8 @@ Optional configuration: `PORT`, `OFFICE_DATA_DIR`, `OFFICE_CODEX_HOME`, `OFFICE_
 
 ## Assets and VR
 
-The default shell is a three.js cloud field in the same scene as the office. The city and district metaphor is no longer the starting view; those objects stay in the renderer for team and recording paths but are hidden on the sky and on a normal project open. The office geometry is still the expanded project. The runtime model is included at `public/models/office-shell.glb`; asset provenance is in `assets/`. Blender is optional for authoring and is not started by the app. From the repository root, an explicitly launched Blender session can run `scripts/build_office_assets.py`; `ITERATION1_ROOT` overrides its output root. That script replaces the active scene, so use a fresh Blender file.
+The default shell is the workspace sky (`src/sky/`), drawn with three.js on a flat canvas. The city and district metaphor is no longer the starting view; those objects stay in the renderer for team and recording paths but are hidden on the sky and on a normal project open. The office geometry is still the expanded project. The runtime model is included at `public/models/office-shell.glb`; asset provenance is in `assets/`. Blender is optional for authoring and is not started by the app. From the repository root, an explicitly launched Blender session can run `scripts/build_office_assets.py`; `ITERATION1_ROOT` overrides its output root. That script replaces the active scene, so use a fresh Blender file.
 
-Cloud layout and workspace membership persist in `.office/state.json`. Dragging a cloud writes its position; removing a workspace rehomes its projects instead of orphaning them. The last workspace cannot be removed. Semantic zoom and the puff meshes are real but still rough: puff lighting, empty-sky composition, and team-district framing from the sky are unfinished.
+Workspace membership persists in `.office/state.json`; removing a workspace rehomes its projects instead of orphaning them, and the last workspace cannot be removed. Team-district framing from the sky is unfinished.
 
 Three.js WebXR provides an initial headset path. Headset comfort, controller behavior, and production VR performance are unverified; the supported demonstration is the desktop walkthrough.
