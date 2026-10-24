@@ -147,7 +147,12 @@ export function createSkyRendererVector(canvas: HTMLCanvasElement): SkyRenderer 
 
 /** Your project clouds in the flat sky, in world units: bigger than in 3D so text has room. */
 export const FLAT_WIDTH = 660;
-const flatSize = (c: SkyCloud) => (c.id === 'you' ? FLAT_WIDTH * .62 : c.mine ? FLAT_WIDTH : FLAT_WIDTH * .82) / CLOUD_WIDTH;
+const flatSize = (c: SkyCloud) => (c.mine ? FLAT_WIDTH : FLAT_WIDTH * .82) * (c.size ?? 1) / CLOUD_WIDTH;
+/**
+ * Zoomed out, clouds shrink a little less than the space between them, so more of them fit on
+ * screen. Their centers keep moving with the camera, so zooming stays anchored to the cursor.
+ */
+const zoomedOutBoost = (zoom: number) => zoom < 1 ? Math.pow(zoom, -.18) : 1;
 
 /**
  * The same vector clouds on a flat 2D canvas with parallax layers: your projects move with you,
@@ -182,7 +187,7 @@ export function createSkyRendererVector2D(canvas: HTMLCanvasElement): SkyRendere
     },
     setClouds(next) { clouds = next; },
     project(cloud, cam): ScreenCloud {
-      const box = place(cloud, cam, view, flatSize(cloud));
+      const box = place(cloud, cam, view, flatSize(cloud) * zoomedOutBoost(cam.zoom));
       const height = box.width * CLOUD_SHAPE;
       // The text sits in the body of the cloud, just below its middle.
       return { x: box.x, y: box.y, width: box.width, height, label: { x: box.x, y: box.y + height * .02, width: box.width * .5 } };

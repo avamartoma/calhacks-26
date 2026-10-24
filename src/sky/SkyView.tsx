@@ -12,7 +12,7 @@ import './sky.css';
  * A project in the sky. Yours (and you) sit in the front layer (depth 1) with a label; other
  * projects you can see in the workspace sit further back, without text until you go to them.
  */
-export interface SkyProject { id: string; name: string; description: string; detail?: string; mine: boolean; x: number; y: number; depth: number; seed: number; kind?: 'you'; agents?: SkyAgent[]; owner?: string }
+export interface SkyProject { id: string; name: string; description: string; detail?: string; mine: boolean; x: number; y: number; depth: number; seed: number; kind?: 'you'; agents?: SkyAgent[]; owner?: string; size?: number }
 /**
  * `clouds` is the default: vector clouds on a flat canvas with parallax layers. `balloons` is
  * the 3D option. `clouds3d` (vector clouds in 3D), `soft` (3D puff clouds) and `2d` (flat puff
@@ -28,6 +28,35 @@ const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math
 const cssColor = (rgb: number[]) => `rgb(${rgb.map(c => Math.round(c * 255)).join(',')})`;
 /** Width of a label before scaling, in CSS pixels. */
 const LABEL_WIDTH = 150;
+const TITLE_FONT = '600 15px Sora, sans-serif';
+let measurer: CanvasRenderingContext2D | null | undefined;
+function textWidth(text: string) {
+  if (measurer === undefined) measurer = document.createElement('canvas').getContext('2d');
+  if (!measurer) return text.length * 8.5;
+  measurer.font = TITLE_FONT;
+  return measurer.measureText(text).width;
+}
+/** How wide a project's label must be, at full size, for its title to fit in two lines. */
+const labelWidthOf = (p: SkyProject) => Math.min(300, Math.max(LABEL_WIDTH, Math.ceil(textWidth(p.name) / 1.8) + 18));
+/** On the flat canvas, your project clouds are 660 units wide at size 1, about half as tall. */
+const FLAT_CLOUD = 660;
+
+/**
+ * Your projects in a tight honeycomb: rows of clouds with small, even gaps, alternate rows
+ * offset, so they sit close together without overlapping.
+ */
+function honeycomb(mine: SkyProject[]): SkyProject[] {
+  if (!mine.length) return mine;
+  const widest = Math.max(...mine.map(p => p.size || 1)) * FLAT_CLOUD;
+  // Roughly square clusters: two over one for three, two over two for four, three over two for five.
+  const columns = Math.max(1, Math.ceil(Math.sqrt(mine.length)));
+  const across = widest + 60, down = widest * .52 + 70;
+  const rows = Math.ceil(mine.length / columns);
+  return mine.map((p, i) => {
+    const row = Math.floor(i / columns), column = i % columns, inRow = Math.min(columns, mine.length - row * columns);
+    return { ...p, x: (column - (inRow - 1) / 2 + (row % 2 ? .25 : -.25) * (inRow > 1 ? 1 : 0)) * across, y: (row - (rows - 1) / 2) * down };
+  });
+}
 
 /** The camera that frames you and your projects, at the front layer. */
 function homeCamera(projects: SkyProject[], view: Viewport, style: SkyStyle): Camera {
@@ -36,12 +65,14 @@ function homeCamera(projects: SkyProject[], view: Viewport, style: SkyStyle): Ca
   // A balloon reaches about 130 units above its center and, with its basket, about 200 below;
   // a vector cloud is 660 wide and 340 tall on the flat canvas, 420 by 220 in 3D.
   const balloon = style === 'balloons', vector = style === 'clouds', vector3d = style === 'clouds3d';
-  const half = balloon ? 130 : vector ? 330 : vector3d ? 210 : CLOUD_WIDTH / 2, above = balloon ? 140 : vector ? 175 : vector3d ? 130 : half * CLOUD_ASPECT, below = balloon ? 200 : above;
-  const minX = Math.min(...mine.map(p => p.x - half)), maxX = Math.max(...mine.map(p => p.x + half));
-  const minY = Math.min(...mine.map(p => p.y - above)), maxY = Math.max(...mine.map(p => p.y + below));
+  const half = (p: SkyProject) => balloon ? 130 : vector ? FLAT_CLOUD * (p.size || 1) / 2 : vector3d ? 210 : CLOUD_WIDTH / 2;
+  const above = (p: SkyProject) => balloon ? 140 : vector ? half(p) * .52 : vector3d ? 130 : half(p) * CLOUD_ASPECT, below = (p: SkyProject) => balloon ? 200 : above(p);
+  const minX = Math.min(...mine.map(p => p.x - half(p))), maxX = Math.max(...mine.map(p => p.x + half(p)));
+  const minY = Math.min(...mine.map(p => p.y - above(p))), maxY = Math.max(...mine.map(p => p.y + below(p)));
   // An overview, not a close-up: your projects in the middle, with room around them for the
   // shared projects. The flat sky's bigger clouds need a wider view.
-  const closest = vector ? .55 : 1.3, widest = vector ? .3 : .45;
+  // On the flat canvas, close enough that every one of your clouds shows its description and agents.
+  const closest = vector ? .62 : 1.3, widest = vector ? .47 : .45;
   const zoom = Math.min(closest, Math.max(widest, Math.min(view.width * .6 / (maxX - minX), view.height * .5 / (maxY - minY))));
   // In 3D, a slight angle, so the depth of the sky shows from the start.
   return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, zoom, z: 0, ...(isFlat(style) ? {} : { yaw: -.16, pitch: .1 }) };
@@ -119,13 +150,18 @@ function SkySpace({ style, projects, onEnter, returnFrom, command }: { style: Sk
   const balloons = style === 'balloons';
   const host = useRef<HTMLDivElement>(null), canvas = useRef<HTMLCanvasElement>(null), whiteout = useRef<HTMLDivElement>(null);
   const labels = useRef(new Map<string, HTMLElement>()), dots = useRef(new Map<string, HTMLElement>());
-  // Bigger vector clouds need more room between them.
-  const spread = style === 'clouds' ? 2.1 : style === 'clouds3d' ? 1.35 : 1;
+  // On the flat canvas each cloud is sized to its title, yours sit in a tight honeycomb, and
+  // shared ones sit close around them on layers further back.
+  const spread = style === 'clouds' ? 1.45 : style === 'clouds3d' ? 1.35 : 1;
   // "Only show my projects" hides everyone else's clouds, and keeps search to yours.
   const [onlyMine, setOnlyMine] = useState(() => localStorage.getItem('iteration1-only-mine') === '1');
   useEffect(() => { localStorage.setItem('iteration1-only-mine', onlyMine ? '1' : '0'); }, [onlyMine]);
   const shown = onlyMine ? projects.filter(p => p.mine) : projects;
-  const list = useRef(shown); list.current = spread === 1 ? shown : shown.map(p => ({ ...p, x: p.x * spread, y: p.y * spread }));
+  const list = useRef(shown);
+  if (style === 'clouds') {
+    const sized = shown.map(p => ({ ...p, size: labelWidthOf(p) / LABEL_WIDTH }));
+    list.current = [...honeycomb(sized.filter(p => p.mine)), ...sized.filter(p => !p.mine).map(p => ({ ...p, x: p.x * spread, y: p.y * spread }))];
+  } else list.current = spread === 1 ? shown : shown.map(p => ({ ...p, x: p.x * spread, y: p.y * spread }));
   const enter = useRef(onEnter); enter.current = onEnter;
   const renderer = useRef<SkyRenderer | null>(null);
   const palette = paletteAt(localHour());
@@ -257,7 +293,8 @@ function SkySpace({ style, projects, onEnter, returnFrom, command }: { style: Sk
           if (depth > immersion) { immersion = depth; deepest = p; }
         }
         // Every cloud shows its title; the description, status and agent dots appear once it is this wide on screen.
-        const detailAt = balloons ? 190 : 280;
+        // Your clouds show details already at the home view; others' need a closer look.
+        const detailAt = balloons ? 190 : p.mine ? 200 : 280;
         // Agent dots sit low in the body of every cloud, yours and others', once it is big enough to show them.
         const dotRow = dots.current.get(p.id);
         if (dotRow) {
@@ -275,8 +312,13 @@ function SkySpace({ style, projects, onEnter, returnFrom, command }: { style: Sk
         emphasis.set(p.id, opacity);
         // Labels scale with what they sit on, so the text always fits inside it.
         const spot = c.label || { x: c.x, y: c.y, width: c.width * .62 };
-        // A title alone keeps a readable size on small, far-off clouds.
-        const compact = c.width < detailAt, scale = compact ? Math.max(spot.width / LABEL_WIDTH, .74) : spot.width / LABEL_WIDTH;
+        // Each label is as wide as its title needs (its cloud is sized to match). A title alone
+        // keeps a readable size on small clouds, narrowing to the cloud; if it would not fit, it hides.
+        const base = style === 'clouds' ? labelWidthOf(p) : LABEL_WIDTH;
+        const compact = c.width < detailAt, scale = compact ? Math.max(spot.width / base, .74) : spot.width / base;
+        const boxWidth = compact ? Math.min(base, spot.width / scale) : base;
+        label.style.width = `${boxWidth}px`;
+        if (compact && p.kind !== 'you' && textWidth(p.name) > (boxWidth - 8) * 2.4) opacity = 0;
         label.style.transform = `translate(${spot.x}px, ${spot.y}px) translate(-50%, -50%) scale(${scale})`;
         label.classList.toggle('compact', compact);
         label.style.opacity = opacity.toFixed(3);

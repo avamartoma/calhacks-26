@@ -20,3 +20,5 @@
 .rail-menu button{padding:8px 10px;border-radius:6px;text-align:left;font:600 12.5px Manrope,sans-serif;color:#3c4660}
 .rail-menu button:hover{background:#eef2f7}
 .rail-menu button.danger{color:#b55c48}
+.workspace-rail li button img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
+.workspace-rail li button:has(img){overflow:visible;background:#2c3756}

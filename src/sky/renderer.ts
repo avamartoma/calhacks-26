@@ -4,7 +4,8 @@ import { cloudFragment, cloudVertex, skyDomeFragment, skyFragment, skyVertex } f
 import { CLOUD_ASPECT, place, type Camera, type Viewport } from './sky-math';
 
 /** A project's cloud in the world. `depth` is 1 for your projects in front, lower further back. */
-export interface SkyCloud { id: string; x: number; y: number; depth: number; seed: number; mine: boolean }
+/** `size` scales a cloud, so one with a longer title is wider. */
+export interface SkyCloud { id: string; x: number; y: number; depth: number; seed: number; mine: boolean; size?: number }
 /** Where a cloud appears on screen: center and size in CSS pixels, y down. `labelY`, when set, is where its label hangs from. */
 export interface ScreenCloud { x: number; y: number; width: number; height: number; labelY?: number; label?: { x: number; y: number; width: number } }
 /** `emphasis` is how visible each object's label is, 0 to 1, so a renderer can draw a panel behind it. */
