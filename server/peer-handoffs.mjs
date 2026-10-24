@@ -17,7 +17,7 @@ export function queueHandoff(room, sender, input) {
   const args = z.object({ agentId: z.string(), message: z.string().trim().min(1).max(6000), kind: z.enum(['finding', 'question', 'answer']).default('finding'), workItemId: z.string().optional(), replyTo: z.string().optional() }).strict().parse(input);
   const target = room.agents.find(a => a.id === args.agentId && a.status !== 'ejected');
   if (!target || target.id === sender.id) throw new Error('Choose another current agent in this office.');
-  if (target.provider === 'cursor') throw new Error('Direct delivery is available for Codex desks. Continue this external assignment in Cursor.');
+  if (target.provider === 'cursor' || target.provider === 'claude-code') throw new Error(`Direct delivery is available for Codex desks. Continue this external assignment in ${target.provider === 'cursor' ? 'Cursor' : 'Claude Code'}.`);
   if (args.workItemId && !room.workItems.some(t => t.id === args.workItemId)) throw new Error('Task not found in this office.');
   const parent = args.replyTo && room.messages.find(m => m.id === args.replyTo);
   const successor=id=>{const seen=new Set();let a=room.agents.find(a=>a.id===id);while(a?.replacedBy && !seen.has(a.id)){seen.add(a.id);a=room.agents.find(next=>next.id===a.replacedBy);}return a?.id || id;};

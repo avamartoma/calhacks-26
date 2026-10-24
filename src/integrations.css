@@ -5,3 +5,7 @@
 
 .cursor-release-check { display: flex; align-items: center; gap: 10px; margin: 16px 0; }
 .cursor-release-check input { width: auto; flex: 0 0 auto; }
+
+.claude-steps { padding-left: 20px; margin: 0 0 14px; }
+.claude-steps li { margin-bottom: 12px; line-height: 1.55; }
+.claude-steps li button { margin-top: 8px; }

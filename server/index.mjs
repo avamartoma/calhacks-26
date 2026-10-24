@@ -6,7 +6,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { Codex, codexInstalled, installCodex, openInBrowser } from './codex.mjs';
 import { checkWorkspace } from './workspace-check.mjs';
 import { identifyEvidence, commandWorkspace, refreshReview, isTestCommand, trimEvidence, assertReviewVersion } from './evidence.mjs';
-import { createCursorDesk } from './cursor.mjs';
+import { createCursorDesk, reporters } from './cursor.mjs';
 import { initIdentities, upsertIdentity, identityBySub, publicIdentity, creditRun } from './identity.mjs';
 import { createAuth, providerFields } from './oauth.mjs';
 import { runDoc, addComment, runFeed } from './run-doc.mjs';
@@ -45,7 +45,7 @@ for (const r of state.rooms) {
     r.workItems = visibleAgents.map(a => workItem(a.task, a.task, { agentId: a.id, status: a.status === 'done' ? 'review' : active(a) ? 'working' : 'queued', acceptanceCriteria: [a.manager ? 'The requested outcome is implemented and verified' : 'Return a concrete result with evidence'] }));
     r.missionStartedAt ||= Date.now(); r.orchestrationVersion = 1;
   }
-  if (!r.demo) for (const a of r.agents) if (active(a) && a.provider !== 'cursor') { a.status = 'paused'; a.turnId = null; event(a, 'system', 'Companion restarted. Resume explicitly after inspecting the latest work.'); const item = assignedTicket(r,a.id); if (item && item.status!=='done' && !item.archived) { item.status = 'blocked'; item.blocker = 'Companion restarted. Resume this ticket to continue.'; item.updatedAt = Date.now(); } }
+  if (!r.demo) for (const a of r.agents) if (active(a) && !selfDriven(a)) { a.status = 'paused'; a.turnId = null; event(a, 'system', 'Companion restarted. Resume explicitly after inspecting the latest work.'); const item = assignedTicket(r,a.id); if (item && item.status!=='done' && !item.archived) { item.status = 'blocked'; item.blocker = 'Companion restarted. Resume this ticket to continue.'; item.updatedAt = Date.now(); } }
   delete r.stopping;initOffice(r);nameStoredRoom(r);
 }
 const clients = new Set();
@@ -67,6 +67,7 @@ async function syncIdentity() {
 }
 await syncIdentity();
 const cursor = createCursorDesk({ state, changed, isStarting: id => startingAgents.has(id), currentIdentity: () => liveIdentity });
+const toolName = a => reporters[a.provider]?.name || 'Cursor';
 const runner = createCursorRunner();
 const claudeKey = createClaudeKeyStore(); await claudeKey.load();
 const claude = createClaudeRunner({ apiKey: () => claudeKey.current() });
@@ -144,7 +145,7 @@ async function startAgent(room, a, prompt) {
 async function startAgentReserved(room, a, prompt) {
   const access=permissionsFor(room,a),accessKey=permissionKey(room,a);
   cursor.assertAvailable(room);
-  if (selfDriven(a)) throw new Error('Continue this task in Cursor or replace the finished worker with a Codex model.');
+  if (selfDriven(a)) throw new Error(`Continue this task in ${toolName(a)} or replace the finished worker with a Codex model.`);
   if (a.provider === 'claude') return continueClaude(room, a, prompt);
   if (external(a)) throw new Error('Relaunch this task with the Cursor agent runner, or replace the worker with a Codex model.');
   await ensureConnected();
@@ -187,7 +188,7 @@ async function startAgentReserved(room, a, prompt) {
   finally { changed(); }
 }
 async function stopAgent(a) {
-  if (selfDriven(a) && a.turnId) throw new Error('Stop execution in Cursor, then use office_cursor_finish to release this assignment.');
+  if (selfDriven(a) && a.turnId) throw new Error(`Stop execution in ${toolName(a)}, then use ${reporters[a.provider].tools}_finish to release this assignment.`);
   if (startingAgents.has(a.id)) throw new Error('Agent is starting. Wait for the turn to begin, then stop it.');
   // A run the office launched can genuinely be cancelled; cancellation lands through the stream.
   if (a.provider === 'claude') { if (claude.running(a.id)) await claude.stop(a.id); a.status = 'paused'; return; }
@@ -203,7 +204,7 @@ async function stopAgent(a) {
   a.status = 'paused';
 }
 async function sendTo(room, a, text) {
-  if (selfDriven(a)) throw new Error('Send this message in Cursor. Iteration1 tracks this worker but does not control its execution.');
+  if (selfDriven(a)) throw new Error(`Send this message in ${toolName(a)}. Iteration1 tracks this worker but does not control its execution.`);
   if (a.provider === 'claude') { if (claude.send(a.id, text)) { event(a, 'user', text); changed(); } else await startAgent(room, a, text); return; }
   if (external(a)) throw new Error('This Cursor run takes one prompt. Wait for it to finish, then launch a follow-up run.');
   if (a.status === 'ejected') throw new Error('Replace this agent before sending a message.');
@@ -385,7 +386,7 @@ app.post('/api/rooms/:id/team/message',wrap(async req=>{
   const message=team.queue(room,{...sender,peerMessagesThisTurn:0},args);if(!message)throw new Error('Choose a teammate agent.');
   message.sentByOwner=true;changed();return {message};
 }));
-app.get('/api/integrations', (req, res) => res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claude: { ...claudeKey.status(), models: claudeModels } }));
+app.get('/api/integrations', (req, res) => res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claudeCode: { command: process.execPath, script: path.join(root, 'scripts', 'claude-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claude: { ...claudeKey.status(), models: claudeModels } }));
 // Connecting Claude: the key is checked with Anthropic, then kept locally. It is never returned to the page.
 app.post('/api/claude/key', wrap(async req => { const status = await claudeKey.save(z.object({ apiKey: z.string() }).strict().parse(req.body).apiKey); changed(); return status; }));
 app.post('/api/claude/key/remove', wrap(async () => { const status = await claudeKey.remove(); changed(); return status; }));
@@ -473,10 +474,13 @@ app.post('/api/rooms/:id/claude/launch', wrap(async req => {
   record(room, 'Claude agent launched', 'work'); changed();
   return { roomId: room.id, agentId: worker.id, workItemId: item.id, ...launched };
 }));
-app.post('/api/rooms/:id/cursor/start', wrap(async req => { await syncIdentity(); return cursor.start(roomBy(state, req.params.id), req.body); }));
-app.post('/api/rooms/:id/cursor/:aid/update', wrap(async req => { await syncIdentity(); return cursor.update(roomBy(state, req.params.id), req.params.aid, req.body); }));
-app.post('/api/rooms/:id/cursor/:aid/finish', wrap(async req => { await syncIdentity(); return cursor.finish(roomBy(state, req.params.id), req.params.aid, req.body); }));
-app.post('/api/rooms/:id/cursor/:aid/release', wrap(async req => cursor.release(roomBy(state, req.params.id), req.params.aid, req.body)));
+// Cursor and Claude Code sessions report in over MCP under /cursor and /claude-code.
+for (const provider of Object.keys(reporters)) {
+  app.post(`/api/rooms/:id/${provider}/start`, wrap(async req => { await syncIdentity(); return cursor.start(roomBy(state, req.params.id), req.body, provider); }));
+  app.post(`/api/rooms/:id/${provider}/:aid/update`, wrap(async req => { await syncIdentity(); return cursor.update(roomBy(state, req.params.id), req.params.aid, req.body, provider); }));
+  app.post(`/api/rooms/:id/${provider}/:aid/finish`, wrap(async req => { await syncIdentity(); return cursor.finish(roomBy(state, req.params.id), req.params.aid, req.body, provider); }));
+  app.post(`/api/rooms/:id/${provider}/:aid/release`, wrap(async req => cursor.release(roomBy(state, req.params.id), req.params.aid, req.body, provider)));
+}
 app.post('/api/demo',wrap(async()=>{for(const old of state.rooms.filter(r=>r.demo && r.demoStep>=5 && !r.agents.some(a=>a.turnId)))old.archived=true;const room=createDemo(root);state.rooms.push(room);changed();return {room};}));
 app.post('/api/rooms/:id/demo/step',wrap(async req=>{const room=roomBy(state,req.params.id);stepDemo(room);changed();return {room};}));
 app.post('/api/rooms/:id/mode',wrap(async req=>{
@@ -528,7 +532,7 @@ app.post('/api/rooms/:id/work/:workId/archive',wrap(async req=>{const room=roomB
 app.post('/api/rooms/:id/work/:workId/run',wrap(async req=>{
   const room=roomBy(state,req.params.id),item=room.workItems.find(t=>t.id===req.params.workId);if(!item)throw new Error('Ticket not found');
   const owner=room.agents.find(a=>a.id===item.agentId);
-  const ready=()=>{if(!room.workItems.includes(item) || (owner && !room.agents.includes(owner)))throw new Error('Office changed. Reopen this ticket.');cursor.assertAvailable(room);if(!owner || owner.status==='ejected')throw new Error('Assign or replace the owner first.');if(owner.provider==='cursor')throw new Error('Continue this assignment in Cursor.');if(room.paused)throw new Error('Resume the office first.');if(room.capturing || owner.turnId || startingAgents.has(owner.id))throw new Error('Wait for the owner to stop before resuming this ticket.');if(item.archived || item.status==='done')throw new Error('Choose an open ticket.');};
+  const ready=()=>{if(!room.workItems.includes(item) || (owner && !room.agents.includes(owner)))throw new Error('Office changed. Reopen this ticket.');cursor.assertAvailable(room);if(!owner || owner.status==='ejected')throw new Error('Assign or replace the owner first.');if(selfDriven(owner))throw new Error(`Continue this assignment in ${toolName(owner)}.`);if(room.paused)throw new Error('Resume the office first.');if(room.capturing || owner.turnId || startingAgents.has(owner.id))throw new Error('Wait for the owner to stop before resuming this ticket.');if(item.archived || item.status==='done')throw new Error('Choose an open ticket.');};
   const {note}=z.object({note:z.string().trim().max(2000).optional()}).strict().parse(req.body);ready();if(!room.demo && owner.provider!=='claude')await ensureConnected();ready();
   const wait=waitingReason(room,item);if(wait)throw new Error(wait.reason);
   if(!room.demo && !owner.manager)canDelegate(room);
@@ -647,7 +651,7 @@ app.post('/api/rooms/:id/agents/:aid/stop', wrap(async req => { const r = roomBy
 app.post('/api/rooms/:id/agents/:aid/speed', wrap(async req => {
   const r = roomBy(state, req.params.id); const a = agentBy(r, req.params.aid);
   const { fast } = z.object({ fast: z.boolean() }).strict().parse(req.body);
-  if (selfDriven(a)) throw new Error('Choose model and speed settings in Cursor.');
+  if (selfDriven(a)) throw new Error(`Choose model and speed settings in ${toolName(a)}.`);
   if (external(a)) throw new Error(`Choose the model when you launch the next ${a.provider === 'claude' ? 'Claude' : 'Cursor'} run.`);
   if (a.status === 'ejected') throw new Error('This agent has left. Select its replacement.');
   if (startingAgents.has(a.id)) throw new Error('A turn is starting. Try again once it has started.');

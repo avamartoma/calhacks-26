@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { ArrowUpRight, Check, Copy } from 'lucide-react';
 import type { Room } from './types';
 import './integrations.css';
-import { ClaudePanel, type ClaudeIntegration } from './ClaudePanel';
+import { ClaudePanel, type ClaudeCodeIntegration, type ClaudeIntegration } from './ClaudePanel';
 
-interface Integrations { cursor: { command: string; script: string; url: string }; claude: ClaudeIntegration }
+interface Integrations { cursor: { command: string; script: string; url: string }; claudeCode: ClaudeCodeIntegration; claude: ClaudeIntegration }
 interface Identity { sub: string; label: string; email?: string; record: { started: number; review: number; blocked: number; verified: number } }
 interface Auth { provider: { domain: string; clientId: string; fromEnv: boolean } | null; signedIn: boolean; identity: Identity | null; redirectUri: string }
 export function IntegrationsPanel({ room, focusClaude = 0 }: { room: Room; focusClaude?: number }) {
@@ -47,11 +47,11 @@ export function IntegrationsPanel({ room, focusClaude = 0 }: { room: Room; focus
     <p className="muted small">Manage models and execution in Cursor.</p>
     <details className="compact-disclosure" open={!auth?.signedIn}><summary>Account</summary>
       {auth?.signedIn && auth.identity
-        ? <><p className="notice">Signed in as <b>{auth.identity.label}</b>{auth.identity.email ? ` · ${auth.identity.email}` : ''}. Cursor sessions publish under this account automatically.</p>
+        ? <><p className="notice">Signed in as <b>{auth.identity.label}</b>{auth.identity.email ? ` · ${auth.identity.email}` : ''}. Cursor and Claude Code sessions publish under this account automatically.</p>
             <p className="muted small">{auth.identity.record.started} runs started · {auth.identity.record.verified} verified</p>
             <button className="text-button" onClick={() => void signOut()}>Sign out</button></>
         : auth?.provider
-          ? <><p>Sign in once. Cursor sessions then publish under your account with a durable desk and track record, and nothing secret goes in <code>.cursor/mcp.json</code>.</p>
+          ? <><p>Sign in once. Cursor and Claude Code sessions then publish under your account with a durable desk and track record, and nothing secret goes in <code>.cursor/mcp.json</code>.</p>
               <button className="primary full" onClick={() => void signIn()}>Sign in with Auth0</button>
               <p className="muted small">Opens <code>{auth.provider.domain}</code> in a browser tab.</p></>
           : <><p>Connect an Auth0 tenant once to enable sign-in. The domain and client id are public for a PKCE client; no client secret is stored.</p>
@@ -66,6 +66,6 @@ export function IntegrationsPanel({ room, focusClaude = 0 }: { room: Room; focus
       <label>Prompt<textarea readOnly rows={3} value={prompt}/></label>
       <button className="text-button" onClick={() => void load()}>Refresh connection details</button>
     </details>
-    <ClaudePanel room={room} claude={data?.claude ?? null} onChange={() => void load()} focus={focusClaude} />
+    <ClaudePanel room={room} claude={data?.claude ?? null} code={data?.claudeCode ?? null} onChange={() => void load()} focus={focusClaude} />
   </div>;
 }

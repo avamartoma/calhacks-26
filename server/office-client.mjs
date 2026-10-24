@@ -13,7 +13,7 @@ export function createOfficeClient({ url = 'http://127.0.0.1:4314', project = pr
   async function session() {
     const res = await localFetch(base, { redirect: 'error', signal: AbortSignal.timeout(10000) });
     cookie = res.headers.get('set-cookie')?.split(';')[0];
-    if (!cookie?.startsWith(`office_session_${parsed.port || '80'}=`) && !cookie?.startsWith('office_session=')) throw new Error('Start Iteration1 before connecting Cursor.');
+    if (!cookie?.startsWith(`office_session_${parsed.port || '80'}=`) && !cookie?.startsWith('office_session=')) throw new Error('Start Iteration1 before connecting this session.');
   }
   async function request(route, body, retry = true) {
     if (!cookie) await session();
@@ -28,15 +28,16 @@ export function createOfficeClient({ url = 'http://127.0.0.1:4314', project = pr
     const state = await request('/state');
     return state.rooms.filter(room => !room.demo && path.relative(actual, room.path) === '');
   }
-  async function room(id) { const found = (await rooms()).find(r => r.id === id); if (!found) throw new Error('Choose a live office belonging to this Cursor workspace.'); return found; }
+  async function room(id) { const found = (await rooms()).find(r => r.id === id); if (!found) throw new Error('Choose a live office belonging to this workspace.'); return found; }
+  const reporting = provider => { if (!['cursor', 'claude-code'].includes(provider)) throw new Error('Invalid reporting tool'); return `/${provider}`; };
   // No credential travels with a report. The office attributes it to whoever is signed in
-  // there, so nothing secret belongs in .cursor/mcp.json.
+  // there, so nothing secret belongs in .cursor/mcp.json or .mcp.json.
   return { request, rooms, room,
     async open(name) { const existing = await rooms(); return existing[0] || (await request('/rooms', { name, path: await realpath(project), demo: false })).room; },
     async identify() { return request('/auth/session'); },
     async dispatch(id, body) { await room(id); return request(`/rooms/${encodeURIComponent(id)}/dispatch`, body); },
-    async cursorStart(id, body) { await room(id); return request(`/rooms/${encodeURIComponent(id)}/cursor/start`, body); },
-    async cursorReport(id, agentId, operation, body) { await room(id); if (!['update', 'finish'].includes(operation)) throw new Error('Invalid Cursor operation'); return request(`/rooms/${encodeURIComponent(id)}/cursor/${encodeURIComponent(agentId)}/${operation}`, body); },
+    async deskStart(provider, id, body) { await room(id); return request(`/rooms/${encodeURIComponent(id)}${reporting(provider)}/start`, body); },
+    async deskReport(provider, id, agentId, operation, body) { await room(id); if (!['update', 'finish'].includes(operation)) throw new Error('Invalid report operation'); return request(`/rooms/${encodeURIComponent(id)}${reporting(provider)}/${encodeURIComponent(agentId)}/${operation}`, body); },
     async runDoc(id, workId) { await room(id); return request(`/rooms/${encodeURIComponent(id)}/work/${encodeURIComponent(workId)}/doc`); }
   };
 }

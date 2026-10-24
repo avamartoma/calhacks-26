@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "iteration1": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["scripts/claude-mcp.mjs"]
+    }
+  }
+}

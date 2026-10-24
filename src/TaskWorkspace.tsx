@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ReviewState, Room, WorkItem } from './types';
+import { reporterName, selfReported } from './reporters';
 import { officeApi, WorkDetail } from './Operations';
 import { HandoffsPanel } from './HandoffsPanel';
 import { TicketForm } from './TicketForm';
@@ -20,7 +21,7 @@ export function TaskWorkspace({room,itemId,connected,busy,action,onAgent,onTask,
     <h2 className="ticket-title">{item.title}</h2><div className="ticket-options"><span>{item.archived?'Archived':`${item.priority || 'normal'} priority`}</span>{!active && item.status!=='done' && !item.archived && <button onClick={()=>setEditing(true)}>Edit ticket</button>}{!active && <button disabled={busy} onClick={archive}>{item.archived?'Restore ticket':'Archive'}</button>}</div>
     {!item.archived && item.status!=='done' && <section className="next-action" aria-label="Next step">
       {owner?.status==='ejected'?<><b>Owner needs replacing</b><button className="secondary" onClick={()=>onAgent(owner.replacedBy || owner.id)}>Open {owner.replacedBy?'replacement':'desk'}</button></>:
-      owner?.provider==='cursor'?<><b>Managed in Cursor</b><button className="secondary" onClick={()=>onAgent(owner.id)}>Open Cursor desk</button></>:
+      owner && selfReported(owner)?<><b>Managed in {reporterName(owner)}</b><button className="secondary" onClick={()=>onAgent(owner.id)}>Open {reporterName(owner)} desk</button></>:
       active && owner?.currentWorkItemId && owner.currentWorkItemId!==item.id?<><b>{agentLine(owner)} is working on another ticket</b><button className="secondary" onClick={()=>onTask(owner.currentWorkItemId!)}>Open active ticket</button></>:
       active?<><b>{owner?.status==='approval'?'Waiting for your approval':`${agentLine(owner)} is working`}</b><button className="secondary" disabled={busy} onClick={owner?.status==='approval'?onInbox:()=>action(()=>officeApi(`/rooms/${room.id}/agents/${owner!.id}/stop`,{}),'Agent paused')}>{owner?.status==='approval'?'Review request':'Pause agent'}</button></>:
       !signedIn?<><b>Ready when you connect</b><button className="primary" onClick={onConnect}>Connect Codex</button></>:
@@ -43,7 +44,7 @@ function TicketReview({room,item,busy,action,connected,active}:{room:Room;item:W
   const gaps=[...item.dependsOn.filter(id=>room.workItems.find(t=>t.id===id)?.status!=='done').map(id=>'Verify '+(room.workItems.find(t=>t.id===id)?.title || 'dependency')),...(item.requiredEvidence || []).filter(kind=>!(kind==='log' && note.trim()) && !item.evidence.some(e=>e.kind===kind && e.text.trim() && (kind!=='test' || e.passed===true))).map(kind=>'Attach '+(kind==='test'?'passing test':kind)+' evidence')];
   if(!room.demo && item.requiredEvidence?.includes('test') && !review?.current)gaps.push(review?.label || 'Check the current project version');
   else if(!room.demo && !review?.version)gaps.push(review?.error || 'Check the current project version');
-  const owner=room.agents.find(a=>a.id===item.agentId),canRerun=(connected || owner?.provider==='claude') && !room.paused && owner?.provider!=='cursor' && owner?.status!=='ejected';
+  const owner=room.agents.find(a=>a.id===item.agentId),canRerun=(connected || owner?.provider==='claude') && !room.paused && !selfReported(owner) && owner?.status!=='ejected';
   const submit=(decision:'done'|'changes')=>action(async()=>{
     if(decision==='changes')await officeApi('/rooms/'+room.id+'/work/'+item.id+'/run',{note});
     else await officeApi('/rooms/'+room.id+'/work/'+item.id,{status:'done',expectedUpdatedAt:item.updatedAt,...(!room.demo?{expectedVersion:review?.version}:{}),receipts:[{kind:'log',text:note}],checks:item.acceptanceCriteria.map((_,index)=>({index,passed:checks.includes(index),evidence:note}))});

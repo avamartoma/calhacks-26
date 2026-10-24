@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowRight, Check, Copy, Users } from 'lucide-react';
 import { officeApi, workLabels } from './Operations';
 import type { Room } from './types';
+import { selfReported } from './reporters';
 import './team.css';
 
 export function TeamPanel({room,onFloor,onHandoffs}:{room:Room;onFloor:()=>void;onHandoffs:()=>void}) {
@@ -14,7 +15,7 @@ export function TeamPanel({room,onFloor,onHandoffs}:{room:Room;onFloor:()=>void;
   const team=room.team,remote=team?.remote;
   useEffect(()=>{if(!room.agents.some(a=>a.id===sender && a.status!=='ejected'))setSender(room.agents.find(a=>a.manager && a.status!=='ejected')?.id || room.agents.find(a=>a.status!=='ejected')?.id || '');},[room.agents,sender]);
   useEffect(()=>{officeApi('/team/addresses').then(d=>{setAddresses(d.addresses);setAddress(d.addresses[0] || '');}).catch(e=>setError(e.message));},[]);
-  useEffect(()=>{if(remote && !remote.agents.some(a=>a.id===recipient && a.status!=='ejected' && a.provider!=='cursor'))setRecipient(remote.agents.find(a=>a.manager && a.status!=='ejected' && a.provider!=='cursor')?.id || remote.agents.find(a=>a.status!=='ejected' && a.provider!=='cursor')?.id || '');},[remote,recipient]);
+  useEffect(()=>{if(remote && !remote.agents.some(a=>a.id===recipient && a.status!=='ejected' && !selfReported(a)))setRecipient(remote.agents.find(a=>a.manager && a.status!=='ejected' && !selfReported(a))?.id || remote.agents.find(a=>a.status!=='ejected' && !selfReported(a))?.id || '');},[remote,recipient]);
   async function run(fn:()=>Promise<void>){setBusy(true);setError('');try{await fn();}catch(e){setError(e instanceof Error?e.message:'Connection failed.');}finally{setBusy(false);}}
   return <section className="team-panel"><h2>Team</h2>
     {team && remote ? <>
@@ -22,11 +23,11 @@ export function TeamPanel({room,onFloor,onHandoffs}:{room:Room;onFloor:()=>void;
       {!team.connected && <p className="notice">{team.error || 'Waiting for teammate.'} Last received work is shown below.</p>}
       {team.overlaps.length>0 && <div className="team-overlaps"><h3>Shared file scopes</h3>{[...new Set(team.overlaps.flatMap(o=>o.files))].map(file=><details key={file}><summary>{file}</summary>{team.overlaps.filter(o=>o.files.includes(file)).map(o=><p key={o.localTaskId+o.remoteTaskId}>{o.localTitle} ↔ {o.remoteTitle}</p>)}</details>)}<small>Coordinate before merging. Each office uses its own checkout.</small></div>}
       <h3>{remote.owner}’s office <span className="muted">· {remote.name}</span></h3>
-      <div className="team-agent-list">{remote.agents.filter(a=>a.status!=='ejected').map(a=><button disabled={a.provider==='cursor'} key={a.id} className={recipient===a.id?'selected':''} onClick={()=>{setRecipient(a.id);setSent(false);}}><span className="team-sphere" style={{background:a.color}}>••</span><span><b>{a.name} <small>{a.role}</small></b><small>{a.task || 'No assignment'}</small></span><em>{a.status}</em></button>)}</div>
+      <div className="team-agent-list">{remote.agents.filter(a=>a.status!=='ejected').map(a=><button disabled={selfReported(a)} key={a.id} className={recipient===a.id?'selected':''} onClick={()=>{setRecipient(a.id);setSent(false);}}><span className="team-sphere" style={{background:a.color}}>••</span><span><b>{a.name} <small>{a.role}</small></b><small>{a.task || 'No assignment'}</small></span><em>{a.status}</em></button>)}</div>
       <h3>Tickets <small>· reported by {remote.owner}</small></h3>
       {remote.workItems.length?remote.workItems.map(t=><details className="team-ticket" key={t.id}><summary><span>{t.title}</span><small>{workLabels[t.status]}</small></summary>{t.blocker && <p>{t.blocker}</p>}<p>{t.files.join(', ') || 'No file scope declared'}</p><small>{t.receiptCount} receipts in teammate’s office</small></details>):<p className="quiet-copy">No tickets yet.</p>}
       <form className="team-compose" onSubmit={e=>{e.preventDefault();run(async()=>{await officeApi(`/rooms/${room.id}/team/message`,{senderId:sender,agentId:recipient,message,kind:'question'});setMessage('');setSent(true);});}}>
-        <h3>Send a handoff</h3><div className="team-route"><label>From your desk<select value={sender} onChange={e=>setSender(e.target.value)}>{room.agents.filter(a=>a.status!=='ejected').map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><ArrowRight size={16}/><label>To {remote.owner}<select value={recipient} onChange={e=>setRecipient(e.target.value)}>{remote.agents.filter(a=>a.status!=='ejected' && a.provider!=='cursor').map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label></div>
+        <h3>Send a handoff</h3><div className="team-route"><label>From your desk<select value={sender} onChange={e=>setSender(e.target.value)}>{room.agents.filter(a=>a.status!=='ejected').map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><ArrowRight size={16}/><label>To {remote.owner}<select value={recipient} onChange={e=>setRecipient(e.target.value)}>{remote.agents.filter(a=>a.status!=='ejected' && !selfReported(a)).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label></div>
         <label className="sr-only" htmlFor="team-message">Handoff message</label><textarea id="team-message" value={message} onChange={e=>{setMessage(e.target.value);setSent(false);}} rows={3} maxLength={6000} placeholder="Ask about a dependency or share a finding…" required/>
         <small>Active agents receive it now. Idle agents read it next turn.</small><button className="primary full" disabled={busy || !message.trim() || !recipient || !sender}>Send handoff</button>{sent && <p role="status">Queued. <button className="text-button" type="button" onClick={onHandoffs}>View handoffs</button></p>}
       </form>
