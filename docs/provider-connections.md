@@ -8,7 +8,7 @@ Build the app and start its production server. The default address is `http://12
 
 For Codex, open **Connections → Codex** and click **Sign in with ChatGPT** and finish the ChatGPT login. When the browser and server run on the same machine, the callback can complete automatically. When they run on different machines, copy the full localhost callback URL from the address bar, paste it into **Callback URL**, and click **Complete sign-in**. A browser connection error on that localhost page is expected in the latter case.
 
-For Claude, open **Connections → Claude**. Click **Sign in with Claude**, authorize on Claude's website, and paste the displayed authorization code including `#state`, or the complete callback URL. Click **Complete sign-in**. The **Launch Claude from the office** section then uses that profile. An explicitly configured `ANTHROPIC_API_KEY` takes precedence over the browser profile.
+For Claude, open **Connections → Claude**. Click **Sign in with Claude**, authorize on Claude's website, and paste the displayed authorization code including `#state`, or the complete callback URL. Click **Complete sign-in**. Claude office agents then run on that profile: choose a Claude model as the manager model when you start work. An explicitly configured `ANTHROPIC_API_KEY` takes precedence over the browser profile.
 
 For Cursor, open **Connections → Cursor** and click **Sign in with Cursor**. Finish signing in on Cursor's website. Iteration1 updates automatically after the SDK creates a dedicated API key named **Iteration1**. An explicitly configured `CURSOR_API_KEY` takes precedence over the saved browser login.
 
@@ -30,6 +30,6 @@ New credential files use owner-only permissions and atomic replacement. Provider
 
 This remains a single-operator app. Auth0 identity does not partition provider credentials, project access, or execution. Each separately hosted operator needs an isolated instance and provider profiles. The execution API retains its existing loopback binding and host/origin checks. Account linking alone does not turn the server into a public, multi-user service.
 
-These connections authorize future work. They do not import conversation history or attach to an already running CLI session. Existing Cursor and Claude Code sessions can still report through MCP.
+These connections authorize future work. They do not import conversation history or attach to an already running CLI session. Existing Cursor, Claude Code and Codex CLI sessions can still report through MCP.
 
 The callback-paste interaction was informed by [OmniRoute's provider connection UI](https://github.com/cheaper-inference/OmniRoute/blob/edab7c3a59bf7d6f040d581dbda3a46adbee0d57/src/shared/components/OAuthModal.tsx). Cursor uses its [documented SDK browser login](https://prod.cursor.com/docs/sdk/typescript#cursor-auth).

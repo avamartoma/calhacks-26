@@ -15,7 +15,8 @@ const finished = progress.extend({ outcome: z.enum(['review', 'blocked']) });
 // and cannot stop them, and each signs in with its own account, so no key is involved here.
 export const reporters = {
   cursor: { name: 'Cursor', tools: 'office_cursor', source: 'cursor-reported' },
-  'claude-code': { name: 'Claude Code', tools: 'office_claude', source: 'claude-reported' }
+  'claude-code': { name: 'Claude Code', tools: 'office_claude', source: 'claude-reported' },
+  'codex-cli': { name: 'Codex CLI', tools: 'office_codex', source: 'codex-reported' }
 };
 const reporter = provider => { const r = reporters[provider]; if (!r) throw new Error('Unknown reporting tool'); return r; };
 

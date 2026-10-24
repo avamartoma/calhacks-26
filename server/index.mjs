@@ -14,6 +14,7 @@ import { ticketFields, assignedTicket, focusTicket, editTicket, archiveTicket } 
 import { peerTools, peerInstructions, inbox, queueHandoff, handoffEnvelope, presentHandoffs, delivered, acknowledge, transferInbox } from './peer-handoffs.mjs';
 import { createTeam } from './team.mjs';
 import { seed, uid, agent, event, workItem, evidenceFrom, roomBy, agentBy, active, canDelegate, handoff, publicItem, external, selfDriven, isClaude } from './domain.mjs';
+import { initWorkspaces, createWorkspace, renameWorkspace, removeWorkspace, assignRoom, placeCloud, roomsIn, cloudSpot, workspaceBy } from './workspaces.mjs';
 import { createCursorRunner, launchFields } from './cursor-agent.mjs';
 import { createClaudeRunner, claudeModels, isClaudeModel } from './claude-agent.mjs';
 import { OFFICE_SERVER, officeMcpServer, officeToolNames, todosToPlan, projectDiff } from './claude-office.mjs';
@@ -38,6 +39,7 @@ try { state = JSON.parse(await readFile(stateFile, 'utf8')); if (state.version !
 catch (e) { if (e.code !== 'ENOENT') throw e; state = seed(root); }
 state.approvals = [];
 initIdentities(state);
+initWorkspaces(state);
 for (const r of state.rooms) {
   if (r.orchestrationVersion !== 1) {
     let visibleAgents = r.agents.filter(a => a.status !== 'ejected');
@@ -82,7 +84,9 @@ await cursorLogin.load();
 const runner = createCursorRunner({ apiKey: () => cursorLogin.current() });
 const claudeKey = createClaudeKeyStore(); await claudeKey.load();
 const claude = createClaudeRunner({ apiKey: () => claudeKey.current(), oauth: async () => { if (claudeLogin.isCompleting()) throw new Error('Wait for Claude sign-in to finish.'); await claudeLogin.load(); return !process.env.ANTHROPIC_API_KEY && claudeLogin.status().configured; }, configDir: () => claudeLogin.configDir });
-function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, claude: { ...claudeKey.status(), models: claudeModels, configured: claudeKey.status().configured || claudeLogin.status().configured }, identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates }; }
+/** Claude can run office agents on the signed-in Claude profile or on an API key. */
+const claudeReady = () => claudeKey.status().configured || claudeLogin.status().configured;
+function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, workspaces: initWorkspaces(state), claude: { ...claudeKey.status(), configured: claudeReady(), models: claudeModels }, identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates }; }
 function changed() {
   if (!broadcastTimer) broadcastTimer = setTimeout(() => {
     broadcastTimer = undefined;
@@ -150,11 +154,11 @@ async function scheduleWorkers(room) {
 }
 // A model the office can run: a Claude model once Claude is connected, otherwise one from the Codex catalog.
 function assertModelAvailable(model) {
-  if (isClaudeModel(model)) { if (!claudeKey.status().configured) throw new Error('Connect Claude before choosing a Claude model.'); return; }
+  if (isClaudeModel(model)) { if (!claudeReady()) throw new Error('Connect Claude before choosing a Claude model.'); return; }
   if (model !== 'Account default' && !connection.models.some(m => m.id === model)) throw new Error('Choose a model available to this account.');
 }
 function setEngine(a, model) { a.model = model; if (isClaudeModel(model)) a.provider = 'claude'; else if (isClaude(a)) delete a.provider; }
-async function ensureEngine(a, model = a.model) { if (isClaudeModel(model)) { if (!claudeKey.status().configured) throw new Error('Connect Claude before starting Claude agents.'); } else await ensureConnected(); }
+async function ensureEngine(a, model = a.model) { if (isClaudeModel(model)) { if (!claudeReady()) throw new Error('Connect Claude before starting Claude agents.'); } else await ensureConnected(); }
 async function ensureConnected() { await codex.connect(); if (!connection.account) throw new Error('Sign in to Codex from the Connect panel first.'); }
 // What every office agent is told, whichever engine runs it.
 function developerInstructions(room, a, access) {
@@ -509,7 +513,7 @@ app.post('/api/rooms/:id/team/message',wrap(async req=>{
 }));
 app.get('/api/integrations', wrap(async (req, res) => {
   await claudeLogin.load();
-  res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}`, account: cursorLogin.status() }, claudeCode: { command: process.execPath, script: path.join(root, 'scripts', 'claude-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claude: { ...claudeKey.status(), models: claudeModels, subscription: claudeLogin.status() } });
+  res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}`, account: cursorLogin.status() }, claudeCode: { command: process.execPath, script: path.join(root, 'scripts', 'claude-mcp.mjs'), url: `http://127.0.0.1:${port}` }, codexCli: { command: process.execPath, script: path.join(root, 'scripts', 'codex-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claude: { ...claudeKey.status(), models: claudeModels, subscription: claudeLogin.status() } });
 }));
 // These endpoints expose login links and connection status, never provider credentials.
 app.use('/api/providers', (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
@@ -612,14 +616,22 @@ app.post('/api/rooms/:id/claude/launch', wrap(async req => {
   record(room, 'Claude agent launched', 'work'); changed();
   return { roomId: room.id, agentId: worker.id, workItemId: item.id, ...launched };
 }));
-// Cursor and Claude Code sessions report in over MCP under /cursor and /claude-code.
+// Cursor, Claude Code and Codex CLI sessions report in over MCP under /cursor, /claude-code and /codex-cli.
 for (const provider of Object.keys(reporters)) {
   app.post(`/api/rooms/:id/${provider}/start`, wrap(async req => { await syncIdentity(); return cursor.start(roomBy(state, req.params.id), req.body, provider); }));
   app.post(`/api/rooms/:id/${provider}/:aid/update`, wrap(async req => { await syncIdentity(); return cursor.update(roomBy(state, req.params.id), req.params.aid, req.body, provider); }));
   app.post(`/api/rooms/:id/${provider}/:aid/finish`, wrap(async req => { await syncIdentity(); return cursor.finish(roomBy(state, req.params.id), req.params.aid, req.body, provider); }));
   app.post(`/api/rooms/:id/${provider}/:aid/release`, wrap(async req => cursor.release(roomBy(state, req.params.id), req.params.aid, req.body, provider)));
 }
-app.post('/api/demo',wrap(async()=>{for(const old of state.rooms.filter(r=>r.demo && r.demoStep>=5 && !r.agents.some(a=>a.turnId)))old.archived=true;const room=createDemo(root);state.rooms.push(room);changed();return {room};}));
+app.post('/api/demo',wrap(async req=>{
+  for(const old of state.rooms.filter(r=>r.demo && r.demoStep>=5 && !r.agents.some(a=>a.turnId)))old.archived=true;
+  const room=createDemo(root);
+  const requested=z.object({workspaceId:z.string().optional()}).strict().parse(req.body || {});
+  const sky=requested.workspaceId ? workspaceBy(state,requested.workspaceId) : initWorkspaces(state)[0];
+  room.workspaceId=sky.id;
+  room.cloud=cloudSpot(roomsIn(state,sky.id).length);
+  state.rooms.push(room);changed();return {room};
+}));
 app.post('/api/rooms/:id/demo/step',wrap(async req=>{const room=roomBy(state,req.params.id);stepDemo(room);changed();return {room};}));
 app.post('/api/rooms/:id/mode',wrap(async req=>{
   const room=roomBy(state,req.params.id); const {mode}=z.object({mode:z.enum(Object.keys(modes))}).parse(req.body);
@@ -746,16 +758,25 @@ app.post('/api/codex/disconnect', wrap(async () => {
 app.post('/api/login', wrap(async () => { await codex.connect(); return codex.call('account/login/start', { type: 'chatgpt' }); }));
 app.get('/api/tools', wrap(async req => { await ensureConnected(); const room = roomBy(state, String(req.query.roomId)); const results = await Promise.allSettled([codex.call('skills/list', { cwds: [room.path] }), codex.call('mcpServerStatus/list', { limit: 100 })]); return { skills: results[0].status === 'fulfilled' ? results[0].value : null, mcp: results[1].status === 'fulfilled' ? results[1].value : null, errors: results.filter(r => r.status === 'rejected').map(r => r.reason.message) }; }));
 app.post('/api/rooms', wrap(async req => {
-  const body = z.object({ name: z.string().trim().min(1).max(60), path: z.string().trim().min(1).max(500), demo: z.boolean().default(false) }).parse(req.body);
+  const { workspaceId, ...body } = z.object({ name: z.string().trim().min(1).max(60), path: z.string().trim().min(1).max(500), demo: z.boolean().default(false), workspaceId: z.string().optional() }).parse(req.body);
   if (!path.isAbsolute(body.path)) throw new Error('Enter an absolute folder path.');
   const actual = await realpath(body.path); if (!(await stat(actual)).isDirectory()) throw new Error('Choose a folder.');
+  const sky = workspaceId ? workspaceBy(state, workspaceId) : initWorkspaces(state)[0];
   const manager = agent('', 'Manager', 'Ready for your first assignment', 4, { manager: true });
-  const r = { id: uid(), ...body, path: actual, goal: '', orchestrationVersion: 1, missionStartedAt: null, workItems: [], tag: `WORKSPACE ${String(state.rooms.length + 1).padStart(2, '0')}`, agents: [manager], messages: [], skills: [...skillNames], budget: 3, paused: false };
+  const r = { id: uid(), ...body, path: actual, goal: '', orchestrationVersion: 1, missionStartedAt: null, workItems: [], tag: `WORKSPACE ${String(state.rooms.length + 1).padStart(2, '0')}`, workspaceId: sky.id, cloud: cloudSpot(roomsIn(state, sky.id).length), agents: [manager], messages: [], skills: [...skillNames], budget: 3, paused: false };
   claimIdentity(manager, r);
   initOffice(r); state.rooms.push(r); changed(); return { room: r };
 }));
 app.post('/api/rooms/:id/cloud/open', wrap(req => cloud.open(roomBy(state, req.params.id))));
 app.post('/api/rooms/:id/cloud/close', wrap(req => cloud.close(roomBy(state, req.params.id))));
+// The cloud canvas shows one workspace at a time, so these decide which projects share a sky.
+app.get('/api/workspaces', wrap(async () => ({ workspaces: initWorkspaces(state) })));
+app.post('/api/workspaces', wrap(async req => { const workspace = createWorkspace(state, req.body); changed(); return { workspace }; }));
+app.patch('/api/workspaces/:id', wrap(async req => { const workspace = renameWorkspace(state, req.params.id, req.body); changed(); return { workspace }; }));
+app.delete('/api/workspaces/:id', wrap(async req => { const result = removeWorkspace(state, req.params.id); changed(); return result; }));
+app.post('/api/workspaces/:id/rooms', wrap(async req => { const room = assignRoom(state, roomBy(state, z.object({ roomId: z.string() }).strict().parse(req.body).roomId), workspaceBy(state, req.params.id).id); changed(); return { room }; }));
+app.post('/api/rooms/:id/workspace', wrap(async req => { const room = assignRoom(state, roomBy(state, req.params.id), z.object({ workspaceId: z.string() }).strict().parse(req.body).workspaceId); changed(); return { room }; }));
+app.post('/api/rooms/:id/cloud', wrap(async req => { const spot = placeCloud(state, roomBy(state, req.params.id), req.body); changed(); return { cloud: spot }; }));
 app.post('/api/rooms/:id/archive',wrap(async req=>{const r=roomBy(state,req.params.id);const {archived}=z.object({archived:z.boolean()}).strict().parse(req.body);if(r.capturing || r.agents.some(a=>a.turnId || startingAgents.has(a.id)))throw new Error('Pause all work before archiving this project.');r.archived=archived;if(archived)r.paused=true;record(r,archived?'Project archived':'Project restored','plan');changed();return {room:r};}));
 app.patch('/api/rooms/:id', wrap(async req => { const r = roomBy(state, req.params.id); const b = z.object({ permissionMode:permissionMode.optional(), name:z.string().trim().min(1).max(60).optional(), budget: z.number().int().min(1).max(6).optional(), skills: z.array(z.enum(skillNames)).optional() }).parse(req.body); const previous=r.permissionMode || 'project-write';Object.assign(r, b);if(b.permissionMode && b.permissionMode!==previous)record(r,`Permissions: ${b.permissionMode} for future runs`,'permissions');changed(); }));
 app.post('/api/rooms/:id/check',wrap(async req=>{const room=roomBy(state,req.params.id);await ensureConnected();room.workspaceCheck=await checkWorkspace(codex,room.path);changed();return room.workspaceCheck;}));
@@ -808,8 +829,8 @@ app.post('/api/rooms/:id/agents/:aid/speed', wrap(async req => {
   const r = roomBy(state, req.params.id); const a = agentBy(r, req.params.aid);
   const { fast } = z.object({ fast: z.boolean() }).strict().parse(req.body);
   if (selfDriven(a)) throw new Error(`Choose model and speed settings in ${toolName(a)}.`);
-  if (isClaude(a)) throw new Error('Fast mode applies to Codex agents. Replace this agent to choose a different Claude model.');
   if (external(a)) throw new Error('Choose the model when you launch the next Cursor run.');
+  if (isClaude(a)) throw new Error('Fast mode applies to Codex agents. Replace this agent to choose a different Claude model.');
   if (a.status === 'ejected') throw new Error('This agent has left. Select its replacement.');
   if (startingAgents.has(a.id)) throw new Error('A turn is starting. Try again once it has started.');
   const message = `${r.demo ? 'Demo: ' : ''}${fast ? 'Fast mode requested' : 'Standard speed selected'} for ${a.name}’s next turn.${fast && !r.demo ? ' Higher usage may apply; availability depends on the model and account.' : ''}`;

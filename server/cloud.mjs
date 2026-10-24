@@ -27,7 +27,7 @@ export function createCloud({ changed, userId }) {
   }
 
   function patch(room, cloud) {
-    room.cloud = { ...(room.cloud || {}), ...cloud };
+    room.preview = { ...(room.preview || {}), ...cloud };
     changed();
   }
 
@@ -60,7 +60,7 @@ export function createCloud({ changed, userId }) {
       const token = (generation.get(room.id) || 0) + 1;
       generation.set(room.id, token);
       disarm(room.id);
-      const sessionId = room.cloud?.sessionId;
+      const sessionId = room.preview?.sessionId;
       if (sessionId) convex().mutation(anyApi.sessions.stop, { sessionId }).catch(() => {});
       patch(room, { previewUrl: undefined, detail: 'Cloud environment closed' });
     }, CLOSE_DELAY_MS);
@@ -128,7 +128,7 @@ export function createCloud({ changed, userId }) {
     try {
       const owner = userId() || 'local';
       const repoUrl = await gitHttpsRemote(room.path);
-      let projectId = room.cloud?.projectId;
+      let projectId = room.preview?.projectId;
       if (projectId) {
         try { await client.query(anyApi.projects.get, { projectId }); }
         catch { projectId = undefined; }
@@ -149,7 +149,7 @@ export function createCloud({ changed, userId }) {
       if (!alive(room.id, token)) return;
       patch(room, { projectId });
 
-      let sessionId = room.cloud?.sessionId;
+      let sessionId = room.preview?.sessionId;
       let session = null;
       if (sessionId) {
         try { session = await client.query(anyApi.sessions.get, { sessionId }); }
@@ -185,7 +185,7 @@ export function createCloud({ changed, userId }) {
       patch(room, { status: 'live', previewUrl: preview.previewUrl, detail: '' });
       startHeartbeat(room, sessionId, token);
     } catch (error) {
-      if (!alive(room.id, token)) { await stopSession(room.cloud?.sessionId); return; }
+      if (!alive(room.id, token)) { await stopSession(room.preview?.sessionId); return; }
       accepting.delete(room.id);
       stopSync(room.id);
       patch(room, { status: 'error', detail: error instanceof Error ? error.message : 'Cloud environment failed' });
@@ -201,10 +201,10 @@ export function createCloud({ changed, userId }) {
     accepting.delete(room.id);
     stopSync(room.id);
     const client = convex();
-    let sessionId = room.cloud?.sessionId;
+    let sessionId = room.preview?.sessionId;
     try {
       patch(room, { status: 'starting', detail: 'Restarting the cloud environment', previewUrl: undefined });
-      const projectId = room.cloud?.projectId;
+      const projectId = room.preview?.projectId;
       if (!projectId) throw new Error('Cloud project is missing');
       if (sessionId) await stopSession(sessionId);
       if (!alive(room.id, token)) return;
@@ -307,7 +307,7 @@ export function createCloud({ changed, userId }) {
     if (!alive(room.id, token) || !accepting.has(room.id)) return;
     if (await isGitignored(room.path, relative)) return;
     if (!alive(room.id, token) || !accepting.has(room.id)) return;
-    const sessionId = room.cloud?.sessionId;
+    const sessionId = room.preview?.sessionId;
     if (!sessionId) return;
     const client = convex();
     const remote = remotePath(relative);
@@ -328,8 +328,8 @@ export function createCloud({ changed, userId }) {
 
   async function claim(room, paths) {
     if (!room || room.demo) return null;
-    const projectId = room.cloud?.projectId;
-    const sessionId = room.cloud?.sessionId;
+    const projectId = room.preview?.projectId;
+    const sessionId = room.preview?.sessionId;
     if (!projectId || !sessionId) return null;
     const client = convex();
     for (const input of paths || []) {

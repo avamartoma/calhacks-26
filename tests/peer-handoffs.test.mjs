@@ -46,7 +46,7 @@ test('peer handoff validates scope, links replies, separates delivery from ackno
   const {a,b,task,room}=fixture();
   assert.throws(()=>queueHandoff(room,a,{agentId:a.id,message:'self'}),/another current/);
   assert.throws(()=>queueHandoff(room,a,{agentId:'outside-room',message:'outside'}),/another current/);
-  b.provider='cursor';assert.throws(()=>queueHandoff(room,a,{agentId:b.id,message:'external'}),/Codex desks/);delete b.provider;
+  b.provider='cursor';assert.throws(()=>queueHandoff(room,a,{agentId:b.id,message:'external'}),/desks this office runs.*Cursor/);delete b.provider;
   assert.throws(()=>queueHandoff(room,a,{agentId:b.id,message:'task',workItemId:'missing'}),/Task not found/);
   const m=queueHandoff(room,a,{agentId:b.id,message:'Check src/search.ts',kind:'question'});
   assert.equal(m.workItemId,task.id);assert.equal(m.status,'queued');assert.equal(b.talkingUntil,undefined);

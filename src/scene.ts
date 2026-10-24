@@ -5,13 +5,14 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CityEnvironment } from './CityEnvironment';
+import { CloudField } from './CloudField';
 import { TeamDistrict } from './TeamDistrict';
 import { officePosition } from './office-layout';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import type { Agent, Room } from './types';
+import type { Agent, Altitude, Room } from './types';
 import { accessoriesFor, costumeColors } from './costume';
 
 interface Actor { beacon: THREE.Mesh<THREE.RingGeometry,THREE.MeshBasicMaterial>; workStatus: string; group: THREE.Group; home: THREE.Vector3; agent: Agent; screen: THREE.CanvasTexture; label: THREE.Sprite; signature: string; eyes: THREE.Group[]; pupils: THREE.Mesh[]; body: THREE.Group; phase: number; visiting: boolean; meetingUntil:number; route: THREE.Vector3[]; outbound: THREE.Vector3[] }
@@ -50,7 +51,17 @@ export class OfficeScene {
   onGraphicsLost?: () => void;
   city: CityEnvironment;
   district: TeamDistrict;
+  clouds: CloudField;
+  altitude: Altitude = 'sky';
+  showingTeam = false;
+  private blend = 0;
+  private blending = false;
+  private blendFrom = { position: new THREE.Vector3(), target: new THREE.Vector3() };
+  private blendTo = { position: new THREE.Vector3(16, 15, 20), target: new THREE.Vector3(-.4, .7, -.3) };
   onOfficeSelect?: (id:string) => void;
+  onEnterProject?: (id: string) => void;
+  onLeaveProject?: () => void;
+  onPlaceCloud?: (id: string, spot: { x: number; y: number }) => void;
   composer: EffectComposer;
   occlusion: SSAOPass;
   panorama?: THREE.DataTexture;
@@ -86,11 +97,24 @@ export class OfficeScene {
     this.scene.add(this.walkOnly);this.scene.add(this.neighborWorld);this.scene.add(this.neighborFlow);
     this.city = new CityEnvironment(this.renderer, this.scene);
     this.district = new TeamDistrict(this.city);this.scene.add(this.district.root);
+    this.city.root.visible = false;
+    this.district.root.visible = false;
+    this.clouds = new CloudField(this.scene, this.camera, this.renderer.domElement);
+    this.clouds.onEnter = id => this.onEnterProject?.(id);
+    this.clouds.onLeave = () => this.onLeaveProject?.();
+    this.clouds.onPlace = (id, spot) => this.onPlaceCloud?.(id, spot);
+    this.world.visible = false;
+    this.flow.visible = false;
+    this.neighborWorld.visible = false;
+    this.neighborFlow.visible = false;
+    this.renderer.setClearColor('#6fa0c6');
     this.camera.position.set(16, 15, 20);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.target.set(-.4, .7, -.3); this.controls.enableDamping = true; this.controls.dampingFactor = .08;
     this.controls.minDistance = 16; this.controls.maxDistance = 52; this.controls.maxPolarAngle = Math.PI / 2.25; this.controls.minPolarAngle = .2;
     this.controls.enablePan = true; this.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    this.controls.enabled = false;
+    this.clouds.restoreView();
     const ambient = new THREE.HemisphereLight('#f2f6fb', '#b7b89e', 1.32); this.scene.add(ambient);
     const sun = new THREE.DirectionalLight('#fff2dc', 2.85); sun.position.set(-90, 72, -75); sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048); sun.shadow.camera.left = -95; sun.shadow.camera.right = 95; sun.shadow.camera.top = 95; sun.shadow.camera.bottom = -95; sun.shadow.camera.far = 330; sun.shadow.normalBias = .04; sun.shadow.bias = -.0003;
@@ -138,6 +162,69 @@ export class OfficeScene {
     this.box(this.walkOnly, -3.1, 2.1, 8.8, 15.2, 4.2, .18, '#dfe3dc');
     this.box(this.walkOnly, 9, 2.1, 8.8, 3.5, 4.2, .18, '#dfe3dc');
     this.walkOnly.visible = false;
+    this.applyShell();
+  }
+  applyShell() {
+    const inProject = this.altitude === 'project' && this.blend > .32;
+    this.city.root.visible = false;
+    this.district.root.visible = this.showingTeam && inProject;
+    this.world.visible = inProject;
+    this.flow.visible = inProject;
+    this.neighborWorld.visible = inProject && !!this.room?.team?.remote;
+    this.neighborFlow.visible = this.neighborWorld.visible;
+    this.walkOnly.visible = this.walk && inProject;
+    this.clouds.setActive(this.altitude === 'sky');
+    this.controls.enabled = this.altitude === 'project' && !this.walk && this.cinemaStep === null && !this.blending;
+    this.renderer.setClearColor(this.altitude === 'sky' ? '#6fa0c6' : '#e3eae3');
+    this.scene.fog = this.altitude === 'sky' ? new THREE.Fog('#7eafcb', 140, 640) : null;
+  }
+  setSky(rooms: Room[], tint?: string) {
+    if (tint) this.clouds.setTint(tint);
+    this.clouds.setRooms(rooms);
+    if (this.altitude === 'sky') this.applyShell();
+  }
+  openProject(room: Room) {
+    const already = this.altitude === 'project' && this.roomId === room.id;
+    this.altitude = 'project';
+    this.showingTeam = false;
+    this.update(room, this.selected);
+    if (already && !this.blending) { this.applyShell(); return; }
+    this.clouds.entered = true;
+    this.clouds.focusCloud(room.id);
+    this.beginBlend(new THREE.Vector3(16, 15, 20), new THREE.Vector3(-.4, .7, -.3), 1);
+    this.applyShell();
+  }
+  returnToSky() {
+    if (this.altitude === 'sky' && !this.blending) { this.applyShell(); return; }
+    this.setWalk(false);
+    this.setCinema(null);
+    this.showingTeam = false;
+    const fromPos = this.camera.position.clone();
+    const fromTarget = this.controls.target.clone();
+    this.altitude = 'sky';
+    this.clouds.setActive(true);
+    this.clouds.height = Math.max(this.clouds.height, 52);
+    const look = this.clouds.look();
+    const toPos = this.camera.position.clone();
+    this.camera.position.copy(fromPos);
+    this.controls.target.copy(fromTarget);
+    this.beginBlend(toPos, look, 0);
+    this.applyShell();
+  }
+  private beginBlend(position: THREE.Vector3, target: THREE.Vector3, goal: number) {
+    this.blendFrom = { position: this.camera.position.clone(), target: this.controls.target.clone() };
+    this.blendTo = { position: position.clone(), target: target.clone() };
+    this.blending = true;
+    this.blend = goal === 1 ? 0 : 1;
+    this.controls.enabled = false;
+    if (this.reduced) {
+      this.camera.position.copy(position);
+      this.controls.target.copy(target);
+      this.camera.lookAt(target);
+      this.blend = goal;
+      this.blending = false;
+      this.applyShell();
+    }
   }
   mat(color: string, roughness = .8) { return new THREE.MeshStandardMaterial({ color, roughness }); }
   box(parent: THREE.Object3D, x: number, y: number, z: number, w: number, h: number, d: number, color: string, round = 0) {
@@ -386,6 +473,7 @@ export class OfficeScene {
   }
   update(room: Room, selected: string | null, includeTeam=true) {
     this.room = room; this.selected = selected;
+    if (this.altitude === 'sky' && this.blend < .2 && includeTeam) return;
     const visible = visibleAgents(room);
     if (this.roomId !== room.id || this.actors.size!==visible.length || visible.some(a => !this.actors.has(a.id) || (this.actors.get(a.id)!.agent.effectiveModel || this.actors.get(a.id)!.agent.model)!==(a.effectiveModel || a.model) || this.actors.get(a.id)!.agent.name!==a.name || this.actors.get(a.id)!.agent.title!==a.title || this.actors.get(a.id)!.agent.role!==a.role)) this.build(room);
     for (const a of room.agents) {
@@ -429,9 +517,10 @@ export class OfficeScene {
     } finally {Object.assign(this,saved);this.neighborWorld.position.set(position.x,0,position.z);this.neighborFlow.position.set(position.x,0,position.z);}
     if(first)this.focusOffice();
   }
-  focusOffice(){if(!this.room?.team?.remote)return;this.setWalk(false);this.setCinema(null);this.controls.maxDistance=280;const p=this.neighborWorld.position;this.controls.target.set(p.x,1,p.z);const fit=Math.max(1,1/this.camera.aspect);this.camera.position.set(p.x+24*fit,24*fit,p.z+30*fit);this.controls.update();}
+  focusOffice(){if(!this.room?.team?.remote || this.altitude!=='project')return;this.setWalk(false);this.setCinema(null);this.controls.maxDistance=280;const p=this.neighborWorld.position;this.controls.target.set(p.x,1,p.z);const fit=Math.max(1,1/this.camera.aspect);this.camera.position.set(p.x+24*fit,24*fit,p.z+30*fit);this.controls.update();}
   focusTeam(){
-    if(!this.room?.team?.remote)return;
+    if(!this.room?.team?.remote || this.altitude!=='project')return;
+    this.showingTeam=true;this.district.root.visible=true;
     this.setWalk(false);this.setCinema(null);this.controls.maxDistance=600;
     const offices=this.room.team.offices || [this.room.team.remote];
     const centers=[{x:0,z:0},...offices.map((_,i)=>officePosition(i))];
@@ -466,7 +555,7 @@ export class OfficeScene {
   resize = () => {
     const { clientWidth: w, clientHeight: h } = this.container;
     this.renderer.setSize(w, h); this.camera.aspect = w / Math.max(h, 1);
-    if (!this.walk && !this.renderer.xr.isPresenting) {
+    if (!this.walk && !this.renderer.xr.isPresenting && this.altitude === 'project') {
       const fit = Math.max(1, 1.3 / this.camera.aspect);
       this.camera.position.sub(this.controls.target).multiplyScalar(fit / this.viewScale).add(this.controls.target);
       this.viewScale = fit; this.controls.maxDistance = (this.room?.team?.remote?600:52) * fit;
@@ -514,7 +603,8 @@ export class OfficeScene {
   };
   setPanelWidth(width:number){if(width===this.panelWidth)return;this.panelWidth=width;this.resize();}
   setWalk(value: boolean) {
-    this.walk = value; this.keys.clear(); this.controls.enabled = !value; this.rig.position.set(0, 0, 0); this.rig.rotation.set(0, 0, 0);
+    if (this.altitude === 'sky' && value) return;
+    this.walk = value; this.keys.clear(); this.controls.enabled = this.altitude==='project' && !value && this.cinemaStep===null && !this.blending; this.rig.position.set(0, 0, 0); this.rig.rotation.set(0, 0, 0);
     if (value) { this.camera.position.set(2.7, 1.7, 6.7); this.yaw = .04; this.pitch = -.05; this.camera.rotation.order = 'YXZ'; this.camera.rotation.set(this.pitch, this.yaw, 0); }
     else { this.camera.position.set(16, 15, 20); this.controls.target.set(-.4, .7, -.3); this.viewScale = 1; this.controls.update(); }
     this.resize();
@@ -522,11 +612,11 @@ export class OfficeScene {
   }
   focus(id: string) { const a = this.actors.get(id); if (!a) return; if (this.walk) { this.camera.position.copy(a.home).add(new THREE.Vector3(0, 1.7, 1.5)); this.yaw = 0; this.pitch = -.05; } else { this.controls.target.copy(a.home).add(new THREE.Vector3(0, .9, -.4)); this.camera.position.copy(a.home).add(new THREE.Vector3(8, 8, 10)); } }
   zoom(factor: number) { if (this.walk) return; this.camera.position.sub(this.controls.target).multiplyScalar(factor).add(this.controls.target); this.controls.update(); }
-  pointerDown = (e: PointerEvent) => { this.down = { x: e.clientX, y: e.clientY }; this.dragging = true; if (this.walk) this.renderer.domElement.setPointerCapture(e.pointerId); };
-  pointerMove = (e: PointerEvent) => { if (this.walk && this.dragging) { this.yaw -= e.movementX * .004; this.pitch = THREE.MathUtils.clamp(this.pitch - e.movementY * .004, -1.1, 1.1); } };
-  pointerUp = (e: PointerEvent) => { this.dragging = false; if (Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 6) return; const rect = this.renderer.domElement.getBoundingClientRect(); this.ray.setFromCamera(new THREE.Vector2((e.clientX - rect.left) / rect.width * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), this.camera); this.selectHit(); };
+  pointerDown = (e: PointerEvent) => { if (this.altitude === 'sky' && this.clouds.pointerDown(e)) return; this.down = { x: e.clientX, y: e.clientY }; this.dragging = true; if (this.walk) this.renderer.domElement.setPointerCapture(e.pointerId); };
+  pointerMove = (e: PointerEvent) => { if (this.altitude === 'sky' && this.clouds.pointerMove(e)) return; if (this.walk && this.dragging) { this.yaw -= e.movementX * .004; this.pitch = THREE.MathUtils.clamp(this.pitch - e.movementY * .004, -1.1, 1.1); } };
+  pointerUp = (e: PointerEvent) => { if (this.altitude === 'sky' && this.clouds.pointerUp(e)) return; this.dragging = false; if (Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 6) return; const rect = this.renderer.domElement.getBoundingClientRect(); this.ray.setFromCamera(new THREE.Vector2((e.clientX - rect.left) / rect.width * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), this.camera); this.selectHit(); };
   contextMenu = (e: Event) => { e.preventDefault(); };
-  keyDown = (e: KeyboardEvent) => { if(this.cinemaStep!==null)return; if ((e.target as HTMLElement).closest('input,textarea,select,[contenteditable=true]')) return; if (this.walk && ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(e.key.toLowerCase())) { e.preventDefault(); this.keys.add(e.key.toLowerCase()); } if (e.key === 'Escape' && this.walk) this.setWalk(false); if (e.key.toLowerCase() === 'e' && this.walk) { this.ray.setFromCamera(new THREE.Vector2(0, 0), this.camera); this.selectHit(); } };
+  keyDown = (e: KeyboardEvent) => { if(this.cinemaStep!==null)return; if ((e.target as HTMLElement).closest('input,textarea,select,[contenteditable=true]')) return; if (this.walk && ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(e.key.toLowerCase())) { e.preventDefault(); this.keys.add(e.key.toLowerCase()); } if (e.key === 'Escape' && this.altitude==='project' && !this.walk) this.onLeaveProject?.(); if (e.key === 'Escape' && this.walk) this.setWalk(false); if (e.key.toLowerCase() === 'e' && this.walk) { this.ray.setFromCamera(new THREE.Vector2(0, 0), this.camera); this.selectHit(); } };
   keyUp = (e: KeyboardEvent) => { this.keys.delete(e.key.toLowerCase()); };
   blur = () => { this.keys.clear(); this.dragging = false; };
   selectHit() { const hit = this.ray.intersectObjects([...this.clickable,...(this.neighborWorld.visible?this.neighborClickable:[])]).find(h => h.object.visible && h.object.parent?.visible !== false); if (hit?.object.userData.agentId) { if(this.neighborActors.has(hit.object.userData.agentId)){this.onTeammate?.();return;}if (this.whipArmed) this.onWhip?.(hit.object.userData.agentId); else this.onSelect(hit.object.userData.agentId); if (this.renderer.xr.isPresenting) this.onStatus?.('Desk selected. Inspect its screen or return to desktop for task controls.'); } else {const office=this.district.hit(this.ray);if(office){if(office===this.room?.team?.remote?.id)this.focusOffice();else this.onOfficeSelect?.(office);}} }
@@ -570,7 +660,22 @@ export class OfficeScene {
       const speed = dt * (this.keys.has('shift') ? 6 : 3.4) / Math.max(1, Math.hypot(forward, side));
       this.move((side * Math.cos(this.yaw) - forward * Math.sin(this.yaw)) * speed, (-forward * Math.cos(this.yaw) - side * Math.sin(this.yaw)) * speed);
     } else if (!this.renderer.xr.isPresenting) {
-      if(this.cinemaShot){const amount=this.reduced?1:1-Math.exp(-dt*1.65);this.camera.position.lerp(this.cinemaShot.position,amount);this.controls.target.lerp(this.cinemaShot.target,amount);this.camera.lookAt(this.controls.target);}else this.controls.update();
+      if (this.blending) {
+        const goal = this.altitude === 'project' ? 1 : 0;
+        this.blend = THREE.MathUtils.damp(this.blend, goal, 3.4, dt);
+        if (Math.abs(this.blend - goal) < .012) { this.blend = goal; this.blending = false; this.applyShell(); }
+        else this.applyShell();
+        const t = this.reduced ? goal : this.blend * this.blend * (3 - 2 * this.blend);
+        this.camera.position.lerpVectors(this.blendFrom.position, this.blendTo.position, this.altitude === 'project' ? t : 1 - t);
+        this.controls.target.lerpVectors(this.blendFrom.target, this.blendTo.target, this.altitude === 'project' ? t : 1 - t);
+        this.camera.lookAt(this.controls.target);
+      } else if (this.altitude === 'sky') {
+        this.clouds.update(this.elapsed, this.reduced);
+      } else if(this.cinemaShot){const amount=this.reduced?1:1-Math.exp(-dt*1.65);this.camera.position.lerp(this.cinemaShot.position,amount);this.controls.target.lerp(this.cinemaShot.target,amount);this.camera.lookAt(this.controls.target);}
+      else {
+        this.controls.update();
+        this.clouds.maybeLeaveFromProject(this.camera.position.distanceTo(this.controls.target));
+      }
     }
     let chatting = 0;
     for (const actor of this.actors.values()) {
@@ -634,11 +739,12 @@ export class OfficeScene {
       const w=this.container.clientWidth,h=this.container.clientHeight;
       const markers=[...this.actors.values()].filter(a=>a.agent.status!=='ejected').map(actor=>{const p=actor.group.position.clone().add(new THREE.Vector3(0,2.6,0)).project(this.camera);return {id:actor.agent.id,x:Math.round((p.x+1)*w/2),y:Math.round((1-p.y)*h/2),status:actor.workStatus,depth:p.z};}).filter(p=>p.depth>0 && p.depth<1);
       const inspectingTeammate=this.controls.target.length()>20 || this.camera.position.distanceTo(this.controls.target)>100;
-      this.onMarkers(this.walk || this.renderer.xr.isPresenting || inspectingTeammate ? [] : markers);
+      this.onMarkers(this.altitude!=='project' || this.walk || this.renderer.xr.isPresenting || inspectingTeammate ? [] : markers);
     }
-    this.city.update(this.elapsed, this.reduced);
+    if (this.altitude !== 'sky') this.clouds.update(this.elapsed, this.reduced);
+    if (this.city.root.visible) this.city.update(this.elapsed, this.reduced);
     this.renderer.info.autoReset=false;this.renderer.info.reset();
-    if(!this.renderer.xr.isPresenting && this.container.clientWidth>=700) this.composer.render(dt);
+    if(!this.renderer.xr.isPresenting && this.altitude==='project' && this.container.clientWidth>=700) this.composer.render(dt);
     else this.renderer.render(this.scene, this.camera);
     if (this.frameCount % 60 === 0) { this.renderer.domElement.dataset.drawCalls = String(this.renderer.info.render.calls); this.renderer.domElement.dataset.triangles = String(this.renderer.info.render.triangles); }
   };
@@ -651,7 +757,7 @@ export class OfficeScene {
     this.renderer.xr.removeEventListener('sessionstart', this.syncRendering);
     this.renderer.xr.removeEventListener('sessionend', this.sessionEnded);
     const own=this.world;this.world=this.neighborWorld;const actors=this.actors;this.actors=this.neighborActors;this.clearWorld();this.world=own;this.actors=actors;
-    this.district.dispose();this.city.dispose();this.composer.passes.forEach(pass=>pass.dispose());this.composer.dispose();
+    this.clouds.dispose();this.district.dispose();this.city.dispose();this.composer.passes.forEach(pass=>pass.dispose());this.composer.dispose();
     this.resizeObserver.disconnect(); this.controls.dispose(); this.clearWorld();
     this.flow.traverse(o=>{const m=o as THREE.Mesh;if(m.geometry)m.geometry.dispose();if(m.material)(m.material as THREE.Material).dispose();});this.flow.clear();
     this.renderer.domElement.removeEventListener('pointerdown', this.pointerDown); this.renderer.domElement.removeEventListener('pointermove', this.pointerMove); this.renderer.domElement.removeEventListener('pointerup', this.pointerUp); this.renderer.domElement.removeEventListener('contextmenu', this.contextMenu);

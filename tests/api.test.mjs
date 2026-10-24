@@ -17,6 +17,9 @@ test('local companion enforces its boundary and preserves room and agent lifecyc
   const req=async(route,body,method='POST')=>{const r=await fetch(base+'/api'+route,{method:body===undefined?'GET':method,headers:{cookie,...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:r.status,data:await r.json()};};
   const blocked=await fetch(base+'/api/connect',{method:'POST',headers:{cookie,Origin:'https://untrusted.invalid','Content-Type':'application/json'},body:'{}'});assert.equal(blocked.status,403);
   const initial=await req('/state');assert.equal(initial.data.rooms[0].demo,true);
+  assert.ok(initial.data.workspaces?.length, 'older rooms migrate into a workspace so the sky is never empty');
+  assert.equal(initial.data.rooms[0].workspaceId, initial.data.workspaces[0].id);
+  assert.ok(Number.isFinite(initial.data.rooms[0].cloud?.x));
   const demoBefore=initial.data.rooms[0];
   const rejectedTemplate=await req(`/rooms/${demoBefore.id}/dispatch`,{prompt:'Must not replace the existing mission',templateId:'missing-template'});
   assert.equal(rejectedTemplate.status,409);
@@ -24,6 +27,11 @@ test('local companion enforces its boundary and preserves room and agent lifecyc
   assert.equal(demoAfter.goal,demoBefore.goal);assert.deepEqual(demoAfter.workItems,demoBefore.workItems);assert.deepEqual(demoAfter.agents,demoBefore.agents);
   const invalid=await req('/rooms',{name:'Bad path',path:'relative/path',demo:true});assert.equal(invalid.status,409);
   const created=await req('/rooms',{name:'Isolated integration test',path:temp,demo:false});assert.equal(created.status,200);const room=created.data.room;
+  assert.equal(room.workspaceId, initial.data.workspaces[0].id, 'a new project lands in the current workspace');
+  assert.ok(Number.isFinite(room.cloud.x) && Number.isFinite(room.cloud.y), 'a new project gets a cloud spot');
+  const extraSky=await req('/workspaces',{name:'Side quests'});assert.equal(extraSky.status,200);
+  const moved=await req(`/workspaces/${extraSky.data.workspace.id}/rooms`,{roomId:room.id});assert.equal(moved.status,200);assert.equal(moved.data.room.workspaceId,extraSky.data.workspace.id);
+  const parked=await req(`/rooms/${room.id}/cloud`,{x:11,y:-6});assert.equal(parked.status,200);assert.equal(parked.data.cloud.x,11);
   const connected=await req('/connect',{});assert.equal(connected.data.account.email,'fixture@example.invalid');
   const rejectedModel=await req(`/rooms/${room.id}/dispatch`,{prompt:'Unavailable model must not replace work',model:'missing-model'});
   assert.equal(rejectedModel.status,409);

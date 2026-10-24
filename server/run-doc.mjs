@@ -10,7 +10,7 @@ export const commentFields = z.object({ blockId: z.string().trim().min(1).max(10
 
 export function attributionOf(receipt, item) {
   if (receipt.source === 'user-recovery') return 'operator';
-  if (receipt.source === 'cursor-reported' || receipt.source === 'claude-reported') return 'self-reported';
+  if (['cursor-reported', 'claude-reported', 'codex-reported'].includes(receipt.source)) return 'self-reported';
   if (receipt.source !== 'observed-command') return 'office-recorded';
   if (receipt.kind !== 'test') return 'observed';
   const current = receipt.passed === true && receipt.stableWorkspace === true && receipt.cwdVerified === true && !!item.reviewState?.version && receipt.workspaceVersion === item.reviewState.version;

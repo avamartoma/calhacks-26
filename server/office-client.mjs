@@ -29,7 +29,7 @@ export function createOfficeClient({ url = 'http://127.0.0.1:4314', project = pr
     return state.rooms.filter(room => !room.demo && path.relative(actual, room.path) === '');
   }
   async function room(id) { const found = (await rooms()).find(r => r.id === id); if (!found) throw new Error('Choose a live office belonging to this workspace.'); return found; }
-  const reporting = provider => { if (!['cursor', 'claude-code'].includes(provider)) throw new Error('Invalid reporting tool'); return `/${provider}`; };
+  const reporting = provider => { if (!['cursor', 'claude-code', 'codex-cli'].includes(provider)) throw new Error('Invalid reporting tool'); return `/${provider}`; };
   // No credential travels with a report. The office attributes it to whoever is signed in
   // there, so nothing secret belongs in .cursor/mcp.json or .mcp.json.
   return { request, rooms, room,
