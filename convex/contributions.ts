@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
+import { requireAccess } from "./access";
 import { recordEvent } from "./events";
 import { assertNonEmpty, contributionStatusValidator } from "./validators";
 
@@ -11,13 +12,10 @@ export const propose = mutation({
     summary: v.string(),
   },
   handler: async (ctx, args) => {
+    await requireAccess(ctx, args.toProjectId, "editor");
     const session = await ctx.db.get(args.fromSessionId);
     if (!session) {
       throw new Error(`Session ${args.fromSessionId} not found`);
-    }
-    const project = await ctx.db.get(args.toProjectId);
-    if (!project) {
-      throw new Error(`Project ${args.toProjectId} not found`);
     }
     const branch = assertNonEmpty(args.branch, "branch");
     const summary = assertNonEmpty(args.summary, "summary");
@@ -48,6 +46,7 @@ export const setStatus = mutation({
     if (!contribution) {
       throw new Error(`Contribution ${args.contributionId} not found`);
     }
+    await requireAccess(ctx, contribution.toProjectId, "editor");
     await ctx.db.patch(args.contributionId, { status: args.status });
     await recordEvent(ctx, {
       projectId: contribution.toProjectId,

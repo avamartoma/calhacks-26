@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import { readFile, writeFile, mkdir, rename, realpath, stat, copyFile } from 'node:fs/promises';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { Codex, codexInstalled, installCodex, openInBrowser } from './codex.mjs';
@@ -30,7 +31,23 @@ import { createCodexCallback, createClaudeLogin, createCursorLogin } from './pro
 import { createCloud } from './cloud.mjs';
 import { editPaths } from './cloud-sync.mjs';
 
+function loadLocalEnv(file) {
+  let text;
+  try { text = readFileSync(file, 'utf8'); } catch { return; }
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+}
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+loadLocalEnv(path.join(root, '.env.local'));
 const dataDir = path.resolve(process.env.OFFICE_DATA_DIR || path.join(root, '.office'));
 await mkdir(dataDir, { recursive: true });
 const stateFile = path.join(dataDir, 'state.json');
@@ -99,7 +116,13 @@ function changed() {
     writeQueue = writeQueue.then(async () => { await writeFile(stateFile + '.tmp', serialized); await rename(stateFile + '.tmp', stateFile); }).catch(e => console.error('State could not be saved:', e.message));
   }, 500);
 }
-const cloud = createCloud({ changed, userId: () => liveIdentity?.sub || 'local' });
+const cloud = createCloud({
+  changed,
+  authToken: async () => {
+    const session = await auth.current();
+    return session && !session.stale ? session.idToken : null;
+  },
+});
 function findThread(threadId) { for (const room of state.rooms) { const a = room.agents.find(a => a.threadId === threadId); if (a) return { room, a }; } return {}; }
 const skillNames = ['office-manager', 'office-handoff', 'office-review'];
 const skillText = Object.fromEntries(await Promise.all(skillNames.map(async n => [n, await readFile(path.join(root, 'skills', n, 'SKILL.md'), 'utf8')])));

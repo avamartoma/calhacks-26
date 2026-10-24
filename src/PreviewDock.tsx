@@ -11,8 +11,10 @@ export function PreviewDock({ cloud }: { cloud?: CloudPreview }) {
         <span className={`preview-status preview-${status}`}>{labels[status]}</span>
       </header>
       {status === 'live' && cloud?.previewUrl
-        ? <iframe title="Live preview" src={cloud.previewUrl} />
-        : <p>{cloud?.detail || 'Opening the cloud environment…'}</p>}
+        ? <iframe key={cloud.previewUrl} title="Live preview" src={cloud.previewUrl} />
+        : cloud?.snapshotUrl
+          ? <img alt="Last preview" src={cloud.snapshotUrl} />
+          : <p>{cloud?.detail || 'Opening the cloud environment…'}</p>}
     </aside>
   );
 }
