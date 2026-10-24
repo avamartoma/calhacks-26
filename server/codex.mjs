@@ -6,6 +6,47 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EventEmitter } from 'node:events';
 
+const runtimeDir = fileURLToPath(new URL('../.office/runtime', import.meta.url));
+// Keep in step with the runtime:install script in package.json.
+export const CODEX_PACKAGE = '@openai/codex@0.156.1';
+
+function onPath(name) {
+  const exts = process.platform === 'win32' ? (process.env.PATHEXT || '.EXE;.CMD').split(';') : [''];
+  return (process.env.PATH || '').split(path.delimiter).some(dir => dir && exts.some(ext => existsSync(path.join(dir, name + ext))));
+}
+
+/** True when a Codex CLI can be started: an explicit binary, the project-local runtime, or `codex` on PATH. */
+export function codexInstalled() {
+  if (process.env.OFFICE_CODEX_BIN) return true;
+  if (existsSync(path.join(runtimeDir, 'node_modules', '@openai', 'codex', 'bin', 'codex.js'))) return true;
+  if (process.platform === 'win32' && existsSync(path.join(process.env.APPDATA || '', 'npm', 'node_modules', '@openai', 'codex', 'bin', 'codex.js'))) return true;
+  return onPath('codex');
+}
+
+/** Installs the pinned Codex CLI into the project-local runtime, which `start` prefers. */
+export function installCodex() {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--prefix', runtimeDir, '--no-save', '--package-lock=false', CODEX_PACKAGE], { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true, shell: process.platform === 'win32' });
+    let stderr = '';
+    child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-2000); });
+    child.on('error', error => reject(new Error(`Could not install Codex: ${error.message}. Install Node.js with npm, or run npm run runtime:install.`)));
+    child.on('exit', code => code === 0 ? resolve() : reject(new Error(`Could not install Codex (npm exited with ${code}). Check your internet connection and try again.${stderr ? `\n${stderr.trim().split('\n').at(-1)}` : ''}`)));
+  });
+}
+
+/** Opens a sign-in page in the default browser. Only https URLs are opened, without a shell. */
+export function openInBrowser(url) {
+  if (!/^https:\/\//.test(url)) return Promise.resolve(false);
+  const [command, args] = process.platform === 'darwin' ? ['open', [url]] : process.platform === 'win32' ? ['rundll32', ['url.dll,FileProtocolHandler', url]] : ['xdg-open', [url]];
+  return new Promise(resolve => {
+    try {
+      const child = spawn(command, args, { stdio: 'ignore', detached: true, windowsHide: true });
+      child.on('error', () => resolve(false));
+      child.on('spawn', () => { child.unref(); resolve(true); });
+    } catch { resolve(false); }
+  });
+}
+
 export class Codex extends EventEmitter {
   constructor() { super(); this.pending = new Map(); this.seq = 0; this.ready = null; this.process = null; }
   async connect() {

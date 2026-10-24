@@ -11,6 +11,7 @@
 | Team transport | `server/team.mjs` | Paired local offices, status exchange and cross-office handoffs |
 | External execution | `server/cursor.mjs`, `scripts/cursor-mcp.mjs` | Cursor ownership and explicitly reported activity |
 | Launched Cursor agents | `server/cursor-agent.mjs` | Office-owned Cursor SDK runs: runtime selection, observable stream and cancellation |
+| Launched Claude agents | `server/claude-agent.mjs`, `src/ClaudePanel.tsx` | Office-owned Claude Agent SDK runs: model and access selection, sandboxed tools, observable stream and cancellation |
 | Sign-in | `server/oauth.mjs` | Auth0 Authorization Code with PKCE, identity-token verification and local session storage |
 | Agent identity | `server/identity.mjs` | Credential subjects and per-identity track records |
 | Public runs | `server/run-doc.mjs` | Block projection, attribution labels, block-anchored comments and the run feed |
