@@ -154,7 +154,7 @@ export class OfficeScene {
     const canvas = document.createElement('canvas'); canvas.width = screen ? 768 : 512; canvas.height = screen ? 480 : 144;
     const ctx = canvas.getContext('2d')!; ctx.fillStyle = screen ? '#182d29' : '#f6f4e9'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     if (screen) {
-      ctx.fillStyle = '#2c4840'; ctx.fillRect(0, 0, 768, 44); ctx.fillStyle = '#b8d4b2'; ctx.font = '18px sans-serif'; ctx.fillText('FOURTEENTH  /  WORKSPACE', 24, 29);
+      ctx.fillStyle = '#2c4840'; ctx.fillRect(0, 0, 768, 44); ctx.fillStyle = '#b8d4b2'; ctx.font = '18px sans-serif'; ctx.fillText('ITERATION1  /  WORKSPACE', 24, 29);
       ctx.fillStyle = color; ctx.fillRect(24, 71, 9, 9); ctx.fillStyle = '#e9f0dd'; ctx.font = 'bold 30px sans-serif'; ctx.fillText(title.slice(0, 32), 47, 95);
       ctx.fillStyle = '#9cbbab'; ctx.font = '20px sans-serif'; ctx.fillText(subtitle.slice(0, 58), 24, 137);
       ctx.strokeStyle = '#3f574c'; ctx.beginPath(); ctx.moveTo(24, 157); ctx.lineTo(744, 157); ctx.stroke();
@@ -218,7 +218,7 @@ export class OfficeScene {
     // A true sphere: expression comes from the eyes, and the costume marks the role.
     const geometry = new THREE.SphereGeometry(.5, 40, 28);
     const skin = new THREE.MeshStandardMaterial({ color: look.color, roughness: .48, metalness: 0, emissive: look.color, emissiveIntensity: .04, envMapIntensity: 0 });
-    skin.customProgramCacheKey = () => 'fourteenth-blob-v3';
+    skin.customProgramCacheKey = () => 'iteration1-blob-v3';
     skin.onBeforeCompile = shader => {
       shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight = mix(outgoingLight, diffuseColor.rgb, .28);\n#include <opaque_fragment>');
     };
@@ -317,7 +317,7 @@ export class OfficeScene {
     for (const x of [6.8, 9.6]) this.box(this.world, x, .65, .5, .065, 1.3, .065, '#536c59');
     const board = new THREE.Mesh(new THREE.PlaneGeometry(3.48, 1.88), new THREE.MeshBasicMaterial({ map: this.textTexture('THE OFFICE BOARD', room.demo ? 'DEMO OFFICE · FLOOR 14' : 'LIVE OFFICE · FLOOR 14', '#d8a466', true, room.goal || 'Your next big idea starts here. Assign a mission to the manager.') })); board.position.set(8.2, 1.6, .6); this.world.add(board);
     this.box(this.world, 6.1, .06, 6.2, 4.4, .04, 2.1, '#687f66');
-    this.sign('14 / FOURTEENTH', 'A place for your agents to do their thing.', 6.1, .55, 7.3, 3.4);
+    this.sign('14 / ITERATION1', 'A place for your agents to do their thing.', 6.1, .55, 7.3, 3.4);
     } else {
       this.shell.updateMatrixWorld(true);
       // Batch the authored static architecture by material, keeping draw calls bounded for XR.

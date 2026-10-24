@@ -70,7 +70,7 @@ test('demo records a rejected completion and preserves that snapshot after later
   assert.match(build.evidence.find(receipt=>receipt.kind==='test').text,/case/i);
 });
 test('code checkpoints preserve the Git index, exclude untracked files and branch isolated code',async t=>{
-  const dir=await mkdtemp(path.join(os.tmpdir(),'fourteenth-checkpoint-'));t.after(async()=>{if(path.basename(dir).startsWith('fourteenth-checkpoint-'))await rm(dir,{recursive:true,force:true});});
+  const dir=await mkdtemp(path.join(os.tmpdir(),'iteration1-checkpoint-'));t.after(async()=>{if(path.basename(dir).startsWith('iteration1-checkpoint-'))await rm(dir,{recursive:true,force:true});});
   const git=async(...args)=>(await exec('git',args,{cwd:dir,windowsHide:true})).stdout.trim();await git('init');await git('config','user.name','Fixture');await git('config','user.email','fixture@example.invalid');await writeFile(path.join(dir,'app.txt'),'baseline');await git('add','app.txt');await git('commit','-m','Baseline');
   await writeFile(path.join(dir,'app.txt'),'staged');await git('add','app.txt');await writeFile(path.join(dir,'app.txt'),'checkpoint');await writeFile(path.join(dir,'private.txt'),'untracked');
   const room=makeRoom();room.skills=['office-manager','office-handoff'];room.demo=false;room.path=dir;const item=workItem('A','A',{agentId:room.agents[0].id});room.workItems=[item];const data=path.join(dir,'.office');await import('node:fs/promises').then(fs=>fs.mkdir(data));const point=await checkpoint(room,'Before change',data);

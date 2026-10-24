@@ -1,5 +1,5 @@
 {
-  "asset": "Fourteenth office interior",
+  "asset": "Iteration1 office interior",
   "authoring": "Original geometry authored locally through ahujasid/blender-mcp execute_blender_code",
   "blenderVersion": "4.5.9 LTS",
   "mcpPackageVersion": "1.9.1",
@@ -21,5 +21,5 @@
   ],
   "sourceLicense": "Original project asset; created for the project owner",
   "integrationLicense": "blender-mcp: MIT; Blender: GPL",
-  "editableSource": "Regenerate assets/fourteenth-office.blend with scripts/build_office_assets.py; the machine-local .blend is excluded from this public snapshot."
+  "editableSource": "Regenerate assets/iteration1-office.blend with scripts/build_office_assets.py; the machine-local .blend is excluded from this public snapshot."
 }

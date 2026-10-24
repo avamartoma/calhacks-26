@@ -83,18 +83,18 @@ test('Cursor client accepts only a loopback origin', () => {
 });
 
 test('stdio MCP runs a complete Cursor assignment without model credentials or Codex sign-in', { timeout: 30000 }, async t => {
-  const root = path.resolve('.'); const temp = await mkdtemp(path.join(os.tmpdir(), 'fourteenth-cursor-'));
+  const root = path.resolve('.'); const temp = await mkdtemp(path.join(os.tmpdir(), 'iteration1-cursor-'));
   const base = 'http://127.0.0.1:44319'; let child; let client;
   async function startServer() {
     child = spawn(process.execPath, ['server/index.mjs', '--production'], { cwd: root, windowsHide: true, env: { ...process.env, PORT: '44319', OFFICE_DATA_DIR: temp, OFFICE_CODEX_HOME: path.join(temp, 'codex'), OFFICE_CODEX_BIN: process.execPath, OFFICE_CODEX_ARGS: JSON.stringify([path.join(root, 'tests/fake-codex.mjs')]), OFFICE_FIXTURE_SIGNED_OUT: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
     let errors = ''; child.stderr.on('data', d => errors += d);
-    await new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error(errors || 'Startup timed out')), 10000); child.stdout.on('data', d => { if (String(d).includes('Fourteenth office')) { clearTimeout(timer); resolve(); } }); child.once('exit', () => { clearTimeout(timer); reject(new Error(errors || 'Server exited')); }); });
+    await new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error(errors || 'Startup timed out')), 10000); child.stdout.on('data', d => { if (String(d).includes('Iteration1 office')) { clearTimeout(timer); resolve(); } }); child.once('exit', () => { clearTimeout(timer); reject(new Error(errors || 'Server exited')); }); });
   }
   async function stopServer() { if (child && child.exitCode === null) { const exited = new Promise(resolve => child.once('exit', resolve)); child.kill(); await exited; } }
-  t.after(async () => { await client?.close(); await stopServer(); if (path.resolve(temp).startsWith(path.resolve(os.tmpdir()) + path.sep + 'fourteenth-cursor-')) await rm(temp, { recursive: true, force: true }); });
+  t.after(async () => { await client?.close(); await stopServer(); if (path.resolve(temp).startsWith(path.resolve(os.tmpdir()) + path.sep + 'iteration1-cursor-')) await rm(temp, { recursive: true, force: true }); });
   await startServer();
-  client = new Client({ name: 'fourteenth-test', version: '1.0.0' });
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'scripts/cursor-mcp.mjs')], env: { FOURTEENTH_URL: base, FOURTEENTH_PROJECT: temp }, stderr: 'pipe' }));
+  client = new Client({ name: 'iteration1-test', version: '1.0.0' });
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'scripts/cursor-mcp.mjs')], env: { ITERATION1_URL: base, ITERATION1_PROJECT: temp }, stderr: 'pipe' }));
   const tools = await client.listTools(); assert.equal(tools.tools.length, 8); assert.ok(!tools.tools.some(tool => /grok_review/.test(tool.name)));
   const call = async (name, args) => { const res = await client.callTool({ name, arguments: args }); return { ...JSON.parse(res.content[0].text), isError: res.isError }; };
   const opened = await call('office_open', { name: 'Cursor integration test' }); assert.ok(opened.roomId);

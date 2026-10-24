@@ -4,7 +4,7 @@ import math
 import os
 from pathlib import Path
 
-ROOT = Path(os.environ.get("FOURTEENTH_ROOT", Path.cwd())).resolve()
+ROOT = Path(os.environ.get("ITERATION1_ROOT", Path.cwd())).resolve()
 (ROOT / "assets").mkdir(exist_ok=True)
 (ROOT / "public/models").mkdir(parents=True, exist_ok=True)
 from mathutils import Vector
@@ -111,7 +111,7 @@ def chair(x, z, executive=False):
         cube('Soft adjustable armrest',x+side*.44,1.04,z,.14,.07,.47,rubber,.024)
     cube('Adjustable headrest',x,1.66,z+.40,.49,.21,.1,upholstery,.055)
 
-cube('Fourteenth structural slab',0,-.34,0,22,.68,18,stone,.035)
+cube('Iteration1 structural slab',0,-.34,0,22,.68,18,stone,.035)
 for ix in range(22):
     for iz in range(18):
         cube('Large format stone floor tile',-10.5+ix,.018,-8.5+iz,.988,.027,.988,tileA if (ix+iz)%4 else tileB,.007)
@@ -250,7 +250,7 @@ for o in list(bpy.context.scene.objects):
         bpy.context.view_layer.objects.active=o
         for modifier in list(o.modifiers):
             bpy.ops.object.modifier_apply(modifier=modifier.name)
-bpy.ops.wm.save_as_mainfile(filepath=str(ROOT / "assets/fourteenth-office.blend"))
+bpy.ops.wm.save_as_mainfile(filepath=str(ROOT / "assets/iteration1-office.blend"))
 bpy.ops.export_scene.gltf(filepath=str(ROOT / "public/models/office-shell.glb"),export_format='GLB',export_apply=True,export_lights=False,export_cameras=False)
 
 # A standalone inspection render from the actual scene.
@@ -273,5 +273,5 @@ bpy.context.scene.render.resolution_y=1000
 bpy.context.scene.render.resolution_percentage=100
 bpy.context.scene.render.image_settings.file_format='PNG'
 bpy.context.scene.render.filepath=str(ROOT / "assets/blender-office-review.png")
-bpy.ops.wm.save_as_mainfile(filepath=str(ROOT / "assets/fourteenth-office.blend"))
+bpy.ops.wm.save_as_mainfile(filepath=str(ROOT / "assets/iteration1-office.blend"))
 print('OFFICE_EXPORT_COMPLETE',len(bpy.context.scene.objects),'objects')

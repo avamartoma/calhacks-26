@@ -15,11 +15,11 @@ const task = { task: 'Make search keyboard accessible', acceptanceCriteria: ['Se
 
 test('an issued token is verifiable once, never recoverable and revocable', () => {
   const { state } = fixture();
-  const { token, identity } = issueAgentIdentity(state, { label: 'Davin · Cursor' });
+  const { token, identity } = issueAgentIdentity(state, { label: 'Davin ? Cursor' });
   assert.equal(verifyAgentToken(state, token).sub, identity.sub);
   assert.equal(publicIdentity(identity).hash, undefined);
   assert.ok(!JSON.stringify(state.identities).includes(token));
-  for (const wrong of [undefined, '', 'fourteenth_agent_' + 'x'.repeat(40), token + 'x', token.slice(0, -1)]) assert.equal(verifyAgentToken(state, wrong), null);
+  for (const wrong of [undefined, '', 'iteration1_agent_' + 'x'.repeat(40), token + 'x', token.slice(0, -1)]) assert.equal(verifyAgentToken(state, wrong), null);
   revokeIdentity(state, identity.sub);
   assert.equal(verifyAgentToken(state, token), null);
   assert.throws(() => revokeIdentity(state, identity.sub), /Unknown/);
@@ -29,7 +29,7 @@ test('an attributed run reuses its identity, accrues a record and refuses anothe
   const { state, room, desk } = fixture();
   const mine = issueAgentIdentity(state, { label: 'Mine' });
   const theirs = issueAgentIdentity(state, { label: 'Theirs' });
-  assert.throws(() => desk.start(room, { ...task, token: 'fourteenth_agent_' + 'z'.repeat(40) }), /not recognised/);
+  assert.throws(() => desk.start(room, { ...task, token: 'iteration1_agent_' + 'z'.repeat(40) }), /not recognised/);
 
   const run = desk.start(room, { ...task, token: mine.token });
   const worker = room.agents.find(a => a.id === run.agentId);

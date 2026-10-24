@@ -7,12 +7,12 @@ import os from 'node:os';
 import path from 'node:path';
 
 test('peer RPC sends directly, queues without restarting, preserves replacement and gates tickets',{timeout:30000},async t=>{
-  const temp=await mkdtemp(path.join(os.tmpdir(),'fourteenth-peers-')),root=path.resolve('.'),base='http://127.0.0.1:44321';
+  const temp=await mkdtemp(path.join(os.tmpdir(),'iteration1-peers-')),root=path.resolve('.'),base='http://127.0.0.1:44321';
   const project=await reviewProject(temp);
   const child=spawn(process.execPath,['server/index.mjs','--production'],{cwd:root,env:{...process.env,PORT:'44321',OFFICE_DATA_DIR:temp,OFFICE_CODEX_HOME:path.join(temp,'codex'),OFFICE_CODEX_BIN:process.execPath,OFFICE_CODEX_ARGS:JSON.stringify([path.join(root,'tests/fake-codex.mjs')])},windowsHide:true,stdio:['ignore','pipe','pipe']});
   let stderr='';child.stderr.on('data',d=>stderr+=d);
-  t.after(async()=>{const exited=new Promise(resolve=>child.once('exit',resolve));child.kill();await exited;if(path.dirname(temp)===os.tmpdir() && path.basename(temp).startsWith('fourteenth-peers-'))await rm(temp,{recursive:true,force:true});});
-  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(stderr||'Startup timed out')),10000);child.stdout.on('data',d=>{if(String(d).includes('Fourteenth office')){clearTimeout(timer);resolve();}});});
+  t.after(async()=>{const exited=new Promise(resolve=>child.once('exit',resolve));child.kill();await exited;if(path.dirname(temp)===os.tmpdir() && path.basename(temp).startsWith('iteration1-peers-'))await rm(temp,{recursive:true,force:true});});
+  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(stderr||'Startup timed out')),10000);child.stdout.on('data',d=>{if(String(d).includes('Iteration1 office')){clearTimeout(timer);resolve();}});});
   const cookie=(await fetch(base)).headers.get('set-cookie').split(';')[0];
   const req=async(route,body)=>{const res=await fetch(base+'/api'+route,{method:body===undefined?'GET':'POST',headers:{cookie,...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:res.status,data:await res.json()};};
   await req('/connect',{});const {room}=(await req('/rooms',{name:'Peer test',path:project,demo:false})).data;const endpoint=`/rooms/${room.id}`;

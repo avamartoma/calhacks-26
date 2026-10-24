@@ -18,7 +18,7 @@ export class CityEnvironment {
   private officeLotsKey = '';
 
   constructor(renderer: THREE.WebGLRenderer, scene: THREE.Scene) {
-    this.root.name = 'Fourteenth city district';
+    this.root.name = 'Iteration1 city district';
     scene.add(this.root);
     this.sky.scale.setScalar(2400);
     const sun = new THREE.Vector3(-.6,.48,-.5).normalize();
@@ -184,7 +184,7 @@ export class CityEnvironment {
       shader.fragmentShader=shader.fragmentShader.replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=mix(.64,.22,glass);');
       shader.fragmentShader=shader.fragmentShader.replace('#include <metalnessmap_fragment>','#include <metalnessmap_fragment>\nmetalnessFactor=mix(.16,.48,glass);');
     };
-    material.customProgramCacheKey=()=> 'fourteenth-city-facade-v3';
+    material.customProgramCacheKey=()=> 'iteration1-city-facade-v3';
     return material;
   }
 

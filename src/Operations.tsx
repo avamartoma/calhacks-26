@@ -38,8 +38,8 @@ function Evidence({item,room,expanded=false,showCriteria=true}:{item:WorkItem;ro
   </div>;
 }
 export function MissionControl({room,data,busy,action,onSelect,onRoom,initialCompose=false,onStarted,onConnect,onTask,onCursor,onCancel}:{onCancel?:()=>void;onCursor:()=>void;onConnect:()=>void;onTask:(id:string)=>void;initialCompose?:boolean;onStarted?:()=>void;room:Room;data:OfficeState;busy:boolean;action:Action;onSelect:(id:string)=>void;onRoom:(id:string)=>void}) {
-  const [compose,setCompose]=useState(initialCompose || !room.goal);const [template,setTemplate]=useState('feature');const [prompt,setPrompt]=useState(()=>sessionStorage.getItem(`fourteenth-mission:${room.id}`)||'');
-  useEffect(()=>{sessionStorage.setItem(`fourteenth-mission:${room.id}`,prompt);},[prompt,room.id]);
+  const [compose,setCompose]=useState(initialCompose || !room.goal);const [template,setTemplate]=useState('feature');const [prompt,setPrompt]=useState(()=>sessionStorage.getItem(`iteration1-mission:${room.id}`)||'');
+  useEffect(()=>{sessionStorage.setItem(`iteration1-mission:${room.id}`,prompt);},[prompt,room.id]);
   const cursorOwner=room.agents.find(a=>a.provider==='cursor' && a.turnId);
   const chosen=data.templates.find(t=>t.id===template);
   const [model,setModel]=useState('gpt-6-sol');

@@ -6,12 +6,12 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 test('real RPC delegation queues dependencies, unblocks verified work, and preserves replay snapshots',{timeout:30000},async t=>{
-  const temp=await mkdtemp(path.join(os.tmpdir(),'fourteenth-orchestration-'));const root=path.resolve('.');const base='http://127.0.0.1:44315';
+  const temp=await mkdtemp(path.join(os.tmpdir(),'iteration1-orchestration-'));const root=path.resolve('.');const base='http://127.0.0.1:44315';
   const project=await reviewProject(temp);
   const child=spawn(process.execPath,['server/index.mjs','--production'],{cwd:root,env:{...process.env,PORT:'44315',OFFICE_DATA_DIR:temp,OFFICE_CODEX_HOME:path.join(temp,'codex'),OFFICE_CODEX_BIN:process.execPath,OFFICE_CODEX_ARGS:JSON.stringify([path.join(root,'tests/fake-codex.mjs')])},windowsHide:true,stdio:['ignore','pipe','pipe']});
   let stderr='';child.stderr.on('data',d=>stderr+=d);
-  t.after(async()=>{const exited=new Promise(resolve=>child.once('exit',resolve));child.kill();await exited;if(path.basename(temp).startsWith('fourteenth-orchestration-'))await rm(temp,{recursive:true,force:true});});
-  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(stderr||'Startup timed out')),10000);child.stdout.on('data',d=>{if(String(d).includes('Fourteenth office')){clearTimeout(timer);resolve();}});});
+  t.after(async()=>{const exited=new Promise(resolve=>child.once('exit',resolve));child.kill();await exited;if(path.basename(temp).startsWith('iteration1-orchestration-'))await rm(temp,{recursive:true,force:true});});
+  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(stderr||'Startup timed out')),10000);child.stdout.on('data',d=>{if(String(d).includes('Iteration1 office')){clearTimeout(timer);resolve();}});});
   const cookie=(await fetch(base)).headers.get('set-cookie').split(';')[0];
   const req=async(route,body)=>{const res=await fetch(base+'/api'+route,{method:body===undefined?'GET':'POST',headers:{cookie,...(body!==undefined?{'Content-Type':'application/json'}:{})},...(body!==undefined?{body:JSON.stringify(body)}:{})});return {status:res.status,data:await res.json()};};
   await req('/connect',{});const {room}= (await req('/rooms',{name:'Queue test',path:project,demo:false})).data;

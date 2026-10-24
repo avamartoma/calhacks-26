@@ -4,7 +4,7 @@ import { z } from 'zod';
 // An agent identity is the durable subject a run is attributed to. The office issues
 // the token once; only its hash is stored. Auth0 replaces issue/verify later without
 // changing `credentialSub`, which is the field every attributed report is keyed on.
-const PREFIX = 'fourteenth_agent_';
+const PREFIX = 'iteration1_agent_';
 const digest = token => createHash('sha256').update(String(token)).digest();
 export const agentToken = z.string().trim().min(PREFIX.length + 16).max(200);
 const blankRecord = () => ({ started: 0, review: 0, blocked: 0, verified: 0 });

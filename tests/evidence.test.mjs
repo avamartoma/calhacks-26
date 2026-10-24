@@ -9,7 +9,7 @@ import { completionGaps, updateWork } from '../server/orchestration.mjs';
 import { checkWorkspace } from '../server/workspace-check.mjs';
 
 test('source edits and untracked files invalidate observed checks; ignored outputs do not', async t => {
-  const folder=await mkdtemp(path.join(os.tmpdir(),'fourteenth-evidence-'));
+  const folder=await mkdtemp(path.join(os.tmpdir(),'iteration1-evidence-'));
   t.after(()=>rm(folder,{recursive:true,force:true}));
   execFileSync('git',['init'],{cwd:folder,windowsHide:true,stdio:'ignore'});
   await writeFile(path.join(folder,'.gitignore'),'output.log\n');

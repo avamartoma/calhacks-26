@@ -1,6 +1,6 @@
 ---
 name: office-review
-description: Perform a bounded read-only verification of a Fourteenth office task and return actionable findings to its manager. Use when reviewing a concrete implementation, regression, or acceptance criterion.
+description: Perform a bounded read-only verification of a Iteration1 office task and return actionable findings to its manager. Use when reviewing a concrete implementation, regression, or acceptance criterion.
 ---
 
 Confirm the assigned acceptance criteria and inspect the actual changes. Review correctness, failure states, input boundaries, and integration behavior that materially affect the user's request. Remain read-only; the manager owns edits.

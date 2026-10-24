@@ -5,7 +5,7 @@ import type { Room } from './types';
 import './team.css';
 
 export function TeamPanel({room,onFloor,onHandoffs}:{room:Room;onFloor:()=>void;onHandoffs:()=>void}) {
-  const [owner,setOwner]=useState(localStorage.getItem('fourteenth-owner') || '');
+  const [owner,setOwner]=useState(localStorage.getItem('iteration1-owner') || '');
   const [addresses,setAddresses]=useState<string[]>([]),[address,setAddress]=useState('');
   const [code,setCode]=useState(''),[invitation,setInvitation]=useState(''),[expires,setExpires]=useState(0);
   const [tab,setTab]=useState<'invite'|'join'>('invite'),[error,setError]=useState(''),[busy,setBusy]=useState(false),[copied,setCopied]=useState(false);
@@ -32,15 +32,15 @@ export function TeamPanel({room,onFloor,onHandoffs}:{room:Room;onFloor:()=>void;
       </form>
       <details className="compact-disclosure"><summary>Connection settings</summary><p>Shared: agent assignments, ticket titles, file scopes and handoffs. Each person controls their own agents. Code stays in separate checkouts.</p><button className="secondary" disabled={busy} onClick={()=>run(async()=>{await officeApi(`/rooms/${room.id}/team/disconnect`,{});setInvitation('');})}>Disconnect teammate</button></details>
     </> : <>
-      <p className="quiet-copy">Connect a teammate’s Fourteenth office on the same project. Each person uses their own checkout and Codex account.</p>
+      <p className="quiet-copy">Connect a teammate’s Iteration1 office on the same project. Each person uses their own checkout and Codex account.</p>
       {room.demo?<p className="notice">Open a live project to connect a teammate.</p>:<>
-        <label>Your name<input value={owner} maxLength={60} onChange={e=>{setOwner(e.target.value);localStorage.setItem('fourteenth-owner',e.target.value);}} placeholder="Name shown to your teammate"/></label>
+        <label>Your name<input value={owner} maxLength={60} onChange={e=>{setOwner(e.target.value);localStorage.setItem('iteration1-owner',e.target.value);}} placeholder="Name shown to your teammate"/></label>
         <div className="tabs"><button onClick={()=>setTab('invite')} className={tab==='invite'?'active':''}>Invite teammate</button><button onClick={()=>setTab('join')} className={tab==='join'?'active':''}>Join teammate</button></div>
         {tab==='invite'?<>
           <label>Sharing address<select value={address} onChange={e=>setAddress(e.target.value)}>{addresses.map(a=><option key={a}>{a}</option>)}</select></label>
           <p className="quiet-copy">Use a trusted local network. Only the paired office can read shared work; your app and agent controls stay local.</p>
           <button className="primary full" disabled={busy || !owner.trim() || !address} onClick={()=>run(async()=>{const result=await officeApi(`/rooms/${room.id}/team/invite`,{owner,address});setInvitation(result.code);setExpires(result.expiresAt);setCopied(false);})}><Users size={16}/>Create invitation</button>
-          {invitation && <div className="team-invitation"><label>Invitation code<textarea rows={3} readOnly value={invitation}/></label><button className="secondary" onClick={()=>run(async()=>{await navigator.clipboard.writeText(invitation);setCopied(true);})}>{copied?<Check size={14}/>:<Copy size={14}/>} {copied?'Copied':'Copy invitation'}</button><small>Share privately. Expires at {new Date(expires).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}.</small><p>Teammate: open the same project in Fourteenth → Team → Join teammate.</p></div>}
+          {invitation && <div className="team-invitation"><label>Invitation code<textarea rows={3} readOnly value={invitation}/></label><button className="secondary" onClick={()=>run(async()=>{await navigator.clipboard.writeText(invitation);setCopied(true);})}>{copied?<Check size={14}/>:<Copy size={14}/>} {copied?'Copied':'Copy invitation'}</button><small>Share privately. Expires at {new Date(expires).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}.</small><p>Teammate: open the same project in Iteration1 → Team → Join teammate.</p></div>}
         </>:<form onSubmit={e=>{e.preventDefault();run(async()=>{await officeApi(`/rooms/${room.id}/team/join`,{owner,code});setCode('');});}}><label>Invitation code<textarea value={code} onChange={e=>setCode(e.target.value)} rows={4} required/></label><p className="quiet-copy">Joining shares assignments, ticket titles, file scopes and handoffs for this project.</p><button className="primary full" disabled={busy || !owner.trim() || !code.trim()}>Connect offices</button></form>}
       </>}
     </>}

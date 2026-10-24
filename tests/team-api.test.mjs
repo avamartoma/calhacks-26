@@ -16,19 +16,19 @@ test('shared offices expose status, not local credentials or execution data',()=
 });
 
 test('two independently owned offices synchronize handoffs, acknowledgments, replacement and reconnection',{timeout:90000},async t=>{
-  const temp=await mkdtemp(path.join(os.tmpdir(),'fourteenth-team-')),root=path.resolve('.');
+  const temp=await mkdtemp(path.join(os.tmpdir(),'iteration1-team-')),root=path.resolve('.');
   const clients=[];
   async function start(port,name){
     const dir=path.join(temp,name);await mkdir(dir,{recursive:true});
     const child=spawn(process.execPath,['server/index.mjs','--production'],{cwd:root,env:{...process.env,PORT:String(port),OFFICE_TEAM_PORT:String(port+100),OFFICE_DATA_DIR:dir,OFFICE_CODEX_HOME:path.join(dir,'codex'),OFFICE_CODEX_BIN:process.execPath,OFFICE_CODEX_ARGS:JSON.stringify([path.join(root,'tests/fake-codex.mjs')])},windowsHide:true,stdio:['ignore','pipe','pipe']});
     let errors='';child.stderr.on('data',d=>errors+=d);
-    await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(errors || 'Startup timeout')),12000);child.stdout.on('data',d=>{if(String(d).includes('Fourteenth office')){clearTimeout(timer);resolve();}});child.once('exit',()=>{clearTimeout(timer);reject(new Error(errors));});});
+    await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(errors || 'Startup timeout')),12000);child.stdout.on('data',d=>{if(String(d).includes('Iteration1 office')){clearTimeout(timer);resolve();}});child.once('exit',()=>{clearTimeout(timer);reject(new Error(errors));});});
     const base=`http://127.0.0.1:${port}`,cookie=(await fetch(base)).headers.get('set-cookie').split(';')[0];
     const client={child,dir,base,cookie,async req(route,body){const res=await fetch(base+'/api'+route,{method:body===undefined?'GET':'POST',headers:{cookie,...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:res.status,data:await res.json()};}};
     clients.push(client);await client.req('/connect',{});return client;
   }
   async function stop(client){if(client.child.exitCode!==null || client.child.signalCode!==null)return;await new Promise(resolve=>{client.child.once('exit',resolve);client.child.kill();});}
-  t.after(async()=>{await Promise.all(clients.map(stop));if(path.dirname(temp)===os.tmpdir() && path.basename(temp).startsWith('fourteenth-team-'))await rm(temp,{recursive:true,force:true});});
+  t.after(async()=>{await Promise.all(clients.map(stop));if(path.dirname(temp)===os.tmpdir() && path.basename(temp).startsWith('iteration1-team-'))await rm(temp,{recursive:true,force:true});});
   const a=await start(44341,'alex'),b=await start(44342,'blair');
   assert.notEqual(a.cookie.split('=')[0],b.cookie.split('=')[0],'ports have independent browser sessions');
   async function create(client,name){const result=await client.req('/rooms',{name,path:client.dir,demo:false});assert.equal(result.status,200);return result.data.room;}

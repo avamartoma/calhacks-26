@@ -20,7 +20,7 @@ export function createCursorDesk({ state, changed, isStarting = () => false }) {
   function start(room, body) {
     const input = z.object({ task: text, token: agentToken.optional(), model: z.string().trim().min(1).max(120).default('Cursor · model not reported'), acceptanceCriteria: z.array(z.string().trim().min(1).max(1000)).min(1).max(8) }).strict().parse(body);
     const identity = input.token ? verifyAgentToken(state, input.token) : null;
-    if (input.token && !identity) throw new Error('That agent token is not recognised. Issue a new identity in Fourteenth and update FOURTEENTH_AGENT_TOKEN.');
+    if (input.token && !identity) throw new Error('That agent token is not recognised. Issue a new identity in Iteration1 and update ITERATION1_AGENT_TOKEN.');
     if (room.demo) throw new Error('Choose a live project room for Cursor work.');
     if (sameProject(room).some(r => r.capturing)) throw new Error('Wait for the checkpoint to finish before assigning work.');
     assertAvailable(room);
@@ -32,7 +32,7 @@ export function createCursorDesk({ state, changed, isStarting = () => false }) {
     room.workItems.push(item); room.goal ||= input.task;
     event(worker, 'user', input.task); event(worker, 'system', 'Execution stays in Cursor. Model, progress and evidence are reported through MCP; verify results before accepting the task.');
     record(room, 'Cursor took implementation ownership', 'work'); changed();
-    return { roomId: room.id, agentId: worker.id, workItemId: item.id, instruction: 'Publish concise progress with office_cursor_update. After execution has finished or stopped, call office_cursor_finish. Fourteenth cannot interrupt Cursor execution.' };
+    return { roomId: room.id, agentId: worker.id, workItemId: item.id, instruction: 'Publish concise progress with office_cursor_update. After execution has finished or stopped, call office_cursor_finish. Iteration1 cannot interrupt Cursor execution.' };
   }
   // An attributed run only accepts reports from the identity that opened it. Operator
   // recovery is exempt: it exists precisely for when that agent can no longer answer.

@@ -34,12 +34,12 @@ test('ticket editing uses revisions and preserves dependency and archive integri
 });
 
 test('manager can assign, pause, resume, review and replace without losing the project backlog',{timeout:30000},async t=>{
-  const temp=await mkdtemp(path.join(os.tmpdir(),'fourteenth-manager-')),root=path.resolve('.'),base='http://127.0.0.1:44325';
+  const temp=await mkdtemp(path.join(os.tmpdir(),'iteration1-manager-')),root=path.resolve('.'),base='http://127.0.0.1:44325';
   const project=await reviewProject(temp);
   const child=spawn(process.execPath,['server/index.mjs','--production'],{cwd:root,env:{...process.env,PORT:'44325',OFFICE_DATA_DIR:temp,OFFICE_CODEX_HOME:path.join(temp,'codex'),OFFICE_CODEX_BIN:process.execPath,OFFICE_CODEX_ARGS:JSON.stringify([path.join(root,'tests/fake-codex.mjs')])},windowsHide:true,stdio:['ignore','pipe','pipe']});
   let stderr='';child.stderr.on('data',d=>stderr+=d);
-  t.after(async()=>{const exited=new Promise(resolve=>child.once('exit',resolve));child.kill();await exited;if(path.dirname(temp)===os.tmpdir() && path.basename(temp).startsWith('fourteenth-manager-'))await rm(temp,{recursive:true,force:true});});
-  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(stderr||'Startup timed out')),10000);child.stdout.on('data',d=>{if(String(d).includes('Fourteenth office')){clearTimeout(timer);resolve();}});});
+  t.after(async()=>{const exited=new Promise(resolve=>child.once('exit',resolve));child.kill();await exited;if(path.dirname(temp)===os.tmpdir() && path.basename(temp).startsWith('iteration1-manager-'))await rm(temp,{recursive:true,force:true});});
+  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(stderr||'Startup timed out')),10000);child.stdout.on('data',d=>{if(String(d).includes('Iteration1 office')){clearTimeout(timer);resolve();}});});
   const cookie=(await fetch(base)).headers.get('set-cookie').split(';')[0];
   const req=async(route,body)=>{const res=await fetch(base+'/api'+route,{method:body===undefined?'GET':'POST',headers:{cookie,...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:res.status,data:await res.json()};};
   const ok=async(route,body)=>{const r=await req(route,body);assert.equal(r.status,200,JSON.stringify(r.data));return r.data;};

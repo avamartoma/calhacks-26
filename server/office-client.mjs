@@ -3,17 +3,17 @@ import { realpath } from 'node:fs/promises';
 
 export function createOfficeClient({ url = 'http://127.0.0.1:4314', project = process.cwd(), token, fetchImpl = fetch } = {}) {
   const parsed = new URL(url);
-  if (parsed.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(parsed.hostname) || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) throw new Error('Fourteenth URL must be a local HTTP origin.');
+  if (parsed.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(parsed.hostname) || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) throw new Error('Iteration1 URL must be a local HTTP origin.');
   const base = parsed.origin;
   let cookie;
   async function localFetch(url, options) {
     try { return await fetchImpl(url, options); }
-    catch { throw new Error(`Fourteenth is unavailable at ${base}. Start it with npm start, then retry.`); }
+    catch { throw new Error(`Iteration1 is unavailable at ${base}. Start it with npm start, then retry.`); }
   }
   async function session() {
     const res = await localFetch(base, { redirect: 'error', signal: AbortSignal.timeout(10000) });
     cookie = res.headers.get('set-cookie')?.split(';')[0];
-    if (!cookie?.startsWith(`office_session_${parsed.port || '80'}=`) && !cookie?.startsWith('office_session=')) throw new Error('Start Fourteenth before connecting Cursor.');
+    if (!cookie?.startsWith(`office_session_${parsed.port || '80'}=`) && !cookie?.startsWith('office_session=')) throw new Error('Start Iteration1 before connecting Cursor.');
   }
   async function request(route, body, retry = true) {
     if (!cookie) await session();
@@ -33,7 +33,7 @@ export function createOfficeClient({ url = 'http://127.0.0.1:4314', project = pr
   const attributed = body => token ? { ...body, token } : body;
   return { request, rooms, room, hasToken: !!token,
     async open(name) { const existing = await rooms(); return existing[0] || (await request('/rooms', { name, path: await realpath(project), demo: false })).room; },
-    async identify() { if (!token) throw new Error('No agent identity configured. Issue one in Fourteenth under Tools, then set FOURTEENTH_AGENT_TOKEN in .cursor/mcp.json.'); return request('/identities/verify', { token }); },
+    async identify() { if (!token) throw new Error('No agent identity configured. Issue one in Iteration1 under Tools, then set ITERATION1_AGENT_TOKEN in .cursor/mcp.json.'); return request('/identities/verify', { token }); },
     async dispatch(id, body) { await room(id); return request(`/rooms/${encodeURIComponent(id)}/dispatch`, body); },
     async cursorStart(id, body) { await room(id); return request(`/rooms/${encodeURIComponent(id)}/cursor/start`, attributed(body)); },
     async cursorReport(id, agentId, operation, body) { await room(id); if (!['update', 'finish'].includes(operation)) throw new Error('Invalid Cursor operation'); return request(`/rooms/${encodeURIComponent(id)}/cursor/${encodeURIComponent(agentId)}/${operation}`, attributed(body)); },
