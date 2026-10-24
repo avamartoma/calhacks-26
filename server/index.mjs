@@ -26,6 +26,8 @@ import { modes, templates, initOffice, record, waitingReason, completionGaps, up
 import { checkpoint, restoreState, branchCheckpoint } from './checkpoints.mjs';
 import { homedir } from 'node:os';
 import { createCodexCallback, createClaudeLogin, createCursorLogin } from './provider-login.mjs';
+import { createCloud } from './cloud.mjs';
+import { editPaths } from './cloud-sync.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = path.resolve(process.env.OFFICE_DATA_DIR || path.join(root, '.office'));
@@ -93,6 +95,7 @@ function changed() {
     writeQueue = writeQueue.then(async () => { await writeFile(stateFile + '.tmp', serialized); await rename(stateFile + '.tmp', stateFile); }).catch(e => console.error('State could not be saved:', e.message));
   }, 500);
 }
+const cloud = createCloud({ changed, userId: () => liveIdentity?.sub || 'local' });
 function findThread(threadId) { for (const room of state.rooms) { const a = room.agents.find(a => a.threadId === threadId); if (a) return { room, a }; } return {}; }
 const skillNames = ['office-manager', 'office-handoff', 'office-review'];
 const skillText = Object.fromEntries(await Promise.all(skillNames.map(async n => [n, await readFile(path.join(root, 'skills', n, 'SKILL.md'), 'utf8')])));
@@ -231,6 +234,7 @@ async function startClaudeTurn(room, a, prompt, access, assigned) {
       instructions: `${developerInstructions(room, a, access)}\nOffice tools are available as ${OFFICE_SERVER} MCP tools (mcp__${OFFICE_SERVER}__office_*). Use TodoWrite to publish your plan.`,
       mcpServers: { [OFFICE_SERVER]: officeMcpServer(sdk, tools, (name, args) => officeTool(room, a, name, args)) },
       extraTools: officeToolNames(tools),
+      beforeEdit: paths => cloud.claim(room, paths),
       onSession: id => { a.sessionId = id; changed(); },
       onMessage: entry => { event(a, entry.kind, entry.text); changed(); },
       onToolUse: block => {
@@ -452,7 +456,12 @@ codex.on('request', async msg => {
       const output = await officeTool(room, a, p.tool, p.arguments || {});
       codex.respond(msg.id, { contentItems: [{ type: 'inputText', text: JSON.stringify(output) }], success: true }); changed();
     } catch (e) { codex.respond(msg.id, { contentItems: [{ type: 'inputText', text: e.message }], success: false }); }
-  } else if (['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/tool/requestUserInput'].includes(msg.method)) {
+  } else if (msg.method === 'item/fileChange/requestApproval') {
+    const changes = p.changes || p.item?.changes || [];
+    const busy = await cloud.claim(room, changes.map(change => change?.path).filter(Boolean));
+    if (busy) { codex.reject(msg.id, busy); event(a, 'error', busy); changed(); return; }
+    state.approvals.push({ id: String(msg.id), rpcId: msg.id, roomId: room.id, agentId: a.id, method: msg.method, command: p.command || p.reason || 'File change requested', questions: p.questions }); a.status = 'approval'; changed();
+  } else if (['item/commandExecution/requestApproval', 'item/tool/requestUserInput'].includes(msg.method)) {
     state.approvals.push({ id: String(msg.id), rpcId: msg.id, roomId: room.id, agentId: a.id, method: msg.method, command: p.command || p.reason || 'File change requested', questions: p.questions }); a.status = 'approval'; changed();
   } else { codex.reject(msg.id, 'This interaction is not supported by Iteration1 yet. Ask the user in a normal message.'); event(a, 'error', `Unsupported interaction: ${msg.method}`); changed(); }
 });
@@ -548,7 +557,7 @@ app.post('/api/rooms/:id/cursor/launch', wrap(async req => {
     identifyEvidence(room); trimEvidence(room, item);
     record(room, `Cursor agent run ${outcome.status}`, 'work'); changed();
   };
-  try { const launched = await runner.launch(worker.id, input, { cwd: room.path, onMessage, onDone }); event(worker, 'system', `Cursor ${launched.runtime} run ${launched.runId}. Execution is owned by this office and can be stopped here.`); record(room, 'Cursor agent launched', 'work'); changed(); return { roomId: room.id, agentId: worker.id, workItemId: item.id, ...launched }; }
+  try { const launched = await runner.launch(worker.id, input, { cwd: room.path, onMessage, onToolStart: message => cloud.claim(room, editPaths(message.name, message.args)), onDone }); event(worker, 'system', `Cursor ${launched.runtime} run ${launched.runId}. Execution is owned by this office and can be stopped here.`); record(room, 'Cursor agent launched', 'work'); changed(); return { roomId: room.id, agentId: worker.id, workItemId: item.id, ...launched }; }
   catch (error) { worker.turnId = null; worker.status = 'error'; event(worker, 'error', error.message); item.status = 'blocked'; item.blocker = error.message; item.updatedAt = Date.now(); changed(); throw error; }
 }));
 // A Claude agent the office launches at its own desk through the Claude Agent SDK. Office-member
@@ -574,7 +583,7 @@ async function launchClaudeDesk(room, a, prompt) {
     // Messages that arrived while the run was closing continue the same session right away.
     if (outcome.status === 'finished' && outcome.unsent.length) startAgent(room, a, outcome.unsent.join('\n\n')).catch(() => {});
   };
-  try { const launched = await claude.launch(a.id, { prompt, model: a.model, access: a.access, effort: a.effort || 'high' }, { cwd: room.path, resume: a.sessionId, onSession: id => { a.sessionId = id; changed(); }, onMessage, onDone }); if (!launched.resumed) event(a, 'system', `Claude ${a.access === 'edit' ? 'editing' : 'read-only'} run on ${launched.model}. Message this desk to steer or continue it.`); changed(); return launched; }
+  try { const launched = await claude.launch(a.id, { prompt, model: a.model, access: a.access, effort: a.effort || 'high' }, { cwd: room.path, resume: a.sessionId, beforeEdit: paths => cloud.claim(room, paths), onSession: id => { a.sessionId = id; changed(); }, onMessage, onDone }); if (!launched.resumed) event(a, 'system', `Claude ${a.access === 'edit' ? 'editing' : 'read-only'} run on ${launched.model}. Message this desk to steer or continue it.`); changed(); return launched; }
   catch (error) { a.turnId = null; a.status = 'error'; event(a, 'error', error.message); setWorkStatus(room, a, 'blocked', error.message); changed(); throw error; }
 }
 async function continueClaude(room, a, prompt) {
@@ -745,6 +754,8 @@ app.post('/api/rooms', wrap(async req => {
   claimIdentity(manager, r);
   initOffice(r); state.rooms.push(r); changed(); return { room: r };
 }));
+app.post('/api/rooms/:id/cloud/open', wrap(req => cloud.open(roomBy(state, req.params.id))));
+app.post('/api/rooms/:id/cloud/close', wrap(req => cloud.close(roomBy(state, req.params.id))));
 app.post('/api/rooms/:id/archive',wrap(async req=>{const r=roomBy(state,req.params.id);const {archived}=z.object({archived:z.boolean()}).strict().parse(req.body);if(r.capturing || r.agents.some(a=>a.turnId || startingAgents.has(a.id)))throw new Error('Pause all work before archiving this project.');r.archived=archived;if(archived)r.paused=true;record(r,archived?'Project archived':'Project restored','plan');changed();return {room:r};}));
 app.patch('/api/rooms/:id', wrap(async req => { const r = roomBy(state, req.params.id); const b = z.object({ permissionMode:permissionMode.optional(), name:z.string().trim().min(1).max(60).optional(), budget: z.number().int().min(1).max(6).optional(), skills: z.array(z.enum(skillNames)).optional() }).parse(req.body); const previous=r.permissionMode || 'project-write';Object.assign(r, b);if(b.permissionMode && b.permissionMode!==previous)record(r,`Permissions: ${b.permissionMode} for future runs`,'permissions');changed(); }));
 app.post('/api/rooms/:id/check',wrap(async req=>{const room=roomBy(state,req.params.id);await ensureConnected();room.workspaceCheck=await checkWorkspace(codex,room.path);changed();return room.workspaceCheck;}));

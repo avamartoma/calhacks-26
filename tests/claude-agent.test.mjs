@@ -83,6 +83,11 @@ test('read-only desks get read tools only; editing desks run commands in a requi
   assert.equal(edit.sandbox.allowUnsandboxedCommands, false);
   assert.equal((await edit.canUseTool('Bash')).behavior, 'allow');
   assert.equal((await edit.canUseTool('WebFetch')).behavior, 'deny');
+  const gated = accessOptions('edit', [], async paths => paths.includes('src/App.tsx') ? 'File is busy: src/App.tsx is held by another session.' : null);
+  const denied = await gated.canUseTool('Edit', { file_path: 'src/App.tsx' });
+  assert.equal(denied.behavior, 'deny');
+  assert.match(denied.message, /File is busy/);
+  assert.equal((await gated.canUseTool('Edit', { file_path: 'src/other.tsx' })).behavior, 'allow');
 });
 
 test('a run streams observable work in the project folder and settles with its cost', async () => {

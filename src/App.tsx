@@ -28,6 +28,7 @@ import type { Agent, OfficeState, Room, Tool } from './types';
 import { reporterName, selfReported } from './reporters';
 import { agentLine, agentSpeech, modelLabel } from './identity';
 import { accessoriesFor, costumeColors, type CostumeKind } from './costume';
+import { PreviewDock } from './PreviewDock';
 import './style.css';
 import './quiet-office.css';
 import './workspace.css';
@@ -98,6 +99,12 @@ export default function App() {
     if(index===demoTeam.selected)scene.current?.focusOffice();
   },[room?.id,demoOffices,demoTeam.selected]);
   useEffect(()=>{if(room && !room.demo && !room.archived)localStorage.setItem('iteration1-live-room',room.id);else if(room?.demo && !allowDemo)setTool('rooms');},[room?.id,allowDemo]);
+  useEffect(() => {
+    if (!room || room.demo || room.archived) return;
+    const id = room.id;
+    void api(`/rooms/${id}/cloud/open`, {}).catch(() => {});
+    return () => { void api(`/rooms/${id}/cloud/close`, {}).catch(() => {}); };
+  }, [room?.id, room?.demo, room?.archived]);
   const cursorOwner = room?.agents.find(a => selfReported(a) && a.turnId);
   const selected = room?.agents.find(a => a.id === selection);
   const liveAgents = room?.agents.filter(a => a.status !== 'ejected') || [];
@@ -175,6 +182,7 @@ export default function App() {
     </header>
     <main className="workspace">
       <div ref={container} className="world" />
+      {tool==='office' && room && !room.demo && !cinematic && !recording && <PreviewDock cloud={room.cloud} />}
       {tool==='office' && !walk && !cinematic && !recording && !replayRoom && <div className="demo-team-controls">
         <button aria-label="Add demo teammate" title={pairedTeam?'Your paired teammate is shown. Preview extra offices in an unpaired project.':demoCount===demoTeammateNames.length?'All demo teammates added':'Add demo teammate'} disabled={pairedTeam || demoCount===demoTeammateNames.length} onClick={()=>{setDemoTeams(current=>{const count=current[room.id]?.count || 0;return {...current,[room.id]:{count:Math.min(count+1,demoTeammateNames.length),selected:Math.min(count,demoTeammateNames.length-1)}};});setToast('Demo teammate added. No model calls.');}}><Plus size={16}/></button>
         {demoCount>0 && <><button aria-label="View project district" title="View project district" onClick={()=>{setCompact(false);scene.current?.focusTeam();}}><Building2 size={14}/></button><select aria-label="Demo teammate office" value={demoTeam.selected} onChange={e=>chooseDemoOffice(demoOffices[Number(e.target.value)].id)}>{demoTeammateNames.slice(0,demoCount).map((name,i)=><option key={name} value={i}>{name} · Demo</option>)}</select><button aria-label="Clear demo teammates" title="Clear demo teammates" onClick={()=>setDemoTeams(current=>({...current,[room.id]:{count:0,selected:0}}))}><X size={14}/></button></>}
