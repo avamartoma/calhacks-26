@@ -67,7 +67,7 @@ Iteration1 can also **launch** a Cursor agent itself through the Cursor SDK, as 
 
 ## Claude agents
 
-Iteration1 can launch **Claude agents** through the Claude Agent SDK. Set `ANTHROPIC_API_KEY` before starting Iteration1, then open **Tools → Integrations**, describe the task, and choose a model (Claude Opus 5.5 by default) and access. An editing agent may change files and run commands in an OS sandbox that confines writes to the project folder; if the sandbox is unavailable the run fails instead of running unconfined. A read-only agent can only read and search. Each run takes one prompt, streams its observable work to its desk, and can be stopped there. Usage is billed to the API key's account.
+Iteration1 can launch **Claude agents** through the Claude Agent SDK. Set `ANTHROPIC_API_KEY` before starting Iteration1, then open **Tools → Integrations**, describe the task, and choose a model (Claude Opus 5.5 by default) and access. An editing agent may change files and run commands in an OS sandbox that confines writes to the project folder; if the sandbox is unavailable the run fails instead of running unconfined. A read-only agent can only read and search. Like a Codex desk, a Claude desk streams its observable work, takes messages while it works, and continues the same conversation when you message it after it finishes (sessions are kept in `~/.iteration1/claude`, apart from your own Claude Code history). It can be stopped from its desk. Usage is billed to the API key's account.
 
 Reusable manager, handoff, and review skills live in `skills/`. The app can install them into a project's `.agents/skills` without overwriting differing instructions.
 

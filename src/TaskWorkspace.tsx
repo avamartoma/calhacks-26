@@ -43,7 +43,7 @@ function TicketReview({room,item,busy,action,connected,active}:{room:Room;item:W
   const gaps=[...item.dependsOn.filter(id=>room.workItems.find(t=>t.id===id)?.status!=='done').map(id=>'Verify '+(room.workItems.find(t=>t.id===id)?.title || 'dependency')),...(item.requiredEvidence || []).filter(kind=>!(kind==='log' && note.trim()) && !item.evidence.some(e=>e.kind===kind && e.text.trim() && (kind!=='test' || e.passed===true))).map(kind=>'Attach '+(kind==='test'?'passing test':kind)+' evidence')];
   if(!room.demo && item.requiredEvidence?.includes('test') && !review?.current)gaps.push(review?.label || 'Check the current project version');
   else if(!room.demo && !review?.version)gaps.push(review?.error || 'Check the current project version');
-  const owner=room.agents.find(a=>a.id===item.agentId),canRerun=connected && !room.paused && owner?.provider!=='cursor' && owner?.provider!=='claude' && owner?.status!=='ejected';
+  const owner=room.agents.find(a=>a.id===item.agentId),canRerun=(connected || owner?.provider==='claude') && !room.paused && owner?.provider!=='cursor' && owner?.status!=='ejected';
   const submit=(decision:'done'|'changes')=>action(async()=>{
     if(decision==='changes')await officeApi('/rooms/'+room.id+'/work/'+item.id+'/run',{note});
     else await officeApi('/rooms/'+room.id+'/work/'+item.id,{status:'done',expectedUpdatedAt:item.updatedAt,...(!room.demo?{expectedVersion:review?.version}:{}),receipts:[{kind:'log',text:note}],checks:item.acceptanceCriteria.map((_,index)=>({index,passed:checks.includes(index),evidence:note}))});

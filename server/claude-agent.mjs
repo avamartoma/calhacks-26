@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+import path from 'node:path';
 import { z } from 'zod';
 
 // Claude agents the office launches through the Claude Agent SDK. Like a launched Cursor
@@ -79,41 +81,79 @@ export function createTranslator() {
   };
 }
 
-export function createClaudeRunner({ importSdk = () => import('@anthropic-ai/claude-agent-sdk'), apiKey = () => process.env.ANTHROPIC_API_KEY } = {}) {
+const userMessage = text => ({ type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null });
+
+/**
+ * The prompt stream for one run. It stays open so messages can be added mid-run, like
+ * steering a Codex turn, and closes once Claude has answered everything it was sent.
+ */
+function inputQueue(first) {
+  const items = [first]; let wake = null; let closed = false;
+  return {
+    push(text) { items.push(text); wake?.(); },
+    close() { closed = true; wake?.(); },
+    get closed() { return closed; },
+    get pending() { return items.length; },
+    async *[Symbol.asyncIterator]() {
+      for (;;) {
+        if (items.length) { yield userMessage(items.shift()); continue; }
+        if (closed) return;
+        await new Promise(resolve => { wake = resolve; }); wake = null;
+      }
+    }
+  };
+}
+
+export function createClaudeRunner({
+  importSdk = () => import('@anthropic-ai/claude-agent-sdk'),
+  apiKey = () => process.env.ANTHROPIC_API_KEY,
+  // Sessions are kept apart from the user's own Claude Code history, as Codex keeps its own home.
+  configDir = () => process.env.OFFICE_CLAUDE_HOME || path.join(homedir(), '.iteration1', 'claude')
+} = {}) {
   const runs = new Map();
-  async function launch(id, input, { cwd, onMessage, onDone }) {
+  /** Starts a run. With `resume`, it continues an earlier session, so the agent keeps its context. */
+  async function launch(id, input, { cwd, resume, onSession, onMessage, onDone }) {
     if (runs.has(id)) throw new Error('This desk already has a Claude run in flight. Stop it before launching another.');
     const key = apiKey();
     if (!key) throw new Error('Set ANTHROPIC_API_KEY before launching a Claude agent. Create a key at platform.claude.com.');
     const { query } = await importSdk();
     const abortController = new AbortController();
+    const prompt = inputQueue(input.prompt);
     const options = {
       cwd, model: input.model, effort: input.effort, abortController,
+      ...(resume ? { resume } : {}),
       // Only the project folder and this office's instructions shape the run, never the user's own Claude settings.
-      settingSources: [], persistSession: false,
-      env: { ...process.env, ANTHROPIC_API_KEY: key },
+      settingSources: [],
+      env: { ...process.env, ANTHROPIC_API_KEY: key, CLAUDE_CONFIG_DIR: configDir() },
       systemPrompt: { type: 'preset', preset: 'claude_code', append: input.access === 'edit'
-        ? 'You are working at a desk in Iteration1. Keep changes focused on the request, run the relevant checks, and finish with a short summary of what changed and how you verified it.'
-        : 'You are a read-only specialist at a desk in Iteration1. Inspect and report findings with file paths. Do not try to edit files.' },
+        ? 'You are working at a desk in Iteration1. Keep changes focused on the request, run the relevant checks, and finish with a short summary of what changed and how you verified it. The user may send follow-up messages; treat each as a continuation of the same work.'
+        : 'You are a read-only specialist at a desk in Iteration1. Inspect and report findings with file paths. Do not try to edit files. The user may send follow-up messages; treat each as a continuation of the same work.' },
       ...accessOptions(input.access)
     };
     let run;
-    try { run = query({ prompt: input.prompt, options }); }
+    try { run = query({ prompt, options }); }
     catch (error) { throw new Error(`Claude agent could not start: ${error.message}`); }
-    const entry = { run, abortController, stopping: false };
+    const entry = { run, prompt, abortController, stopping: false, late: [], sessionId: resume || null };
     runs.set(id, entry);
-    void pump(id, entry, onMessage, onDone);
-    return { model: input.model, access: input.access };
+    void pump(id, entry, onSession, onMessage, onDone);
+    return { model: input.model, access: input.access, resumed: !!resume };
   }
-  async function pump(id, entry, onMessage, onDone) {
+  async function pump(id, entry, onSession, onMessage, onDone) {
     const translate = createTranslator();
     let result = null, failure = null;
     try {
       for await (const message of entry.run) {
-        if (message?.type === 'result') { result = message; continue; }
+        if (message?.session_id && message.session_id !== entry.sessionId) { entry.sessionId = message.session_id; onSession?.(entry.sessionId); }
+        if (message?.type === 'result') {
+          result = message;
+          // Everything sent so far has been answered: end the run. Later messages resume the session.
+          if (!entry.prompt.pending) entry.prompt.close();
+          continue;
+        }
         for (const item of translate(message)) onMessage(item);
       }
     } catch (error) { failure = error.message; }
+    entry.prompt.close();
     runs.delete(id);
     const status = entry.stopping ? 'cancelled' : result?.subtype === 'success' && !result.is_error ? 'finished' : 'error';
     onDone({
@@ -121,8 +161,18 @@ export function createClaudeRunner({ importSdk = () => import('@anthropic-ai/cla
       result: result?.subtype === 'success' ? result.result || '' : '',
       error: status === 'error' ? (result?.errors?.join('\n') || failure || (result ? `Claude run ended: ${result.subtype}` : 'The Claude run ended without a result.')) : '',
       costUsd: result?.total_cost_usd ?? null,
-      turns: result?.num_turns ?? null
+      turns: result?.num_turns ?? null,
+      sessionId: entry.sessionId,
+      // Messages that arrived as the run was closing; the caller continues the session with them.
+      unsent: entry.late
     });
+  }
+  /** Adds a message to a run in flight. Returns false when no run is in flight at this desk. */
+  function send(id, text) {
+    const entry = runs.get(id);
+    if (!entry || entry.stopping) return false;
+    if (entry.prompt.closed) entry.late.push(text); else entry.prompt.push(text);
+    return true;
   }
   async function stop(id) {
     const entry = runs.get(id);
@@ -132,5 +182,5 @@ export function createClaudeRunner({ importSdk = () => import('@anthropic-ai/cla
     entry.abortController.abort();
     return { stopping: true };
   }
-  return { launch, stop, running: id => runs.has(id), count: () => runs.size };
+  return { launch, send, stop, running: id => runs.has(id), count: () => runs.size };
 }

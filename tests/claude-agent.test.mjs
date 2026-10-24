@@ -6,17 +6,26 @@ const assistant = content => ({ type: 'assistant', message: { role: 'assistant',
 const toolResult = (id, content, isError = false) => ({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content, is_error: isError }] } });
 const success = { type: 'result', subtype: 'success', is_error: false, result: 'Added the label', total_cost_usd: 0.42, num_turns: 3 };
 
-function fakeSdk({ messages = [success], hold, throwAt } = {}) {
-  const calls = { prompt: null, options: null };
+/**
+ * Stands in for the SDK's query(): reads the prompt stream like Claude Code does and answers
+ * each user message with the next scripted turn (a list of messages ending in a result).
+ */
+function fakeSdk({ turns = [[success]], hold, throwAt, sessionId = 'session-1' } = {}) {
+  const calls = { prompts: [], options: null };
   function query({ prompt, options }) {
-    calls.prompt = prompt; calls.options = options;
+    calls.options = options;
     const signal = options.abortController.signal;
     async function* run() {
-      for (const [i, message] of messages.entries()) {
-        if (throwAt === i) throw new Error('transport closed');
-        yield message;
+      let turn = 0;
+      for await (const user of prompt) {
+        calls.prompts.push(user.message.content);
+        if (hold && turn === hold.atTurn) await new Promise((resolve, reject) => { hold.release = resolve; signal.addEventListener('abort', () => reject(new Error('aborted'))); });
+        for (const [i, message] of (turns[turn] || [success]).entries()) {
+          if (throwAt === i) throw new Error('transport closed');
+          yield { ...message, session_id: sessionId };
+        }
+        turn += 1;
       }
-      if (hold) await new Promise((resolve, reject) => { hold.release = resolve; signal.addEventListener('abort', () => reject(new Error('aborted'))); });
     }
     return run();
   }
@@ -79,24 +88,26 @@ test('read-only desks get read tools only; editing desks run commands in a requi
 });
 
 test('a run streams observable work in the project folder and settles with its cost', async () => {
-  const { sdk, calls } = fakeSdk({ messages: [
+  const { sdk, calls } = fakeSdk({ turns: [[
     { type: 'system', subtype: 'init' },
     assistant([{ type: 'thinking', thinking: 'private' }, { type: 'text', text: 'Adding a label' }, { type: 'tool_use', id: 't1', name: 'Edit', input: { file_path: 'a.tsx' } }]),
     toolResult('t1', 'ok'),
     success
-  ] });
-  const published = []; let done;
-  const runner = createClaudeRunner({ importSdk: async () => sdk, apiKey: () => 'sk-ant-test' });
-  await runner.launch('desk-1', input, { cwd: '/project', onMessage: entry => published.push(entry), onDone: outcome => { done = outcome; } });
+  ]] });
+  const published = []; let done; const sessions = [];
+  const runner = createClaudeRunner({ importSdk: async () => sdk, apiKey: () => 'sk-ant-test', configDir: () => '/office/claude' });
+  await runner.launch('desk-1', input, { cwd: '/project', onSession: id => sessions.push(id), onMessage: entry => published.push(entry), onDone: outcome => { done = outcome; } });
 
-  assert.equal(calls.prompt, input.prompt);
+  await settle();
+  assert.deepEqual(calls.prompts, [input.prompt]);
   assert.equal(calls.options.cwd, '/project');
   assert.equal(calls.options.model, 'claude-opus-5-5');
   assert.deepEqual(calls.options.settingSources, [], 'the user\'s own Claude settings never shape an office run');
-  assert.equal(calls.options.persistSession, false);
+  assert.equal(calls.options.resume, undefined, 'a new desk starts a new session');
   assert.equal(calls.options.env.ANTHROPIC_API_KEY, 'sk-ant-test');
-
-  await settle();
+  assert.equal(calls.options.env.CLAUDE_CONFIG_DIR, '/office/claude', 'sessions stay out of the user\'s own Claude history');
+  assert.deepEqual(sessions, ['session-1'], 'the session is reported as soon as it is known');
+  assert.equal(done.sessionId, 'session-1');
   assert.deepEqual(published.map(entry => entry.kind), ['update', 'file']);
   assert.equal(done.status, 'finished'); assert.equal(done.result, 'Added the label'); assert.equal(done.costUsd, 0.42);
   assert.equal(runner.running('desk-1'), false);
@@ -104,13 +115,13 @@ test('a run streams observable work in the project folder and settles with its c
 
 test('failed runs and broken streams settle the desk with the reason', async () => {
   let done;
-  const failed = createClaudeRunner({ importSdk: async () => fakeSdk({ messages: [{ type: 'result', subtype: 'error_max_turns', is_error: true, errors: ['Reached the turn limit'] }] }).sdk, apiKey: () => 'k' });
+  const failed = createClaudeRunner({ importSdk: async () => fakeSdk({ turns: [[{ type: 'result', subtype: 'error_max_turns', is_error: true, errors: ['Reached the turn limit'] }]] }).sdk, apiKey: () => 'k' });
   await failed.launch('desk-1', input, { cwd: '/p', onMessage() {}, onDone: outcome => { done = outcome; } });
   await settle();
   assert.equal(done.status, 'error'); assert.equal(done.error, 'Reached the turn limit');
 
   const published = [];
-  const broken = createClaudeRunner({ importSdk: async () => fakeSdk({ messages: [assistant([{ type: 'text', text: 'partial' }]), success], throwAt: 1 }).sdk, apiKey: () => 'k' });
+  const broken = createClaudeRunner({ importSdk: async () => fakeSdk({ turns: [[assistant([{ type: 'text', text: 'partial' }]), success]], throwAt: 1 }).sdk, apiKey: () => 'k' });
   await broken.launch('desk-2', input, { cwd: '/p', onMessage: entry => published.push(entry), onDone: outcome => { done = outcome; } });
   await settle();
   assert.equal(published.length, 1, 'work published before the break is kept');
@@ -122,8 +133,8 @@ test('a launch needs a key, refuses a second run at one desk and can be stopped'
   const keyless = createClaudeRunner({ importSdk: async () => fakeSdk().sdk, apiKey: () => '' });
   await assert.rejects(keyless.launch('desk-1', input, { cwd: '/p', onMessage() {}, onDone() {} }), /ANTHROPIC_API_KEY/);
 
-  const hold = {}; let done;
-  const runner = createClaudeRunner({ importSdk: async () => fakeSdk({ messages: [], hold }).sdk, apiKey: () => 'k' });
+  const hold = { atTurn: 0 }; let done;
+  const runner = createClaudeRunner({ importSdk: async () => fakeSdk({ hold }).sdk, apiKey: () => 'k' });
   await assert.rejects(runner.stop('desk-1'), /No Claude run is in flight/);
   await runner.launch('desk-1', input, { cwd: '/p', onMessage() {}, onDone: outcome => { done = outcome; } });
   await assert.rejects(runner.launch('desk-1', input, { cwd: '/p', onMessage() {}, onDone() {} }), /already has a Claude run/);
@@ -131,4 +142,29 @@ test('a launch needs a key, refuses a second run at one desk and can be stopped'
   await settle();
   assert.equal(done.status, 'cancelled'); assert.equal(done.error, '');
   assert.equal(runner.count(), 0);
+  assert.equal(runner.send('desk-1', 'too late'), false, 'a stopped desk takes no messages');
+});
+
+test('messages sent mid-run reach the same run, like steering a Codex turn', async () => {
+  const hold = { atTurn: 0 }; let done;
+  const { sdk, calls } = fakeSdk({ hold, turns: [[success], [{ ...success, result: 'Also added tests' }]] });
+  const runner = createClaudeRunner({ importSdk: async () => sdk, apiKey: () => 'k' });
+  await runner.launch('desk-1', input, { cwd: '/p', onMessage() {}, onDone: outcome => { done = outcome; } });
+  await settle();
+  assert.equal(runner.send('desk-1', 'Also add tests'), true);
+  hold.release(); await settle();
+  assert.deepEqual(calls.prompts, [input.prompt, 'Also add tests'], 'one run answers both messages');
+  assert.equal(done.status, 'finished'); assert.equal(done.result, 'Also added tests');
+  assert.deepEqual(done.unsent, []);
+  assert.equal(runner.running('desk-1'), false, 'the run ends once everything sent is answered');
+});
+
+test('a follow-up after a run ends resumes the saved session', async () => {
+  const { sdk, calls } = fakeSdk();
+  const runner = createClaudeRunner({ importSdk: async () => sdk, apiKey: () => 'k' });
+  assert.equal(runner.send('desk-1', 'hello'), false, 'no run in flight: the caller starts a follow-up');
+  const launched = await runner.launch('desk-1', { ...input, prompt: 'Now add tests' }, { cwd: '/p', resume: 'session-1', onMessage() {}, onDone() {} });
+  await settle();
+  assert.equal(launched.resumed, true);
+  assert.equal(calls.options.resume, 'session-1', 'the agent keeps its earlier context');
 });
