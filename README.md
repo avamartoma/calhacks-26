@@ -17,10 +17,13 @@ Open **http://127.0.0.1:4314**. For a production build, run `npm run build`, the
 
 The sample office works without signing in and is explicitly simulated. For live work, connect an engine from the top bar and choose an existing local project folder:
 
-- **Sign in to Codex** is one click. It installs the pinned Codex CLI into the project if it is missing, then opens ChatGPT sign-in in your browser; the page continues on its own when you finish. Iteration1 uses its own sign-in profile in `~/.iteration1/codex`; it does not switch the Codex desktop app's account. Account model availability and usage limits apply.
-- **Connect Claude** is one click and a paste. It opens Anthropic's API key page and puts the cursor in the key box; pasting a key checks it with Anthropic and connects. Anthropic does not allow third-party apps to sign in with a Claude.ai subscription, so Claude agents use an API key, billed by usage to that key's account.
+- **Codex** signs in from **Connections → Codex**. It installs the pinned Codex CLI into the project if it is missing, then opens ChatGPT sign-in in your browser; the page continues on its own when you finish, or you can paste its localhost callback URL. Iteration1 uses its own sign-in profile in `~/.iteration1/codex`; it does not switch the Codex desktop app's account. Account model availability and usage limits apply.
+- **Claude** connects from **Connections → Claude**: sign in with Claude into an app-owned profile, or paste an Anthropic API key, which is checked with Anthropic and saved only on this computer.
+- **Cursor**'s SDK creates a dedicated app key from **Connections → Cursor**.
 
-On Windows, complete the one-time Windows sandbox setup from the Codex panel before starting work if requested; Windows asks for administrator approval. `npm run runtime:install` installs the Codex runtime ahead of time if you prefer.
+Provider accounts connect through the browser without importing a local CLI login. [Connection steps, credential storage, and deployment boundaries](docs/provider-connections.md).
+
+On Windows, `npm run runtime:install` installs the pinned project-local Codex runtime. Restart Iteration1 after installation. Complete Windows sandbox setup from the connection panel before starting work if requested.
 
 ## Use it
 
@@ -70,6 +73,10 @@ Connect a tenant once in the panel, or set `ITERATION1_AUTH0_DOMAIN` and `ITERAT
 
 Iteration1 can also **launch** a Cursor agent itself through the Cursor SDK, as an alternative to a session reporting in. Those runs use a model chosen here, stream their observable work, and can be stopped from the office. Set `CURSOR_API_KEY` first; launching requires Node 22.13+, which the rest of the app does not.
 
+## Codex CLI sessions
+
+A **Codex CLI** session you run yourself can report into the office over MCP too, on its own ChatGPT sign-in, which stays separate from the office's Codex profile. Open **Connections → Codex → Use an existing Codex CLI session**, copy the connect command (it runs `codex mcp add` and points the server at that project), then copy the start command. Its desk tools are `office_codex_start`, `office_codex_update` and `office_codex_finish`; reports are labeled `codex-reported`, and it shares the per-project writer lock with Cursor and Claude Code.
+
 ## Claude agents
 
 Claude agents are full office members, run through the Claude Agent SDK. Choose a Claude model (Claude Opus 5.5, Sonnet 5.5, Haiku 5.5 or Fable 5.1) as the manager when you start work, or when you replace any agent, and the office runs exactly as it does on Codex:
@@ -79,7 +86,9 @@ Claude agents are full office members, run through the Claude Agent SDK. Choose 
 - **Same evidence.** Commands and file edits are recorded as observed evidence: test commands with the project version they ran against, and edits as a project diff. Plans published with TodoWrite show as the desk's plan. Development modes set Claude's effort and the turn time budget.
 - **Continuity.** A Claude agent continues its own conversation across turns and restarts; sessions are kept in `~/.iteration1/claude`, apart from your own Claude Code history. It can be stopped, steered and replaced like any desk.
 
-The API key is saved only on this computer (`~/.iteration1/anthropic-key.json`, readable only by you) and never sent back to the page. `ANTHROPIC_API_KEY` in the environment also works and takes precedence. Claude agents do not use Codex approval prompts or fast mode.
+Claude agents run on the Claude account signed in from **Connections → Claude**, or on an Anthropic API key pasted there. The key is saved only on this computer (`~/.iteration1/anthropic-key.json`, readable only by you) and never sent back to the page. `ANTHROPIC_API_KEY` in the environment also works and takes precedence. Usage follows that account's or key's billing and limits. Claude agents do not use Codex approval prompts or fast mode.
+
+**Claude Code sessions connect over MCP, with no API key.** An existing Claude Code session reports into the office the same way a Cursor session does, using your own Claude sign-in and model. In this repository the checked-in `.mcp.json` and `/office` command are all you need: open Claude Code here, approve the `iteration1` server, and run `/office`. For another project, open **Connections → Claude** and copy the connect command, which runs `claude mcp add` with project scope, then copy the start command to open Claude Code with the office prompt. The desk tools are `office_claude_start`, `office_claude_update` and `office_claude_finish`, alongside the shared `office_open`, `office_status`, `office_identify`, `office_run_doc` and `office_dispatch`. Cursor and Claude Code share one writer lock per project, Claude Code reports are labeled `claude-reported` (self-reported in run docs), and they publish under the Auth0 account signed in to the office. Like Cursor, the office observes a Claude Code session but cannot stop it.
 
 Reusable manager, handoff, and review skills live in `skills/`. The app can install them into a project's `.agents/skills` without overwriting differing instructions.
 
@@ -99,7 +108,7 @@ Tests cover lifecycle, delegation, dependencies, evidence, permissions, model re
 
 State, checkpoints, and pairing credentials remain in ignored `.office/` storage. The app listens on loopback and validates requests. The separate team listener exposes only pairing/status/handoff operations on a trusted network; see the team guide before connecting. Do not expose the execution API publicly.
 
-Optional configuration: `PORT`, `OFFICE_DATA_DIR`, `OFFICE_CODEX_HOME`, `OFFICE_CODEX_BIN`, `OFFICE_CODEX_ARGS`, `OFFICE_TEAM_PORT`, `ANTHROPIC_API_KEY`, `OFFICE_CLAUDE_HOME`, and `OFFICE_CLAUDE_KEY_FILE`. Credentials are never part of this repository.
+Optional configuration: `PORT`, `OFFICE_DATA_DIR`, `OFFICE_CODEX_HOME`, `OFFICE_CODEX_BIN`, `OFFICE_CODEX_ARGS`, `OFFICE_TEAM_PORT`, `ANTHROPIC_API_KEY`, `OFFICE_CLAUDE_HOME`, `OFFICE_CLAUDE_KEY_FILE`, and `OFFICE_CURSOR_AUTH_FILE`. Credentials are never part of this repository.
 
 ## Assets and VR
 

@@ -6,7 +6,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { Codex, codexInstalled, installCodex, openInBrowser } from './codex.mjs';
 import { checkWorkspace } from './workspace-check.mjs';
 import { identifyEvidence, commandWorkspace, refreshReview, isTestCommand, trimEvidence, assertReviewVersion } from './evidence.mjs';
-import { createCursorDesk } from './cursor.mjs';
+import { createCursorDesk, reporters } from './cursor.mjs';
 import { initIdentities, upsertIdentity, identityBySub, publicIdentity, creditRun } from './identity.mjs';
 import { createAuth, providerFields } from './oauth.mjs';
 import { runDoc, addComment, runFeed } from './run-doc.mjs';
@@ -24,6 +24,8 @@ import { featureUrl } from './feature-link.mjs';
 import { permissionMode, permissionsFor, permissionKey } from './permissions.mjs';
 import { modes, templates, initOffice, record, waitingReason, completionGaps, updateWork, handoffPacket, selectPolicy, teamInstructions, applyTemplate, createDemo, stepDemo } from './orchestration.mjs';
 import { checkpoint, restoreState, branchCheckpoint } from './checkpoints.mjs';
+import { homedir } from 'node:os';
+import { createCodexCallback, createClaudeLogin, createCursorLogin } from './provider-login.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = path.resolve(process.env.OFFICE_DATA_DIR || path.join(root, '.office'));
@@ -46,7 +48,7 @@ for (const r of state.rooms) {
     r.workItems = visibleAgents.map(a => workItem(a.task, a.task, { agentId: a.id, status: a.status === 'done' ? 'review' : active(a) ? 'working' : 'queued', acceptanceCriteria: [a.manager ? 'The requested outcome is implemented and verified' : 'Return a concrete result with evidence'] }));
     r.missionStartedAt ||= Date.now(); r.orchestrationVersion = 1;
   }
-  if (!r.demo) for (const a of r.agents) if (active(a) && a.provider !== 'cursor') { a.status = 'paused'; a.turnId = null; event(a, 'system', 'Companion restarted. Resume explicitly after inspecting the latest work.'); const item = assignedTicket(r,a.id); if (item && item.status!=='done' && !item.archived) { item.status = 'blocked'; item.blocker = 'Companion restarted. Resume this ticket to continue.'; item.updatedAt = Date.now(); } }
+  if (!r.demo) for (const a of r.agents) if (active(a) && !selfDriven(a)) { a.status = 'paused'; a.turnId = null; event(a, 'system', 'Companion restarted. Resume explicitly after inspecting the latest work.'); const item = assignedTicket(r,a.id); if (item && item.status!=='done' && !item.archived) { item.status = 'blocked'; item.blocker = 'Companion restarted. Resume this ticket to continue.'; item.updatedAt = Date.now(); } }
   delete r.stopping;initOffice(r);nameStoredRoom(r);
 }
 const clients = new Set();
@@ -68,10 +70,19 @@ async function syncIdentity() {
 }
 await syncIdentity();
 const cursor = createCursorDesk({ state, changed, isStarting: id => startingAgents.has(id), currentIdentity: () => liveIdentity });
-const runner = createCursorRunner();
+const toolName = a => reporters[a.provider]?.name || 'Cursor';
+const codexCallback = createCodexCallback();
+let codexLoginId = null;
+const claudeLogin = createClaudeLogin({ configDir: process.env.OFFICE_CLAUDE_HOME || path.join(homedir(), '.iteration1', 'claude') });
+await claudeLogin.load();
+const cursorLogin = createCursorLogin({ file: process.env.OFFICE_CURSOR_AUTH_FILE || path.join(dataDir, 'provider-auth', 'cursor.json'), changed });
+await cursorLogin.load();
+const runner = createCursorRunner({ apiKey: () => cursorLogin.current() });
 const claudeKey = createClaudeKeyStore(); await claudeKey.load();
-const claude = createClaudeRunner({ apiKey: () => claudeKey.current() });
-function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, claude: { ...claudeKey.status(), models: claudeModels }, identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates }; }
+const claude = createClaudeRunner({ apiKey: () => claudeKey.current(), oauth: async () => { if (claudeLogin.isCompleting()) throw new Error('Wait for Claude sign-in to finish.'); await claudeLogin.load(); return !process.env.ANTHROPIC_API_KEY && claudeLogin.status().configured; }, configDir: () => claudeLogin.configDir });
+/** Claude can run office agents on the signed-in Claude profile or on an API key. */
+const claudeReady = () => claudeKey.status().configured || claudeLogin.status().configured;
+function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, claude: { ...claudeKey.status(), configured: claudeReady(), models: claudeModels }, identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates }; }
 function changed() {
   if (!broadcastTimer) broadcastTimer = setTimeout(() => {
     broadcastTimer = undefined;
@@ -138,11 +149,11 @@ async function scheduleWorkers(room) {
 }
 // A model the office can run: a Claude model once Claude is connected, otherwise one from the Codex catalog.
 function assertModelAvailable(model) {
-  if (isClaudeModel(model)) { if (!claudeKey.status().configured) throw new Error('Connect Claude before choosing a Claude model.'); return; }
+  if (isClaudeModel(model)) { if (!claudeReady()) throw new Error('Connect Claude before choosing a Claude model.'); return; }
   if (model !== 'Account default' && !connection.models.some(m => m.id === model)) throw new Error('Choose a model available to this account.');
 }
 function setEngine(a, model) { a.model = model; if (isClaudeModel(model)) a.provider = 'claude'; else if (isClaude(a)) delete a.provider; }
-async function ensureEngine(a, model = a.model) { if (isClaudeModel(model)) { if (!claudeKey.status().configured) throw new Error('Connect Claude before starting Claude agents.'); } else await ensureConnected(); }
+async function ensureEngine(a, model = a.model) { if (isClaudeModel(model)) { if (!claudeReady()) throw new Error('Connect Claude before starting Claude agents.'); } else await ensureConnected(); }
 async function ensureConnected() { await codex.connect(); if (!connection.account) throw new Error('Sign in to Codex from the Connect panel first.'); }
 // What every office agent is told, whichever engine runs it.
 function developerInstructions(room, a, access) {
@@ -162,7 +173,7 @@ async function startAgent(room, a, prompt) {
 async function startAgentReserved(room, a, prompt) {
   const access=permissionsFor(room,a),accessKey=permissionKey(room,a);
   cursor.assertAvailable(room);
-  if (selfDriven(a)) throw new Error('Continue this task in Cursor or replace the finished worker with a Codex model.');
+  if (selfDriven(a)) throw new Error(`Continue this task in ${toolName(a)} or replace the finished worker with a Codex model.`);
   if (external(a)) throw new Error('Relaunch this task with the Cursor agent runner, or replace the worker with a Codex model.');
   if (!isClaude(a)) await ensureConnected();
   if(!isClaude(a) && access.canWrite && process.platform==='win32' && connection.sandboxStatus!=='ready')throw new Error('Windows sandbox setup is required to edit project files. Open Connect Codex, choose Set up Windows sandbox, then resume this ticket.');
@@ -273,7 +284,7 @@ async function steerAgent(target, text) {
   await codex.call('turn/steer', { threadId: target.threadId, expectedTurnId: target.turnId, input: [{ type: 'text', text }] });
 }
 async function stopAgent(a) {
-  if (selfDriven(a) && a.turnId) throw new Error('Stop execution in Cursor, then use office_cursor_finish to release this assignment.');
+  if (selfDriven(a) && a.turnId) throw new Error(`Stop execution in ${toolName(a)}, then use ${reporters[a.provider].tools}_finish to release this assignment.`);
   if (startingAgents.has(a.id)) throw new Error('Agent is starting. Wait for the turn to begin, then stop it.');
   // A run the office launched can genuinely be cancelled; cancellation lands through the stream.
   if (isClaude(a)) {
@@ -296,7 +307,7 @@ async function stopAgent(a) {
   a.status = 'paused';
 }
 async function sendTo(room, a, text) {
-  if (selfDriven(a)) throw new Error('Send this message in Cursor. Iteration1 tracks this worker but does not control its execution.');
+  if (selfDriven(a)) throw new Error(`Send this message in ${toolName(a)}. Iteration1 tracks this worker but does not control its execution.`);
   if (external(a)) throw new Error('This Cursor run takes one prompt. Wait for it to finish, then launch a follow-up run.');
   if (a.status === 'ejected') throw new Error('Replace this agent before sending a message.');
   if (isClaude(a)) { if (claude.send(a.id, text)) { event(a, 'user', text); changed(); } else await startAgent(room, a, text); return; }
@@ -334,6 +345,7 @@ async function handleNotification(msg) {
     return;
   }
   if (msg.method === 'account/updated' || msg.method === 'account/login/completed') {
+    if (msg.method === 'account/login/completed') { codexCallback.cancel(); codexLoginId = null; }
     const failed = msg.method === 'account/login/completed' && msg.params?.success === false;
     refreshAccount().then(() => { if (failed && !connection.account) { connection.error = msg.params.error || 'Sign-in did not finish. Try again.'; changed(); } }).catch(e => { connection.error = e.message; changed(); });
     return;
@@ -488,7 +500,23 @@ app.post('/api/rooms/:id/team/message',wrap(async req=>{
   const message=team.queue(room,{...sender,peerMessagesThisTurn:0},args);if(!message)throw new Error('Choose a teammate agent.');
   message.sentByOwner=true;changed();return {message};
 }));
-app.get('/api/integrations', (req, res) => res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claude: { ...claudeKey.status(), models: claudeModels } }));
+app.get('/api/integrations', wrap(async (req, res) => {
+  await claudeLogin.load();
+  res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}`, account: cursorLogin.status() }, claudeCode: { command: process.execPath, script: path.join(root, 'scripts', 'claude-mcp.mjs'), url: `http://127.0.0.1:${port}` }, codexCli: { command: process.execPath, script: path.join(root, 'scripts', 'codex-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claude: { ...claudeKey.status(), models: claudeModels, subscription: claudeLogin.status() } });
+}));
+// These endpoints expose login links and connection status, never provider credentials.
+app.use('/api/providers', (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
+app.get('/api/providers/cursor', (req, res) => res.json(cursorLogin.status()));
+app.post('/api/providers/cursor/login', wrap(async () => cursorLogin.begin()));
+app.post('/api/providers/cursor/cancel', wrap(async () => cursorLogin.cancel()));
+app.post('/api/providers/cursor/disconnect', wrap(async () => { if (runner.count()) throw new Error('Stop Cursor agents before disconnecting.'); return cursorLogin.disconnect(); }));
+const callbackFields = z.object({ callback: z.string().trim().min(1).max(8192) }).strict();
+app.get('/api/providers/claude', wrap(async () => claudeLogin.load()));
+function assertClaudeLoginIdle() { if (claude.count() || state.rooms.some(r => r.agents.some(a => a.provider === 'claude' && a.turnId))) throw new Error('Stop Claude agents before changing the connected account.'); }
+app.post('/api/providers/claude/login', wrap(async () => { assertClaudeLoginIdle(); const status = claudeLogin.begin(); changed(); return status; }));
+app.post('/api/providers/claude/complete', wrap(async req => { assertClaudeLoginIdle(); const status = await claudeLogin.complete(callbackFields.parse(req.body).callback); changed(); return status; }));
+app.post('/api/providers/claude/cancel', wrap(async () => { const status = claudeLogin.cancel(); changed(); return status; }));
+app.post('/api/providers/claude/disconnect', wrap(async () => { assertClaudeLoginIdle(); const status = await claudeLogin.disconnect(); changed(); return status; }));
 // Connecting Claude: the key is checked with Anthropic, then kept locally. It is never returned to the page.
 app.post('/api/claude/key', wrap(async req => { const status = await claudeKey.save(z.object({ apiKey: z.string() }).strict().parse(req.body).apiKey); changed(); return status; }));
 app.post('/api/claude/key/remove', wrap(async () => { const status = await claudeKey.remove(); changed(); return status; }));
@@ -525,10 +553,13 @@ app.post('/api/rooms/:id/cursor/launch', wrap(async req => {
   try { const launched = await runner.launch(worker.id, input, { cwd: room.path, onMessage, onDone }); event(worker, 'system', `Cursor ${launched.runtime} run ${launched.runId}. Execution is owned by this office and can be stopped here.`); record(room, 'Cursor agent launched', 'work'); changed(); return { roomId: room.id, agentId: worker.id, workItemId: item.id, ...launched }; }
   catch (error) { worker.turnId = null; worker.status = 'error'; event(worker, 'error', error.message); item.status = 'blocked'; item.blocker = error.message; item.updatedAt = Date.now(); changed(); throw error; }
 }));
-app.post('/api/rooms/:id/cursor/start', wrap(async req => { await syncIdentity(); return cursor.start(roomBy(state, req.params.id), req.body); }));
-app.post('/api/rooms/:id/cursor/:aid/update', wrap(async req => { await syncIdentity(); return cursor.update(roomBy(state, req.params.id), req.params.aid, req.body); }));
-app.post('/api/rooms/:id/cursor/:aid/finish', wrap(async req => { await syncIdentity(); return cursor.finish(roomBy(state, req.params.id), req.params.aid, req.body); }));
-app.post('/api/rooms/:id/cursor/:aid/release', wrap(async req => cursor.release(roomBy(state, req.params.id), req.params.aid, req.body)));
+// Cursor, Claude Code and Codex CLI sessions report in over MCP under /cursor, /claude-code and /codex-cli.
+for (const provider of Object.keys(reporters)) {
+  app.post(`/api/rooms/:id/${provider}/start`, wrap(async req => { await syncIdentity(); return cursor.start(roomBy(state, req.params.id), req.body, provider); }));
+  app.post(`/api/rooms/:id/${provider}/:aid/update`, wrap(async req => { await syncIdentity(); return cursor.update(roomBy(state, req.params.id), req.params.aid, req.body, provider); }));
+  app.post(`/api/rooms/:id/${provider}/:aid/finish`, wrap(async req => { await syncIdentity(); return cursor.finish(roomBy(state, req.params.id), req.params.aid, req.body, provider); }));
+  app.post(`/api/rooms/:id/${provider}/:aid/release`, wrap(async req => cursor.release(roomBy(state, req.params.id), req.params.aid, req.body, provider)));
+}
 app.post('/api/demo',wrap(async()=>{for(const old of state.rooms.filter(r=>r.demo && r.demoStep>=5 && !r.agents.some(a=>a.turnId)))old.archived=true;const room=createDemo(root);state.rooms.push(room);changed();return {room};}));
 app.post('/api/rooms/:id/demo/step',wrap(async req=>{const room=roomBy(state,req.params.id);stepDemo(room);changed();return {room};}));
 app.post('/api/rooms/:id/mode',wrap(async req=>{
@@ -580,7 +611,7 @@ app.post('/api/rooms/:id/work/:workId/archive',wrap(async req=>{const room=roomB
 app.post('/api/rooms/:id/work/:workId/run',wrap(async req=>{
   const room=roomBy(state,req.params.id),item=room.workItems.find(t=>t.id===req.params.workId);if(!item)throw new Error('Ticket not found');
   const owner=room.agents.find(a=>a.id===item.agentId);
-  const ready=()=>{if(!room.workItems.includes(item) || (owner && !room.agents.includes(owner)))throw new Error('Office changed. Reopen this ticket.');cursor.assertAvailable(room);if(!owner || owner.status==='ejected')throw new Error('Assign or replace the owner first.');if(owner.provider==='cursor')throw new Error('Continue this assignment in Cursor.');if(room.paused)throw new Error('Resume the office first.');if(room.capturing || owner.turnId || startingAgents.has(owner.id))throw new Error('Wait for the owner to stop before resuming this ticket.');if(item.archived || item.status==='done')throw new Error('Choose an open ticket.');};
+  const ready=()=>{if(!room.workItems.includes(item) || (owner && !room.agents.includes(owner)))throw new Error('Office changed. Reopen this ticket.');cursor.assertAvailable(room);if(!owner || owner.status==='ejected')throw new Error('Assign or replace the owner first.');if(selfDriven(owner))throw new Error(`Continue this assignment in ${toolName(owner)}.`);if(room.paused)throw new Error('Resume the office first.');if(room.capturing || owner.turnId || startingAgents.has(owner.id))throw new Error('Wait for the owner to stop before resuming this ticket.');if(item.archived || item.status==='done')throw new Error('Choose an open ticket.');};
   const {note}=z.object({note:z.string().trim().max(2000).optional()}).strict().parse(req.body);ready();if(!room.demo && owner.provider!=='claude')await ensureConnected();ready();
   const wait=waitingReason(room,item);if(wait)throw new Error(wait.reason);
   if(!room.demo && !owner.manager)canDelegate(room);
@@ -633,12 +664,26 @@ app.post('/api/codex/sign-in', wrap(() => signingIn ||= (async () => {
     if (!codexInstalled()) { connection.signIn = { step: 'installing' }; changed(); await installCodex(); connection.installed = true; }
     await codex.connect(); await refreshAccount();
     if (connection.account) return { connected: true };
+    if (codexCallback.isCompleting()) throw new Error('Wait for the current callback to finish.');
     const login = await codex.call('account/login/start', { type: 'chatgpt' });
+    codexLoginId = login.loginId;
+    const manual = codexCallback.begin(login.authUrl);
     const opened = await openInBrowser(login.authUrl);
-    connection.signIn = { step: 'browser', authUrl: login.authUrl, opened }; changed();
+    connection.signIn = { step: 'browser', authUrl: login.authUrl, opened, manualCallback: !!manual, expiresAt: manual?.expiresAt }; changed();
     return { connected: false, authUrl: login.authUrl, opened };
   } catch (error) { connection.signIn = null; connection.error = error.message; changed(); throw error; }
 })().finally(() => { signingIn = null; })));
+app.post('/api/codex/callback', wrap(async req => {
+  await codexCallback.complete(callbackFields.parse(req.body).callback);
+  await refreshAccount();
+  if (!connection.account) throw new Error('Codex is still completing sign-in. Refresh the connection in a moment.');
+  return { connected: true };
+}));
+app.post('/api/codex/cancel', wrap(async () => { if (codexCallback.isCompleting()) throw new Error('Wait for the current callback to finish.'); if (codexLoginId) await codex.call('account/login/cancel', { loginId: codexLoginId }); codexLoginId = null; codexCallback.cancel(); connection.signIn = null; changed(); return { cancelled: true }; }));
+app.post('/api/codex/disconnect', wrap(async () => {
+  if (startingAgents.size || state.rooms.some(r => !r.demo && r.agents.some(a => !external(a) && a.provider !== 'claude' && a.turnId))) throw new Error('Stop Codex agents before disconnecting.');
+  await codex.call('account/logout', {}); codexLoginId = null; codexCallback.cancel(); await refreshAccount(); return { disconnected: true };
+}));
 app.post('/api/login', wrap(async () => { await codex.connect(); return codex.call('account/login/start', { type: 'chatgpt' }); }));
 app.get('/api/tools', wrap(async req => { await ensureConnected(); const room = roomBy(state, String(req.query.roomId)); const results = await Promise.allSettled([codex.call('skills/list', { cwds: [room.path] }), codex.call('mcpServerStatus/list', { limit: 100 })]); return { skills: results[0].status === 'fulfilled' ? results[0].value : null, mcp: results[1].status === 'fulfilled' ? results[1].value : null, errors: results.filter(r => r.status === 'rejected').map(r => r.reason.message) }; }));
 app.post('/api/rooms', wrap(async req => {
@@ -701,7 +746,7 @@ app.post('/api/rooms/:id/agents/:aid/stop', wrap(async req => { const r = roomBy
 app.post('/api/rooms/:id/agents/:aid/speed', wrap(async req => {
   const r = roomBy(state, req.params.id); const a = agentBy(r, req.params.aid);
   const { fast } = z.object({ fast: z.boolean() }).strict().parse(req.body);
-  if (selfDriven(a)) throw new Error('Choose model and speed settings in Cursor.');
+  if (selfDriven(a)) throw new Error(`Choose model and speed settings in ${toolName(a)}.`);
   if (external(a)) throw new Error('Choose the model when you launch the next Cursor run.');
   if (isClaude(a)) throw new Error('Fast mode applies to Codex agents. Replace this agent to choose a different Claude model.');
   if (a.status === 'ejected') throw new Error('This agent has left. Select its replacement.');
@@ -767,4 +812,4 @@ changed();
 // Without a Codex CLI there is nothing to connect yet; the sign-in button installs it.
 if (codexInstalled()) codex.connect().then(refreshAccount).catch(e => { connection.error = e.message; changed(); });
 else connection.installed = false;
-process.on('SIGINT', () => { team.close();codex.close(); server.close(); process.exit(0); });
+process.on('SIGINT', () => { cursorLogin.cancel();team.close();codex.close(); server.close(); process.exit(0); });

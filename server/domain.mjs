@@ -42,10 +42,10 @@ export function seed(cwd) {
 export function roomBy(state, id) { const r = state.rooms.find(r => r.id === id); if (!r) throw new Error('Room not found'); return r; }
 export function agentBy(room, id) { const a = room.agents.find(a => a.id === id); if (!a) throw new Error('Agent not found'); return a; }
 export function active(a) { return ['working', 'talking', 'approval'].includes(a.status); }
-/** A Cursor IDE session drives itself; the office observes it and cannot stop it. */
-export function selfDriven(a) { return a?.provider === 'cursor'; }
-/** Either kind of Cursor worker: the office does not run its turns. */
-export function external(a) { return a?.provider === 'cursor' || a?.provider === 'cursor-sdk'; }
+/** A Cursor, Claude Code or Codex CLI session drives itself; the office observes it and cannot stop it. */
+export function selfDriven(a) { return a?.provider === 'cursor' || a?.provider === 'claude-code' || a?.provider === 'codex-cli'; }
+/** A worker whose turns the office does not run: a self-driven session or a launched Cursor run. */
+export function external(a) { return selfDriven(a) || a?.provider === 'cursor-sdk'; }
 /** An office agent whose turns run on Claude through the Claude Agent SDK instead of Codex. */
 export function isClaude(a) { return a?.provider === 'claude'; }
 export function canDelegate(room) {
