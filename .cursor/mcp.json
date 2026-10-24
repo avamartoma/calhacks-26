@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "fourteenth": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}/scripts/cursor-mcp.mjs"],
+      "env": { "FOURTEENTH_PROJECT": "${workspaceFolder}" }
+    }
+  }
+}

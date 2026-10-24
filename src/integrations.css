@@ -1,0 +1,7 @@
+.integrations-panel p { line-height: 1.55; }
+.integrations-panel > p { margin-bottom: 14px; }
+.integrations-panel code { overflow-wrap: anywhere; }
+.integration-config { font-family: monospace; font-size: 11px; margin-top: 12px; }
+
+.cursor-release-check { display: flex; align-items: center; gap: 10px; margin: 16px 0; }
+.cursor-release-check input { width: auto; flex: 0 0 auto; }

@@ -1,0 +1,36 @@
+{
+  "name": "fourteenth-office",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "runtime:install": "npm install --prefix .office/runtime --no-save --package-lock=false @openai/codex@0.156.1",
+    "dev": "node server/index.mjs",
+    "build": "tsc -b && vite build",
+    "start": "node server/index.mjs --production",
+    "test": "node --test tests/*.test.mjs",
+    "demo:team": "node scripts/team-preview.mjs",
+    "demo:check": "node scripts/demo-check.mjs",
+    "pretest": "npm run build"
+  },
+  "dependencies": {
+    "@fontsource/manrope": "^5.2.8",
+    "@fontsource/sora": "^5.2.8",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "express": "^5.1.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "three": "^0.180.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.180.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.0"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "asset": "Fourteenth office interior",
+  "authoring": "Original geometry authored locally through ahujasid/blender-mcp execute_blender_code",
+  "blenderVersion": "4.5.9 LTS",
+  "mcpPackageVersion": "1.9.1",
+  "source": "https://github.com/ahujasid/blender-mcp",
+  "blenderDistribution": "https://download.blender.org/release/Blender4.5/blender-4.5.9-windows-x64.zip",
+  "distributionVerification": "SHA-256 matched official blender-4.5.9.sha256",
+  "telemetry": "disabled",
+  "mcpSafeMode": true,
+  "runtimeFile": "public/models/office-shell.glb",
+  "authoringScript": "scripts/build_office_assets.py",
+  "sceneObjects": 1253,
+  "materials": 24,
+  "thirdPartyAssetModels": [],
+  "paidGenerations": 0,
+  "runtimeAdaptations": [
+    "Static geometry merged by material",
+    "Task-chair upper backs omitted for blob visibility",
+    "Dynamic screens and procedural blob agents added in Three.js"
+  ],
+  "sourceLicense": "Original project asset; created for the project owner",
+  "integrationLicense": "blender-mcp: MIT; Blender: GPL",
+  "editableSource": "Regenerate assets/fourteenth-office.blend with scripts/build_office_assets.py; the machine-local .blend is excluded from this public snapshot."
+}

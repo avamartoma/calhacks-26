@@ -1,0 +1,13 @@
+.tour-stops{display:flex;flex-direction:column;margin:24px 0;gap:8px}
+.tour-stops>button{display:flex;align-items:center;gap:14px;padding:16px 12px;text-align:left;border:1px solid #ced9c8;border-radius:8px;background:#f9faf1;color:#304c38}
+.tour-stops>button:hover{background:#e9efdf}.tour-stops>button>span{font:500 16px 'Sora',sans-serif;color:#65795d}.tour-stops>button>div{flex:1}.tour-stops b{font-size:14px}.tour-stops small{display:block;font-size:12px;line-height:1.6;margin-top:4px;color:#53654f}
+.recording-studio .quiet-copy{font-size:13px;line-height:1.8}.recording-studio kbd{margin-left:auto;font-size:12px}
+.recording-mode .topbar,.recording-mode .detail-panel,.recording-mode .spatial-badges,.recording-mode .office-pulse,.recording-mode .compact-hotbar,.recording-mode .walk-hint,.recording-mode .crosshair,.recording-mode .touch-pad,.recording-mode .camera-controls,.recording-mode .toast,.recording-mode .help-panel{display:none!important}
+.recording-strip{position:absolute;z-index:80;bottom:18px;left:24px;right:24px;display:flex;justify-content:space-between;align-items:center;pointer-events:none;color:#eef3e6;font-size:11px;letter-spacing:1px}
+.recording-strip>span{background:#263d32e8;padding:8px 12px;border:1px solid #bfd0b633;border-radius:4px}.recording-strip>button{pointer-events:auto;opacity:.25;padding:8px 12px;background:#f4f6ec;color:#304c38;border-radius:4px;font-size:11px;letter-spacing:0}.recording-strip>button:hover,.recording-strip>button:focus-visible{opacity:1}
+.gate-history{margin:16px 0;padding:14px;border:1px solid #d6b09a;border-left:3px solid #a85438;background:#fcf3e8;border-radius:5px;color:#773e2c}.gate-history b{font-size:13px}.gate-history p,.gate-history small{font-size:12px;line-height:1.7}
+.snapshot-evidence{padding:18px 0;border-block:1px solid #d5ddcb;margin:22px 0}.snapshot-tasks{display:flex;flex-direction:column;gap:6px}.snapshot-tasks button{border:1px solid #cbd6c2;border-radius:5px;padding:12px;text-align:left;background:#f7f9ee;font-size:13px}.snapshot-tasks button[aria-pressed=true]{background:#e4edda;border-color:#749366}.snapshot-tasks small{display:block;margin-top:4px;color:#53664e;font-size:11px}.snapshot-evidence .operations{margin-top:24px}
+
+.receipt-jumps{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0 16px}.receipt-jumps button,.receipt-jumps a{display:flex;align-items:center;gap:7px;padding:9px 12px;font-size:12px;color:#34533e;background:#e7eddd;border:1px solid #cbd8c1;border-radius:5px;text-decoration:none}.receipt{scroll-margin-top:14px}
+
+.ops-panel .receipt pre{font-size:12px;line-height:1.7}.ops-panel .receipt summary{font-size:12px}

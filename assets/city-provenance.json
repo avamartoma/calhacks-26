@@ -1,0 +1,17 @@
+{
+  "name": "Fourteenth procedural city district",
+  "source": "src/CityEnvironment.ts",
+  "authoring": "Original deterministic geometry and facade/road/water shader extensions authored for this project",
+  "seed": 1400926,
+  "units": "metres",
+  "streetElevation": -44,
+  "officeElevation": 0,
+  "buildingVolumes": 307,
+  "trafficVehicles": 72,
+  "dependencies": "Installed Three.js 0.180: MIT. Sky, SSAOPass, EffectComposer and OutputPass from its bundled examples.",
+  "lighting": "Analytic daylight sky, shared sun and hemisphere light, local 256px cubemap reflection capture, PMREM, distance fog",
+  "desktopPostprocessing": "4-sample targets, half-resolution 24-sample SSAO, ACES output. Narrow screens and XR bypass postprocessing.",
+  "thirdPartyModels": [],
+  "externalTextureRequests": [],
+  "limitations": "Static reflection probe; no ray tracing. City geometry supplies parallax but is not a pedestrian exploration area. No headset performance verification."
+}

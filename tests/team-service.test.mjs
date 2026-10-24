@@ -1,0 +1,50 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,mkdir,rm,readFile} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {createTeam} from '../server/team.mjs';
+import {agent} from '../server/domain.mjs';
+import {queueHandoff} from '../server/peer-handoffs.mjs';
+
+test('replies follow the original sender through replacement',()=>{
+  const original=agent('Original','Research','Inspect',0),successor=agent('Successor','Research','Inspect',1),recipient=agent('Recipient','Review','Review',2);
+  const room={agents:[original,successor,recipient],messages:[],workItems:[]};
+  const message=queueHandoff(room,original,{agentId:recipient.id,message:'Question',kind:'question'});
+  original.replacedBy=successor.id;original.status='ejected';successor.replaces=original.id;
+  assert.equal(queueHandoff(room,recipient,{agentId:successor.id,message:'Answer',kind:'answer',replyTo:message.id}).toId,successor.id);
+});
+
+test('lost pairing response retries idempotently; receiving a packet awaits durable storage',{timeout:20000},async t=>{
+  const dir=await mkdtemp(path.join(os.tmpdir(),'fourteenth-team-service-'));
+  const originalFetch=globalThis.fetch;
+  const room=name=>({id:name,name,paused:false,demo:false,agents:[agent('Morgan','Manager','Inspect',0)],workItems:[],messages:[]});
+  const ar=room('A'),br=room('B');let release;let block=false,persisted=0;
+  const services=[];
+  t.after(async()=>{globalThis.fetch=originalFetch;services.forEach(s=>s.close());if(path.dirname(dir)===os.tmpdir() && path.basename(dir).startsWith('fourteenth-team-service-'))await rm(dir,{recursive:true,force:true});});
+  for(const name of ['a','b'])await mkdir(path.join(dir,name));
+  const a=await createTeam({state:{rooms:[ar]},dataDir:path.join(dir,'a'),port:44451,changed(){},onReceive:async()=>{},persist:async()=>{if(block)await new Promise(r=>release=r);persisted++;}});services.push(a);
+  const b=await createTeam({state:{rooms:[br]},dataDir:path.join(dir,'b'),port:44452,changed(){},onReceive:async()=>{},persist:async()=>{}});services.push(b);
+  const invitation=await a.invite(ar,{owner:'Alex',address:'http://127.0.0.1:44451'});
+  let lose=true;
+  globalThis.fetch=async(...args)=>{const response=await originalFetch(...args);if(lose && String(args[0]).endsWith('/pair')){lose=false;await response.arrayBuffer();throw new Error('Lost response');}return response;};
+  await assert.rejects(()=>b.join(br,{owner:'Blair',code:invitation.code}),/Lost response/);
+  assert.equal(a.view(ar).remote.owner,'Blair');assert.equal(b.view(br),null);
+  const joined=await b.join(br,{owner:'Blair',code:invitation.code});assert.equal(joined.remote.owner,'Alex');
+  globalThis.fetch=originalFetch;
+  block=true;const before=persisted;
+  const sent=b.queue(br,br.agents[0],{agentId:ar.agents[0].id,message:'Durable handoff'});
+  for(let i=0;i<60 && !release;i++)await new Promise(r=>setTimeout(r,50));
+  assert.ok(release,'incoming transport waited for local persistence');assert.equal(persisted,before);
+  assert.equal(br.messages.find(m=>m.id===sent.id).receivedAt,undefined,'sender has no receipt until persistence finishes');
+  block=false;release();
+  for(let i=0;i<60 && !br.messages[0].receivedAt;i++)await new Promise(r=>setTimeout(r,50));
+  const receivedAt=br.messages[0].receivedAt;assert.ok(receivedAt);
+  await new Promise(r=>setTimeout(r,2200));assert.equal(br.messages[0].receivedAt,receivedAt,'unchanged polling does not replay meeting activity');
+  let finishLeave;
+  globalThis.fetch=async(...args)=>{if(String(args[0]).endsWith('/leave'))return new Promise(resolve=>finishLeave=()=>resolve(new Response('{}',{status:503})));return originalFetch(...args);};
+  const leaving=b.disconnect(br);
+  for(let i=0;i<60 && !finishLeave;i++)await new Promise(r=>setTimeout(r,20));
+  assert.ok(finishLeave);assert.equal(JSON.parse(await readFile(path.join(dir,'b','team-links.json'),'utf8')).links.length,0,'local revocation is durable before waiting on an offline teammate');
+  finishLeave();await leaving;
+});
