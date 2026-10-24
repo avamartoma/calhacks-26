@@ -7,7 +7,7 @@ import { ClaudePanel, type ClaudeCodeIntegration, type ClaudeIntegration } from 
 interface Integrations { cursor: { command: string; script: string; url: string }; claudeCode: ClaudeCodeIntegration; claude: ClaudeIntegration }
 interface Identity { sub: string; label: string; email?: string; record: { started: number; review: number; blocked: number; verified: number } }
 interface Auth { provider: { domain: string; clientId: string; fromEnv: boolean } | null; signedIn: boolean; identity: Identity | null; redirectUri: string }
-export function IntegrationsPanel({ room, focusClaude = 0 }: { room: Room; focusClaude?: number }) {
+export function IntegrationsPanel({ room, focusClaude = 0, onStartWork }: { room: Room; focusClaude?: number; onStartWork?: () => void }) {
   const [data, setData] = useState<Integrations | null>(null);
   const [error, setError] = useState(''); const [copied, setCopied] = useState('');
   const [auth, setAuth] = useState<Auth | null>(null);
@@ -66,6 +66,6 @@ export function IntegrationsPanel({ room, focusClaude = 0 }: { room: Room; focus
       <label>Prompt<textarea readOnly rows={3} value={prompt}/></label>
       <button className="text-button" onClick={() => void load()}>Refresh connection details</button>
     </details>
-    <ClaudePanel room={room} claude={data?.claude ?? null} code={data?.claudeCode ?? null} onChange={() => void load()} focus={focusClaude} />
+    <ClaudePanel room={room} claude={data?.claude ?? null} code={data?.claudeCode ?? null} onChange={() => void load()} onStartWork={onStartWork} focus={focusClaude} />
   </div>;
 }

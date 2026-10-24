@@ -20,7 +20,7 @@ async function post(url: string, body: unknown) {
  * Claude Code reports into this room over MCP and runs on its own Claude sign-in, so no key is
  * needed. Launching Claude Agent SDK runs from the office itself still takes an Anthropic API key.
  */
-export function ClaudePanel({ room, claude, code, onChange, focus = 0 }: { room: Room; claude: ClaudeIntegration | null; code: ClaudeCodeIntegration | null; onChange: () => void; focus?: number }) {
+export function ClaudePanel({ room, claude, code, onChange, onStartWork, focus = 0 }: { room: Room; claude: ClaudeIntegration | null; code: ClaudeCodeIntegration | null; onChange: () => void; onStartWork?: () => void; focus?: number }) {
   const [apiKey, setApiKey] = useState('');
   const [prompt, setPrompt] = useState('');
   const [model, setModel] = useState('claude-opus-5-5');
@@ -83,6 +83,7 @@ export function ClaudePanel({ room, claude, code, onChange, focus = 0 }: { room:
       </>
       : <>
         <div className="account-info"><CheckCheck size={22} /><div><b>API key connected</b><small>{claude.source === 'environment' ? `Using ANTHROPIC_API_KEY (${claude.hint})` : `API key ${claude.hint}`}</small></div></div>
+        {!room.demo && onStartWork && <button className="secondary full" onClick={onStartWork}>Start work with Claude as the manager</button>}
         {room.demo ? <p className="notice">Open a live project room to launch Claude agents.</p> : <>
           <p>Launch a Claude agent at a new desk. It works in <code>{room.path}</code>. Message it at its desk to steer or continue it.</p>
           <label>Task<textarea rows={3} value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Describe the work" /></label>

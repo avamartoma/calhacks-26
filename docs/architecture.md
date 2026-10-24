@@ -4,14 +4,14 @@
 
 | Area | Files | Responsibility |
 | --- | --- | --- |
-| Local companion | `server/index.mjs`, `server/codex.mjs` | Express app, Codex app-server connection, local session and lifecycle |
+| Local companion | `server/index.mjs`, `server/codex.mjs` | Express app, Codex app-server connection and one-click sign-in, local session and agent lifecycle for both engines |
 | Work graph | `server/domain.mjs`, `server/orchestration.mjs`, `server/tickets.mjs` | Roles, assignments, dependencies, scheduling and mode policies |
 | Review | `server/evidence.mjs`, `server/workspace-check.mjs` | Evidence receipts, current-source checks and verification gates |
 | Continuity | `server/checkpoints.mjs`, `server/peer-handoffs.mjs` | Checkpoints, replacement context and persistent messages |
 | Team transport | `server/team.mjs` | Paired local offices, status exchange and cross-office handoffs |
 | External execution | `server/cursor.mjs`, `server/office-mcp.mjs`, `scripts/cursor-mcp.mjs`, `scripts/claude-mcp.mjs` | Cursor and Claude Code session ownership and explicitly reported activity over MCP |
 | Launched Cursor agents | `server/cursor-agent.mjs` | Office-owned Cursor SDK runs: runtime selection, observable stream and cancellation |
-| Launched Claude agents | `server/claude-agent.mjs`, `src/ClaudePanel.tsx` | Office-owned Claude Agent SDK runs: model and access selection, sandboxed tools, observable stream and cancellation |
+| Claude engine | `server/claude-agent.mjs`, `server/claude-office.mjs`, `server/claude-key.mjs` | Office agents run on Claude through the Claude Agent SDK: same instructions, office tools (as MCP), permissions, evidence and handoffs as Codex agents; sessions, steering, cancellation and the locally stored API key |
 | Sign-in | `server/oauth.mjs` | Auth0 Authorization Code with PKCE, identity-token verification and local session storage |
 | Agent identity | `server/identity.mjs` | Credential subjects and per-identity track records |
 | Public runs | `server/run-doc.mjs` | Block projection, attribution labels, block-anchored comments and the run feed |
