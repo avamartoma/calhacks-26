@@ -142,7 +142,7 @@ A **Codex CLI** session you run yourself can report into the office over MCP too
 ![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
 ![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
 
-**iteration1-office** (`agent1q0r5evneykvtpltu348zc0nq6a32lwuaq4ywjt0twxw7kz9945y0qgxn6mk`) lets the office's owner run it from an ASI:One chat. It is a uAgent that implements the Agent Chat Protocol and is registered on Agentverse. Say `status` for tasks, blockers and who is working, `report on <task>` for a run doc that separates verified receipts from self-reported ones, `approvals` for commands waiting in the office, or `mission: <what to build>` to hand a new mission to the implementation manager, followed by `confirm`.
+**iteration1-office** (`agent1q0r5evneykvtpltu348zc0nq6a32lwuaq4ywjt0twxw7kz9945y0qgxn6mk`) lets the office's owner run it from an ASI:One chat. It is a uAgent that implements the Agent Chat Protocol and is registered on Agentverse. Say `status` for tasks, blockers and who is working, `report on <task>` for a run doc that separates verified receipts from self-reported ones, `approvals` for commands waiting in the office, `alerts` for what the watcher noticed, or `mission: <what to build>` to hand a new mission to the implementation manager, followed by `confirm`.
 
 It is another client of the local office, like the MCP servers. It runs on your computer and reaches Agentverse through its mailbox, an outbound connection, so the office stays on loopback and the agent's own server listens only on `127.0.0.1`. It holds no office credential, and missions publish under the account signed in to the office.
 
@@ -156,6 +156,12 @@ python -m venv .office/runtime/agent-venv
 ```
 
 With the office running (`npm start`), open the `agentverse.ai/inspect` link the agent prints and choose **Connect → Mailbox** once. On Windows on ARM, uAgents needs `grpcio`, which has no ARM64 wheel; create the venv from an x64 Python (for example the `python` NuGet package unpacked under `.office/runtime/python-x64`), which runs under emulation. Tests: `python -m unittest discover agents`.
+
+**iteration1-watcher** is a second, local uAgent that follows the office's live state stream and tells the office agent, agent to agent, when a task blocks, becomes ready for review or finishes (with whether it was verified), when an approval is waiting, when a new mission starts and when the office pauses or goes offline. The office agent forwards each batch to its paired owners in ASI:One and keeps the last 20 for `alerts`, in case a message the agent starts doesn't appear in the chat. The office agent accepts alerts only from the watcher whose seed sits beside its own in `.office/fetch-watcher.json`. The watcher reconnects with backoff when the office restarts, compares against the last state it saw so nothing is missed meanwhile, and drops repeats within a minute. Run it beside the office agent:
+
+```sh
+.office/runtime/agent-venv/Scripts/python agents/watcher_agent.py
+```
 
 ## Claude agents
 

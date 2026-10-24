@@ -19,6 +19,7 @@ import uagents.asgi
 from uagents import Agent, Context, Protocol
 from uagents.crypto import Identity
 from uagents.resolver import RulesBasedResolver
+from alerts import OFFICE_CONFIG
 from uagents_core.contrib.protocols.chat import ChatAcknowledgement, ChatMessage, TextContent, chat_protocol_spec
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,7 +35,7 @@ if len(sys.argv) < 2:
     sys.exit(__doc__)
 messages = [f"pair {sys.argv[1]}", *(sys.argv[2:] or ["status"])]
 
-config = json.loads((STATE / "fetch-agent.json").read_text(encoding="utf-8"))
+config = json.loads(OFFICE_CONFIG.read_text(encoding="utf-8-sig"))
 office_address = Identity.from_seed(os.environ.get("OFFICE_AGENT_SEED") or config["seed"], 0).address
 
 # A stable tester seed, so repeated runs reuse one address instead of registering a new one each time.

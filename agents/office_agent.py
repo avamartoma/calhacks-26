@@ -26,10 +26,11 @@ from uagents_core.contrib.protocols.chat import (
 )
 
 sys.path.insert(0, str(Path(__file__).parent))
+from alerts import OFFICE_CONFIG, OfficeAlert, alert_protocol, watcher_address  # noqa: E402
 from office_core import HELP, Gate, OfficeAgent, OfficeClient  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-CONFIG = ROOT / ".office" / "fetch-agent.json"
+CONFIG = OFFICE_CONFIG
 
 # Windows consoles may not encode every character ASI:One sends; never let logging crash a handler.
 sys.stdout.reconfigure(errors="backslashreplace")
@@ -40,7 +41,7 @@ uagents.asgi.HOST = "127.0.0.1"
 
 def load_config() -> dict:
     try:
-        return json.loads(CONFIG.read_text(encoding="utf-8"))
+        return json.loads(CONFIG.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return {}
 
@@ -77,13 +78,14 @@ agent = Agent(
     name="iteration1-office",
     seed=os.environ.get("OFFICE_AGENT_SEED") or config["seed"],
     port=int(os.environ.get("OFFICE_AGENT_PORT", "8001")),
-    mailbox=True,
+    mailbox=os.environ.get("OFFICE_AGENT_MAILBOX") != "0",
     publish_agent_details=True,
     report_events=False,  # optional Agentverse telemetry; it needs an API key and logs 401s without one
     readme_path=str(Path(__file__).parent / "AGENT.md"),
     description="Check on, and hand missions to, an Iteration1 office of coding agents running on its owner's computer.",
 )
 chat = Protocol(spec=chat_protocol_spec)
+alerts = alert_protocol()
 
 
 def reply(text: str) -> ChatMessage:
@@ -116,12 +118,26 @@ async def on_chat(ctx: Context, sender: str, msg: ChatMessage):
     await ctx.send(sender, reply(answer))
 
 
+@alerts.on_message(OfficeAlert)
+async def on_alert(ctx: Context, sender: str, msg: OfficeAlert):
+    # Alerts are accepted only from this computer's own watcher agent.
+    if sender != watcher_address():
+        say(f"Ignored alert from unknown sender {sender}")
+        return
+    lines = [line[:300] for line in msg.lines[:20]]
+    office.remember(lines)
+    say(f"Alert from watcher -> {len(office.gate.owners)} owner(s): {lines}")
+    for owner in sorted(office.gate.owners):
+        await ctx.send(owner, reply("Office update:\n" + "\n".join(f"- {line}" for line in lines)))
+
+
 @chat.on_message(ChatAcknowledgement)
 async def on_ack(ctx: Context, sender: str, msg: ChatAcknowledgement):
     pass
 
 
 agent.include(chat, publish_manifest=True)
+agent.include(alerts)
 
 if __name__ == "__main__":
     agent.run()
