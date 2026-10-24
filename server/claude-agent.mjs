@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { editPaths } from './cloud-sync.mjs';
 
 // Claude as an office engine, through the Claude Agent SDK. A Claude agent is a full office
 // member: it takes the same instructions and office tools as a Codex agent, its stream is
@@ -25,7 +26,7 @@ const FILE_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
  * project folder; if the sandbox is unavailable the run fails instead of running unconfined.
  * `extraTools` names additional tools to allow, such as the office's MCP tools.
  */
-export function accessOptions(access, extraTools = []) {
+export function accessOptions(access, extraTools = [], beforeEdit) {
   const tools = access === 'edit' ? EDIT_TOOLS : READ_TOOLS;
   const allowed = new Set([...tools, ...extraTools]);
   return {
@@ -34,7 +35,15 @@ export function accessOptions(access, extraTools = []) {
     permissionMode: access === 'edit' ? 'acceptEdits' : 'dontAsk',
     ...(access === 'edit' ? { sandbox: { enabled: true, failIfUnavailable: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false } } : {}),
     // Nobody is watching a terminal, so anything outside the grant is denied rather than prompted.
-    canUseTool: async name => allowed.has(name) ? { behavior: 'allow' } : { behavior: 'deny', message: `${name} is not available to this ${access === 'edit' ? 'editing' : 'read-only'} desk.` }
+    canUseTool: async (name, input) => {
+      if (!allowed.has(name)) return { behavior: 'deny', message: `${name} is not available to this ${access === 'edit' ? 'editing' : 'read-only'} desk.` };
+      const paths = editPaths(name, input);
+      if (beforeEdit && paths.length) {
+        const denial = await beforeEdit(paths);
+        if (denial) return { behavior: 'deny', message: denial };
+      }
+      return { behavior: 'allow' };
+    }
   };
 }
 
@@ -112,7 +121,7 @@ export function createClaudeRunner({
 } = {}) {
   const runs = new Map();
   /** Starts a run. With `resume`, it continues an earlier session, so the agent keeps its context. */
-  async function launch(id, input, { cwd, resume, instructions, mcpServers, extraTools = [], onSession, onMessage, onToolUse, onToolResult, onDone }) {
+  async function launch(id, input, { cwd, resume, instructions, mcpServers, extraTools = [], beforeEdit, onSession, onMessage, onToolUse, onToolResult, onDone }) {
     if (runs.has(id)) throw new Error('This desk already has a Claude run in flight. Stop it before launching another.');
     const useOAuth = await oauth();
     const key = useOAuth ? null : apiKey();
@@ -131,7 +140,7 @@ export function createClaudeRunner({
         ? 'You are working at a desk in Iteration1. Keep changes focused on the request, run the relevant checks, and finish with a short summary of what changed and how you verified it. The user may send follow-up messages; treat each as a continuation of the same work.'
         : 'You are a read-only specialist at a desk in Iteration1. Inspect and report findings with file paths. Do not try to edit files. The user may send follow-up messages; treat each as a continuation of the same work.') },
       ...(mcpServers ? { mcpServers } : {}),
-      ...accessOptions(input.access, extraTools)
+      ...accessOptions(input.access, extraTools, beforeEdit)
     };
     let run;
     try { run = query({ prompt, options }); }

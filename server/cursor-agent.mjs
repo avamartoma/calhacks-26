@@ -46,7 +46,7 @@ export function publicMessage(message) {
 
 export function createCursorRunner({ importSdk = () => import('@cursor/sdk'), apiKey = () => process.env.CURSOR_API_KEY } = {}) {
   const runs = new Map();
-  async function launch(id, input, { cwd, mcpServers, onMessage, onDone }) {
+  async function launch(id, input, { cwd, mcpServers, onMessage, onToolStart, onDone }) {
     if (runs.has(id)) throw new Error('This desk already has a Cursor run in flight. Stop it before launching another.');
     const key = await apiKey();
     if (!key) throw new Error('Connect Cursor in Connections → Cursor, or set CURSOR_API_KEY before launching a Cursor agent.');
@@ -64,12 +64,24 @@ export function createCursorRunner({ importSdk = () => import('@cursor/sdk'), ap
     try { run = await agent.send(input.prompt); }
     catch (error) { await dispose(agent); throw new Error(`Cursor agent could not start: ${error.message}`); }
     runs.set(id, { agent, run });
-    void pump(id, agent, run, onMessage, onDone);
+    void pump(id, agent, run, onMessage, onToolStart, onDone);
     return { runId: run.id, agentId: agent.agentId, runtime: input.runtime };
   }
-  async function pump(id, agent, run, onMessage, onDone) {
+  async function pump(id, agent, run, onMessage, onToolStart, onDone) {
     let failure = null;
-    try { for await (const message of run.stream()) { const item = publicMessage(message); if (item) onMessage(item); } }
+    try {
+      for await (const message of run.stream()) {
+        if (message?.type === 'tool_call' && message.status === 'running' && onToolStart) {
+          const busy = await onToolStart(message);
+          if (busy) {
+            onMessage({ kind: 'error', text: busy });
+            if (run.supports?.('cancel')) await run.cancel().catch(() => {});
+            continue;
+          }
+        }
+        const item = publicMessage(message); if (item) onMessage(item);
+      }
+    }
     catch (error) { failure = error.message; }
     let result;
     // `wait` is what distinguishes finished from errored or cancelled, and releases the run's watchers.

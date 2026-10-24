@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.convex/
 .office/
 .protocol/
 artifacts/
