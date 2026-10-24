@@ -131,7 +131,7 @@ test('failed runs and broken streams settle the desk with the reason', async () 
 
 test('a launch needs a key, refuses a second run at one desk and can be stopped', async () => {
   const keyless = createClaudeRunner({ importSdk: async () => fakeSdk().sdk, apiKey: () => '' });
-  await assert.rejects(keyless.launch('desk-1', input, { cwd: '/p', onMessage() {}, onDone() {} }), /ANTHROPIC_API_KEY/);
+  await assert.rejects(keyless.launch('desk-1', input, { cwd: '/p', onMessage() {}, onDone() {} }), /Connect Claude first/);
 
   const hold = { atTurn: 0 }; let done;
   const runner = createClaudeRunner({ importSdk: async () => fakeSdk({ hold }).sdk, apiKey: () => 'k' });

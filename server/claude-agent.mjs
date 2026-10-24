@@ -115,7 +115,7 @@ export function createClaudeRunner({
   async function launch(id, input, { cwd, resume, onSession, onMessage, onDone }) {
     if (runs.has(id)) throw new Error('This desk already has a Claude run in flight. Stop it before launching another.');
     const key = apiKey();
-    if (!key) throw new Error('Set ANTHROPIC_API_KEY before launching a Claude agent. Create a key at platform.claude.com.');
+    if (!key) throw new Error('Connect Claude first: open Tools → Integrations and add your Anthropic API key.');
     const { query } = await importSdk();
     const abortController = new AbortController();
     const prompt = inputQueue(input.prompt);

@@ -15,6 +15,7 @@ import { createTeam } from './team.mjs';
 import { seed, uid, agent, event, workItem, evidenceFrom, roomBy, agentBy, active, canDelegate, handoff, publicItem, external, selfDriven } from './domain.mjs';
 import { createCursorRunner, launchFields } from './cursor-agent.mjs';
 import { createClaudeRunner, claudeLaunchFields, claudeModels } from './claude-agent.mjs';
+import { createClaudeKeyStore } from './claude-key.mjs';
 import { claimIdentity, nameStoredRoom, replacementName } from './names.mjs';
 import { z } from 'zod';
 import { featureUrl } from './feature-link.mjs';
@@ -54,7 +55,8 @@ const loadedThreads = new Set();
 const startingAgents = new Set();
 const cursor = createCursorDesk({ state, changed, isStarting: id => startingAgents.has(id) });
 const runner = createCursorRunner();
-const claude = createClaudeRunner();
+const claudeKey = createClaudeKeyStore(); await claudeKey.load();
+const claude = createClaudeRunner({ apiKey: () => claudeKey.current() });
 function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates }; }
 function changed() {
   if (!broadcastTimer) broadcastTimer = setTimeout(() => {
@@ -370,7 +372,10 @@ app.post('/api/rooms/:id/team/message',wrap(async req=>{
   const message=team.queue(room,{...sender,peerMessagesThisTurn:0},args);if(!message)throw new Error('Choose a teammate agent.');
   message.sentByOwner=true;changed();return {message};
 }));
-app.get('/api/integrations', (req, res) => res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claude: { configured: !!process.env.ANTHROPIC_API_KEY, models: claudeModels } }));
+app.get('/api/integrations', (req, res) => res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claude: { ...claudeKey.status(), models: claudeModels } }));
+// Connecting Claude: the key is checked with Anthropic, then kept locally. It is never returned to the page.
+app.post('/api/claude/key', wrap(async req => claudeKey.save(z.object({ apiKey: z.string() }).strict().parse(req.body).apiKey)));
+app.post('/api/claude/key/remove', wrap(async () => claudeKey.remove()));
 // The token is shown once at issue time; only its hash is kept, so a lost token is reissued, not recovered.
 app.post('/api/identities', wrap(async req => { const { token, identity } = issueAgentIdentity(state, req.body); changed(); return { token, identity: publicIdentity(identity) }; }));
 app.delete('/api/identities/:sub', wrap(async req => { const removed = revokeIdentity(state, req.params.sub); changed(); return { identity: publicIdentity(removed) }; }));

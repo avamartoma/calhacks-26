@@ -276,7 +276,7 @@ function ToolsPanel({ room, connected, action, onConnect, onTool, onDemo, onWhip
     {name:'Workflows',icon:Layers,target:'templates'},
     {name:'Run mode',icon:Zap,target:'modes'},
     {name:'Skills',icon:Sparkles,target:'skills'},
-    {name:'Cursor',icon:ArrowUpRight,target:'integrations'}
+    {name:'Cursor & Claude',icon:ArrowUpRight,target:'integrations'}
   ];
   return <><h2>Tools</h2>{tools.map(t=><button className="tool-row" key={t.target} onClick={()=>onTool(t.target as Tool)}><t.icon size={19}/><span><b>{t.name}</b></span><ChevronRight size={14}/></button>)}
     <details className="compact-disclosure"><summary>Presentation</summary><button className="tool-row" onClick={onDemo}><Play size={19}/><span>Watch demo</span></button><button className="tool-row" onClick={()=>onTool('recording')}><Monitor size={19}/><span>Recording studio</span></button><button className="tool-row" onClick={onWhip}><Zap size={19}/><span>Whip · Crunch mode</span></button></details>

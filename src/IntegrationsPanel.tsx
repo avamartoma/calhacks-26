@@ -47,6 +47,6 @@ export function IntegrationsPanel({ room }: { room: Room }) {
       <label>Prompt<textarea readOnly rows={3} value={prompt}/></label>
       <button className="text-button" onClick={() => void load()}>Refresh connection details</button>
     </details>
-    <ClaudePanel room={room} claude={data?.claude ?? null} />
+    <ClaudePanel room={room} claude={data?.claude ?? null} onChange={() => void load()} />
   </div>;
 }
