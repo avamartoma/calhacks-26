@@ -65,6 +65,10 @@ Issue an **agent identity** from the Cursor panel to give a session a durable de
 
 Iteration1 can also **launch** a Cursor agent itself through the Cursor SDK, as an alternative to a session reporting in. Those runs use a model chosen here, stream their observable work, and can be stopped from the office. Set `CURSOR_API_KEY` first; launching requires Node 22.13+, which the rest of the app does not.
 
+## Claude agents
+
+Iteration1 can launch **Claude agents** through the Claude Agent SDK. Set `ANTHROPIC_API_KEY` before starting Iteration1, then open **Tools → Integrations**, describe the task, and choose a model (Claude Opus 5.5 by default) and access. An editing agent may change files and run commands in an OS sandbox that confines writes to the project folder; if the sandbox is unavailable the run fails instead of running unconfined. A read-only agent can only read and search. Each run takes one prompt, streams its observable work to its desk, and can be stopped there. Usage is billed to the API key's account.
+
 Reusable manager, handoff, and review skills live in `skills/`. The app can install them into a project's `.agents/skills` without overwriting differing instructions.
 
 ## Validation

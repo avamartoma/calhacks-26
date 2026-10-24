@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { ArrowUpRight, Check, Copy } from 'lucide-react';
 import type { Room } from './types';
 import './integrations.css';
+import { ClaudePanel, type ClaudeIntegration } from './ClaudePanel';
 
-interface Integrations { cursor: { command: string; script: string; url: string } }
+interface Integrations { cursor: { command: string; script: string; url: string }; claude: ClaudeIntegration }
 interface Identity { sub: string; label: string; record: { started: number; review: number; blocked: number; verified: number } }
 export function IntegrationsPanel({ room }: { room: Room }) {
   const [data, setData] = useState<Integrations | null>(null);
@@ -46,5 +47,6 @@ export function IntegrationsPanel({ room }: { room: Room }) {
       <label>Prompt<textarea readOnly rows={3} value={prompt}/></label>
       <button className="text-button" onClick={() => void load()}>Refresh connection details</button>
     </details>
+    <ClaudePanel room={room} claude={data?.claude ?? null} />
   </div>;
 }

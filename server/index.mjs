@@ -14,6 +14,7 @@ import { peerTools, peerInstructions, inbox, queueHandoff, handoffEnvelope, pres
 import { createTeam } from './team.mjs';
 import { seed, uid, agent, event, workItem, evidenceFrom, roomBy, agentBy, active, canDelegate, handoff, publicItem, external, selfDriven } from './domain.mjs';
 import { createCursorRunner, launchFields } from './cursor-agent.mjs';
+import { createClaudeRunner, claudeLaunchFields, claudeModels } from './claude-agent.mjs';
 import { claimIdentity, nameStoredRoom, replacementName } from './names.mjs';
 import { z } from 'zod';
 import { featureUrl } from './feature-link.mjs';
@@ -53,6 +54,7 @@ const loadedThreads = new Set();
 const startingAgents = new Set();
 const cursor = createCursorDesk({ state, changed, isStarting: id => startingAgents.has(id) });
 const runner = createCursorRunner();
+const claude = createClaudeRunner();
 function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates }; }
 function changed() {
   if (!broadcastTimer) broadcastTimer = setTimeout(() => {
@@ -128,6 +130,7 @@ async function startAgentReserved(room, a, prompt) {
   const access=permissionsFor(room,a),accessKey=permissionKey(room,a);
   cursor.assertAvailable(room);
   if (selfDriven(a)) throw new Error('Continue this task in Cursor or replace the finished worker with a Codex model.');
+  if (a.provider === 'claude') throw new Error('Launch a new Claude agent for follow-up work, or replace this worker with a Codex model.');
   if (external(a)) throw new Error('Relaunch this task with the Cursor agent runner, or replace the worker with a Codex model.');
   await ensureConnected();
   if(access.canWrite && process.platform==='win32' && connection.sandboxStatus!=='ready')throw new Error('Windows sandbox setup is required to edit project files. Open Connect Codex, choose Set up Windows sandbox, then resume this ticket.');
@@ -137,6 +140,7 @@ async function startAgentReserved(room, a, prompt) {
   if (room.capturing) throw new Error('A checkpoint is being captured. Try again shortly.');
   if (a.status === 'ejected') throw new Error('This agent has been ejected. Replace it to continue.');
   if (a.turnId) throw new Error('This agent is already working. Send a message to steer it.');
+  if(access.canWrite && state.rooms.some(other=>!other.demo && path.relative(other.path,room.path)==='' && other.agents.some(w=>w.provider==='claude' && w.access==='edit' && w.turnId)))throw new Error('A Claude agent is editing this project. Wait for it to finish or stop it first.');
   if(a.manager && state.rooms.some(other=>other!==room && !other.demo && path.relative(other.path,room.path)==='' && other.agents.some(owner=>owner.manager && (owner.turnId || startingAgents.has(owner.id)))))throw new Error('Another room is already implementing in this project folder. Pause its manager first.');
   if (!a.manager) canDelegate(room);
   const assigned=assignedWork(room,a.id); if(assigned){const wait=waitingReason(room,assigned);if(wait)throw new Error(wait.reason);}
@@ -171,6 +175,7 @@ async function stopAgent(a) {
   if (selfDriven(a) && a.turnId) throw new Error('Stop execution in Cursor, then use office_cursor_finish to release this assignment.');
   if (startingAgents.has(a.id)) throw new Error('Agent is starting. Wait for the turn to begin, then stop it.');
   // A run the office launched can genuinely be cancelled; cancellation lands through the stream.
+  if (a.provider === 'claude') { if (claude.running(a.id)) await claude.stop(a.id); a.status = 'paused'; return; }
   if (external(a)) { if (runner.running(a.id)) await runner.stop(a.id); a.status = 'paused'; return; }
   if (a.threadId && a.turnId) {
     try { await codex.call('turn/interrupt', { threadId: a.threadId, turnId: a.turnId }); }
@@ -184,6 +189,7 @@ async function stopAgent(a) {
 }
 async function sendTo(room, a, text) {
   if (selfDriven(a)) throw new Error('Send this message in Cursor. Iteration1 tracks this worker but does not control its execution.');
+  if (a.provider === 'claude') throw new Error('This Claude run takes one prompt. Wait for it to finish, then launch a follow-up run.');
   if (external(a)) throw new Error('This Cursor run takes one prompt. Wait for it to finish, then launch a follow-up run.');
   if (a.status === 'ejected') throw new Error('Replace this agent before sending a message.');
   if (a.turnId) { await codex.call('turn/steer', { threadId: a.threadId, expectedTurnId: a.turnId, input: [{ type: 'text', text }] }); event(a, 'user', text); }
@@ -360,7 +366,7 @@ app.post('/api/rooms/:id/team/message',wrap(async req=>{
   const message=team.queue(room,{...sender,peerMessagesThisTurn:0},args);if(!message)throw new Error('Choose a teammate agent.');
   message.sentByOwner=true;changed();return {message};
 }));
-app.get('/api/integrations', (req, res) => res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}` } }));
+app.get('/api/integrations', (req, res) => res.json({ cursor: { command: process.execPath, script: path.join(root, 'scripts', 'cursor-mcp.mjs'), url: `http://127.0.0.1:${port}` }, claude: { configured: !!process.env.ANTHROPIC_API_KEY, models: claudeModels } }));
 // The token is shown once at issue time; only its hash is kept, so a lost token is reissued, not recovered.
 app.post('/api/identities', wrap(async req => { const { token, identity } = issueAgentIdentity(state, req.body); changed(); return { token, identity: publicIdentity(identity) }; }));
 app.delete('/api/identities/:sub', wrap(async req => { const removed = revokeIdentity(state, req.params.sub); changed(); return { identity: publicIdentity(removed) }; }));
@@ -392,6 +398,36 @@ app.post('/api/rooms/:id/cursor/launch', wrap(async req => {
     record(room, `Cursor agent run ${outcome.status}`, 'work'); changed();
   };
   try { const launched = await runner.launch(worker.id, input, { cwd: room.path, onMessage, onDone }); event(worker, 'system', `Cursor ${launched.runtime} run ${launched.runId}. Execution is owned by this office and can be stopped here.`); record(room, 'Cursor agent launched', 'work'); changed(); return { roomId: room.id, agentId: worker.id, workItemId: item.id, ...launched }; }
+  catch (error) { worker.turnId = null; worker.status = 'error'; event(worker, 'error', error.message); item.status = 'blocked'; item.blocker = error.message; item.updatedAt = Date.now(); changed(); throw error; }
+}));
+// A Claude agent the office launches through the Claude Agent SDK. Same ownership as a
+// launched Cursor run: the office picks the model and access, records the stream and can stop it.
+app.post('/api/rooms/:id/claude/launch', wrap(async req => {
+  const room = roomBy(state, req.params.id);
+  if (room.demo) throw new Error('Choose a live project room for Claude work.');
+  const input = claudeLaunchFields.parse(req.body);
+  cursor.assertAvailable(room);
+  if (room.capturing) throw new Error('Wait for the checkpoint to finish before launching a run.');
+  // Only one writer per project: an editing run waits for every active turn; a read-only run only for other writers.
+  if (room.agents.some(a => (a.turnId || startingAgents.has(a.id)) && (input.access === 'edit' || a.manager || a.access === 'edit'))) throw new Error('Wait for the active office work to finish before launching a Claude agent.');
+  const worker = agent('', input.access === 'edit' ? 'Implementation' : 'Research', input.prompt, room.agents.length, { provider: 'claude', model: input.model, modelSource: 'office-selected', access: input.access, status: 'working', turnId: uid() });
+  const item = workItem(input.prompt.split('\n')[0].slice(0, 120), input.prompt, { agentId: worker.id, status: 'working', acceptanceCriteria: ['Return a concrete, evidence-backed result'], requiredEvidence: [input.access === 'edit' ? 'diff' : 'log'], checks: [], comments: [], files: [] });
+  room.paused = false; room.agents.push(worker); claimIdentity(worker, room); room.workItems.push(item); room.goal ||= input.prompt;
+  event(worker, 'user', input.prompt);
+  const onMessage = entry => { event(worker, entry.kind, entry.text); worker.updatedAt = Date.now(); changed(); };
+  const onDone = outcome => {
+    worker.turnId = null; worker.status = outcome.status === 'finished' ? 'done' : outcome.status === 'cancelled' ? 'paused' : 'error';
+    if (outcome.error) event(worker, 'error', outcome.error);
+    if (outcome.result) event(worker, 'update', outcome.result);
+    if (outcome.costUsd != null) event(worker, 'system', `Claude run used ${outcome.turns ?? '?'} turns, about $${outcome.costUsd.toFixed(2)}.`);
+    item.evidence.push(...evidenceFrom(worker));
+    item.status = outcome.status === 'finished' ? 'review' : 'blocked';
+    item.blocker = item.status === 'blocked' ? outcome.error || `Claude run ${outcome.status}.` : '';
+    item.updatedAt = Date.now();
+    identifyEvidence(room); trimEvidence(room, item);
+    record(room, `Claude agent run ${outcome.status}`, 'work'); changed();
+  };
+  try { const launched = await claude.launch(worker.id, input, { cwd: room.path, onMessage, onDone }); event(worker, 'system', `Claude ${input.access === 'edit' ? 'editing' : 'read-only'} run on ${launched.model}. Execution is owned by this office and can be stopped here.`); record(room, 'Claude agent launched', 'work'); changed(); return { roomId: room.id, agentId: worker.id, workItemId: item.id, ...launched }; }
   catch (error) { worker.turnId = null; worker.status = 'error'; event(worker, 'error', error.message); item.status = 'blocked'; item.blocker = error.message; item.updatedAt = Date.now(); changed(); throw error; }
 }));
 app.post('/api/rooms/:id/cursor/start', wrap(async req => cursor.start(roomBy(state, req.params.id), req.body)));
@@ -553,7 +589,7 @@ app.post('/api/rooms/:id/agents/:aid/speed', wrap(async req => {
   const r = roomBy(state, req.params.id); const a = agentBy(r, req.params.aid);
   const { fast } = z.object({ fast: z.boolean() }).strict().parse(req.body);
   if (selfDriven(a)) throw new Error('Choose model and speed settings in Cursor.');
-  if (external(a)) throw new Error('Choose the model when you launch the next Cursor run.');
+  if (external(a)) throw new Error(`Choose the model when you launch the next ${a.provider === 'claude' ? 'Claude' : 'Cursor'} run.`);
   if (a.status === 'ejected') throw new Error('This agent has left. Select its replacement.');
   if (startingAgents.has(a.id)) throw new Error('A turn is starting. Try again once it has started.');
   const message = `${r.demo ? 'Demo: ' : ''}${fast ? 'Fast mode requested' : 'Standard speed selected'} for ${a.name}’s next turn.${fast && !r.demo ? ' Higher usage may apply; availability depends on the model and account.' : ''}`;
