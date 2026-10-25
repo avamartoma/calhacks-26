@@ -11,7 +11,9 @@ const megabytes = (bytes: number) => `${(bytes / 1_000_000).toFixed(bytes < 10_0
 
 /** A new project from a folder on this computer, from your GitHub repos, or from any repository link. */
 export function NewProject({ githubLogin, workspace, onClose, onCreated }: { githubLogin: boolean; workspace?: TargetWorkspace; onClose: () => void; onCreated: (id: string) => void }) {
-  const [source, setSource] = useState<'folder' | 'github'>(githubLogin ? 'github' : 'folder');
+  // Phones can't pick a folder (iOS has no folder picker), so there it's files, and GitHub comes first.
+  const [phone] = useState(() => matchMedia('(hover: none) and (pointer: coarse)').matches);
+  const [source, setSource] = useState<'folder' | 'github'>(githubLogin || phone ? 'github' : 'folder');
   const [name, setName] = useState('');
   const [repoUrl, setRepoUrl] = useState('');
   const [packed, setPacked] = useState<PackedFolder | null>(null);
@@ -35,7 +37,7 @@ export function NewProject({ githubLogin, workspace, onClose, onCreated }: { git
     try {
       let id: Id<'projects'>;
       if (source === 'folder') {
-        if (!packed) throw new Error('Choose a folder first');
+        if (!packed) throw new Error(phone ? 'Choose some files first' : 'Choose a folder first');
         setBusy('Uploading…');
         const response = await fetch(await uploadUrl({}), { method: 'POST', headers: { 'Content-Type': 'application/gzip' }, body: packed.archive });
         if (!response.ok) throw new Error('The upload failed. Try again.');
@@ -54,12 +56,12 @@ export function NewProject({ githubLogin, workspace, onClose, onCreated }: { git
     <h2>New project</h2>
     {workspace && <p className="web-note">In <b>{workspace.name}</b>, seen by {audience(workspace)}.</p>}
     <div className="web-tabs" role="tablist">
-      <button type="button" role="tab" aria-selected={source === 'folder'} onClick={() => setSource('folder')}><FolderUp size={15} /> Upload a folder</button>
+      <button type="button" role="tab" aria-selected={source === 'folder'} onClick={() => setSource('folder')}><FolderUp size={15} /> {phone ? 'Upload files' : 'Upload a folder'}</button>
       <button type="button" role="tab" aria-selected={source === 'github'} onClick={() => setSource('github')}><Github size={15} /> From GitHub</button>
     </div>
     {source === 'folder' ? <>
-      <input ref={picker} type="file" hidden multiple {...{ webkitdirectory: '' }} onChange={e => void pick(e.target.files)} />
-      <button type="button" className="secondary" onClick={() => picker.current?.click()} disabled={!!busy}>{packed ? 'Choose a different folder' : 'Choose folder'}</button>
+      <input ref={picker} type="file" hidden multiple {...(phone ? {} : { webkitdirectory: '' })} onChange={e => void pick(e.target.files)} />
+      <button type="button" className="secondary" onClick={() => picker.current?.click()} disabled={!!busy}>{phone ? (packed ? 'Choose different files' : 'Choose files') : (packed ? 'Choose a different folder' : 'Choose folder')}</button>
       {packed && <p className="web-note">{packed.files} files, {megabytes(packed.archive.size)} packed{packed.skipped ? ` · ${packed.skipped} left out (dependencies, build output, git, files over 5 MB)` : ''}</p>}
       <label>Name<input value={name} onChange={e => setName(e.target.value)} maxLength={60} placeholder="Customer portal" required /></label>
     </> : <>
