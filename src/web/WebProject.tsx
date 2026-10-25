@@ -13,6 +13,7 @@ import type { Agent, Room } from '../types';
 import { ConnectionTabs, ConnectionsPanel, providerNames, providers, useConnections, type Provider } from './Connections';
 import { describe, useSkyRows, type SkyRow } from './WebSky';
 import { FetchPanel } from './FetchWeb';
+import { ShareLinkButtons } from './ShareLinks';
 
 type Run = NonNullable<ReturnType<typeof useRuns>>[number];
 const useRuns = (projectId: Id<'projects'>) => useQuery(api.agentRuns.list, { projectId });
@@ -262,6 +263,7 @@ function SharePanel({ row, onClose }: { row: SkyRow; onClose: () => void }) {
     <header><h2>Share</h2><button className="icon-button" aria-label="Close" onClick={onClose}><X size={16} /></button></header>
     <div className="web-link"><code>{link}</code><button className="secondary" onClick={() => void navigator.clipboard.writeText(link).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}>{copied ? <Check size={14} /> : <Copy size={14} />}</button></div>
     {row.mine ? <>
+      <ShareLinkButtons projectId={row.id as Id<'projects'>} />
       <label className="web-check"><input type="checkbox" checked={row.visibility === 'public'} onChange={e => void setVisibility({ projectId: row.id as Id<'projects'>, visibility: e.target.checked ? 'public' : 'private' })} /> Anyone signed in can view</label>
       <form className="web-invite" onSubmit={async event => {
         event.preventDefault(); setNote('');

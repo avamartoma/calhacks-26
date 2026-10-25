@@ -5,6 +5,7 @@ import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/s
 import { requireAccess } from "./access";
 import { currentUser } from "./identity";
 import { publicWorkspace } from "./workspaces";
+import { inviteLink, revokeInvites } from "./shareLinks";
 import { accessRoleValidator, assertNonEmpty } from "./validators";
 
 declare const process: { env: Record<string, string | undefined> };
@@ -125,8 +126,10 @@ export const invite = mutation({
       id = await ctx.db.insert("projectAccess", { projectId: args.projectId, email, role: args.role, invitedBy: user.id });
     }
     if (email !== user.email) {
+      // The email's own link works whichever account they sign in with, not only this address.
+      const token = await inviteLink(ctx, args.projectId, email, args.role, user.id);
       await ctx.scheduler.runAfter(0, internal.inviteEmail.send, {
-        email, role: args.role, project: project.name, projectId: args.projectId,
+        email, role: args.role, project: project.name, projectId: args.projectId, token,
         inviter: user.name || user.email || "Someone", ...(user.email ? { inviterEmail: user.email } : {}),
       });
     }
@@ -150,6 +153,7 @@ export const remove = mutation({
       throw new Error("Invite not found");
     }
     await ctx.db.delete(existing._id);
+    await revokeInvites(ctx, args.projectId, email);
     return { ok: true as const };
   },
 });

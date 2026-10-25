@@ -12,7 +12,7 @@ import { inviteMessage } from "./lib/inviteMessage";
 declare const process: { env: Record<string, string | undefined> };
 
 export const send = internalAction({
-  args: { email: v.string(), inviter: v.string(), inviterEmail: v.optional(v.string()), project: v.string(), projectId: v.string(), role: v.union(v.literal("viewer"), v.literal("editor")) },
+  args: { email: v.string(), inviter: v.string(), inviterEmail: v.optional(v.string()), project: v.string(), projectId: v.string(), token: v.optional(v.string()), role: v.union(v.literal("viewer"), v.literal("editor")) },
   handler: async (_ctx, args): Promise<{ sent: boolean }> => {
     const user = process.env.GMAIL_USER, pass = process.env.GMAIL_APP_PASSWORD;
     if (!user || !pass) {

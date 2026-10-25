@@ -41,6 +41,7 @@ import type * as runChanges from "../runChanges.js";
 import type * as runChangesStore from "../runChangesStore.js";
 import type * as sessionSandbox from "../sessionSandbox.js";
 import type * as sessions from "../sessions.js";
+import type * as shareLinks from "../shareLinks.js";
 import type * as sharing from "../sharing.js";
 import type * as validators from "../validators.js";
 import type * as workspaces from "../workspaces.js";
@@ -85,6 +86,7 @@ declare const fullApi: ApiFromModules<{
   runChangesStore: typeof runChangesStore;
   sessionSandbox: typeof sessionSandbox;
   sessions: typeof sessions;
+  shareLinks: typeof shareLinks;
   sharing: typeof sharing;
   validators: typeof validators;
   workspaces: typeof workspaces;

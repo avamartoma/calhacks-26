@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
       beforeFiles: [
         { source: "/", destination: "/app/index.html" },
         { source: "/project/:path*", destination: "/app/index.html" },
+        { source: "/join/:path*", destination: "/app/index.html" },
       ],
       afterFiles: [],
       fallback: [],

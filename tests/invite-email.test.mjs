@@ -13,3 +13,11 @@ test('an invite email names who shared what, links to the project and escapes na
   assert.ok(!message.html.includes('<script>'));
   assert.match(inviteMessage({ inviter: 'Ava', project: 'P', projectId: 'x', email: 'a@b.co', role: 'viewer' }).text, /watch its agents/);
 });
+
+test('with an invite link, the email opens /join and works with any account', () => {
+  const message = inviteMessage({ inviter: 'Ava', project: 'Notes API', projectId: 'k57abc', email: 'davina@school.edu', role: 'viewer', token: 'tok_123' });
+  assert.equal(message.link, 'https://calhacks-26.vercel.app/join/tok_123');
+  assert.match(message.text, /Sign in with any account/);
+  assert.ok(!message.text.includes('davina@school.edu'));
+  assert.ok(message.html.includes('href="https://calhacks-26.vercel.app/join/tok_123"'));
+});

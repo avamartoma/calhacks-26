@@ -114,3 +114,11 @@
 .workspace-permissions label{align-items:flex-start;font-weight:400}
 .workspace-permissions small{display:block;font-size:11.5px;color:#66708a}
 .workspace-members .primary,.new-workspace .primary{background:#26324a;border-color:#26324a;color:#fff}
+/* The owner's view and edit links in the Share panel. */
+.web-share-links{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:8px;background:#f3f5f8}
+.web-share-link{display:flex;align-items:center;gap:8px}
+.web-share-link>span{flex:1;min-width:0}
+.web-share-link b{display:block;font:600 13px Urbanist,sans-serif;color:#24304a}
+.web-share-link small{display:block;font-size:11.5px;color:#66708a}
+.web-share-link .secondary{padding:7px 10px;font-size:12px;white-space:nowrap}
+.web-share-link .text-button{padding:4px;font-size:12px}

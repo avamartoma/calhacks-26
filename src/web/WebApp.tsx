@@ -7,6 +7,7 @@ import hosted from '../../hosted.json';
 import { localHour, paletteAt } from '../sky/time-of-day';
 import { WebSky } from './WebSky';
 import { WebProject } from './WebProject';
+import { JoinLink } from './ShareLinks';
 import '@fontsource/urbanist/400.css';
 import '@fontsource/urbanist/500.css';
 import '@fontsource/urbanist/600.css';
@@ -57,7 +58,9 @@ function Gate() {
   const [guest, setGuest] = useState(() => import.meta.env.DEV && sessionStorage.getItem('opencloud-guest') === '1');
   const route = useRoute();
   if (isLoading) return <main className="loading"><LoaderCircle className="spin" size={20} /></main>;
-  if (isAuthenticated || guest) return route.path.startsWith('/project/')
+  if (isAuthenticated || guest) return route.path.startsWith('/join/')
+    ? <JoinLink token={decodeURIComponent(route.path.slice('/join/'.length))} go={route.go} />
+    : route.path.startsWith('/project/')
     ? <WebProject id={decodeURIComponent(route.path.slice('/project/'.length))} go={route.go} />
     : <WebSky go={route.go} />;
   const palette = paletteAt(localHour());

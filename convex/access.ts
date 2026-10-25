@@ -33,9 +33,9 @@ const best = (a: AccessRole | null, b: AccessRole | null) => (!a ? b : !b ? a : 
 /**
  * Role for this caller, or null when they cannot view the project.
  * Owner (including the unsigned office user `local`) is editor. Otherwise the highest of:
- * an invite to the project (matched by lowercased email), being public (viewer), and the
- * project's workspace (public: viewer; shared: the member's role, and editor for its creator).
- * `link` does not grant access.
+ * an invite to the project (matched by lowercased email), a share link the caller accepted
+ * (linkGrants), being public (viewer), and the project's workspace (public: viewer; shared:
+ * the member's role, and editor for its creator).
  */
 export async function grantedRole(
   ctx: AccessCtx,
@@ -53,6 +53,13 @@ export async function grantedRole(
       .withIndex("by_project_email", (q) => q.eq("projectId", project._id).eq("email", email))
       .unique();
     role = best(role, invite?.role ?? null);
+  }
+  if (!user.local) {
+    const grants = await ctx.db
+      .query("linkGrants")
+      .withIndex("by_project_user", (q) => q.eq("projectId", project._id).eq("userId", user.id))
+      .collect();
+    for (const grant of grants) role = best(role, grant.role);
   }
   if (project.visibility === "public") {
     role = best(role, "viewer");

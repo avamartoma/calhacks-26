@@ -102,6 +102,33 @@ export default defineSchema({
     .index("by_project", ["projectId"])
     .index("by_project_email", ["projectId", "email"]),
 
+  // Links that give whoever opens them, signed in, view or edit access. A `link` is the owner's
+  // reusable view or edit link; an `invite` is the one-time link in an invite email, so it works
+  // whichever address the person signs in with.
+  shareLinks: defineTable({
+    projectId: v.id("projects"),
+    token: v.string(),
+    role: accessRoleValidator,
+    kind: v.union(v.literal("link"), v.literal("invite")),
+    email: v.optional(v.string()),
+    createdBy: v.string(),
+    usedBy: v.optional(v.string()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_token", ["token"])
+    .index("by_project", ["projectId"]),
+
+  // Who got access by opening a share link, and through which one, so turning a link off removes it.
+  linkGrants: defineTable({
+    projectId: v.id("projects"),
+    userId: v.string(),
+    role: accessRoleValidator,
+    linkId: v.id("shareLinks"),
+  })
+    .index("by_project_user", ["projectId", "userId"])
+    .index("by_link", ["linkId"])
+    .index("by_user", ["userId"]),
+
   fileChanges: defineTable({
     projectId: v.id("projects"),
     sessionId: v.optional(v.id("sessions")),
