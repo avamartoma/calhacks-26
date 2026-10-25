@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from jira_cloud import KEY, Jira, JiraError
-from office_core import CONFIRM_TTL, EDGE, _clip
+from office_core import CONFIRM_TTL, EDGE, OfficeError, _clip
 
 SYSTEM = """You turn a product idea into a Jira plan for a small software team. Write one epic and 2 to 6 user stories.
 Each story needs a short summary, one or two sentences of description, and 2 to 4 testable acceptance criteria
@@ -95,10 +95,18 @@ class PlannerAgent:
             return str(e)
         return HELP
 
-    def draft(self, sender: str, idea: str) -> str:
+    def draft_plan(self, idea: str) -> tuple[Plan, bool]:
+        """A plan for an idea, and whether the model wrote it (False means the simple split)."""
         plan = clean_plan(self.ask(SYSTEM, idea[:4000])) if self.ask else None
-        note = "" if plan else ("" if not self.ask else "The model didn't return a usable plan, so this is a simple split of your idea.\n\n")
-        plan = plan or fallback_plan(idea)
+        return (plan, True) if plan else (fallback_plan(idea), False)
+
+    def create_plan(self, plan: Plan) -> tuple[str | None, list[str]]:
+        epic = self.jira.create(plan.epic["summary"], plan.epic["description"], kind="epic") if self.jira.issue_types()["epic"] else None
+        return epic, [self.jira.create(s["summary"], s["description"], s["acceptance_criteria"], parent=epic) for s in plan.stories]
+
+    def draft(self, sender: str, idea: str) -> str:
+        plan, modeled = self.draft_plan(idea)
+        note = "" if modeled or not self.ask else "The model didn't return a usable plan, so this is a simple split of your idea.\n\n"
         self.drafts[sender] = (plan, self.clock() + CONFIRM_TTL)
         return note + plan_text(plan, self.jira.project)
 
@@ -106,8 +114,7 @@ class PlannerAgent:
         plan, expires = self.drafts.pop(sender, (None, 0))
         if not plan or expires < self.clock():
             return "There's no plan waiting. Say `plan: <idea>` first."
-        epic = self.jira.create(plan.epic["summary"], plan.epic["description"], kind="epic") if self.jira.issue_types()["epic"] else None
-        keys = [self.jira.create(s["summary"], s["description"], s["acceptance_criteria"], parent=epic) for s in plan.stories]
+        epic, keys = self.create_plan(plan)
         lines = [f"Created in {self.jira.project}:" + (f" epic {epic}," if epic else "") + f" {len(keys)} stories."]
         lines += [f"- {k}: {s['summary']}" for k, s in zip(keys, plan.stories)]
         lines += ["", f"Say `start {keys[0]}` to hand the first one to the office."]
@@ -123,6 +130,37 @@ class PlannerAgent:
         if not issues:
             return f"No open issues in {self.jira.project}. Say `plan: <idea>` to create some."
         return f"Open in {self.jira.project}:\n" + "\n".join(f"- {i['key']} [{i['status']}] {_clip(i['summary'], 90)}" for i in issues)
+
+    def run_job(self, kind: str, payload: dict, room_id: str, dispatch: Callable[[str, str], object]) -> tuple[bool, dict]:
+        """Work the office app queued: draft a plan, create it in Jira, or start a story in this project.
+        The app is only reachable from this computer, so it acts for the office's owner."""
+        if self.jira is None:
+            return False, {"error": "Jira isn't set up yet. Run agents/configure.py on this computer, then restart the agents."}
+        try:
+            if kind == "plan":
+                idea = str(payload.get("idea", "")).strip()
+                if len(idea) < 6:
+                    return False, {"error": "Describe the idea in a sentence."}
+                plan, modeled = self.draft_plan(idea)
+                return True, {"plan": {"epic": plan.epic, "stories": plan.stories}, "modeled": modeled, "project": self.jira.project}
+            if kind == "create":
+                plan = clean_plan(payload.get("plan"))
+                if not plan:
+                    return False, {"error": "That plan is incomplete. Draft it again."}
+                epic, keys = self.create_plan(plan)
+                return True, {"epic": epic, "issues": [{"key": k, "summary": s["summary"]} for k, s in zip(keys, plan.stories)], "project": self.jira.project, "site": self.jira.site}
+            if kind == "start":
+                key = str(payload.get("key", "")).strip().upper()
+                if not KEY.fullmatch(key):
+                    return False, {"error": "Choose a Jira issue such as KAN-2."}
+                issue = self.jira.issue(key)
+                dispatch(room_id, mission_prompt(issue))
+                return True, {"key": issue["key"], "summary": issue["summary"]}
+        except JiraError as e:
+            return False, {"error": str(e)}
+        except OfficeError as e:  # the office refusing a mission, for example
+            return False, {"error": f"The office said: {e}"}
+        return False, {"error": f"I don't handle {kind} jobs."}
 
     def on_event(self, kind: str, title: str, detail: str = "", verified: bool | None = None) -> str | None:
         """Mirror office progress onto the Jira issue named at the start of the task title. Returns a log line."""

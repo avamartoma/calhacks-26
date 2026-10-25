@@ -1,0 +1,32 @@
+/* ASI:One agents in the project rail, their panel and on tickets. Follows the rail and panel styles in workspace.css. */
+.fetch-rail{display:flex;flex-direction:column;gap:2px;margin-top:8px;padding-top:8px;border-top:1px solid #e2e6e3}
+.project-rail .fetch-rail-title{font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:#758279;padding:4px 8px}
+.fetch-rail-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px}
+.project-rail .fetch-rail-agent{gap:6px;padding:5px 8px;font-size:11px}
+.fetch-rail-agent i,.fetch-card header i{flex:none;width:7px;height:7px;border-radius:50%;background:#c9d0cb}
+.fetch-rail-agent i.on,.fetch-card.on header i{background:#3d9a68;box-shadow:0 0 0 3px #3d9a6822}
+.fetch-rail-agent span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.fetch-panel h3{font:600 14px/1.4 Manrope,sans-serif;margin:24px 0 10px}
+.fetch-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin:16px 0}
+.fetch-card{display:flex;flex-direction:column;gap:4px;padding:12px;border:1px solid #e2e6e3;border-radius:6px;background:#fff}
+.fetch-card header{display:flex;align-items:center;gap:8px}.fetch-card header b{flex:1;font-size:13px}.fetch-card header i{margin-top:0}
+.fetch-card p{margin:0;font-size:12px;color:#536158}.fetch-card small{font-size:11px;color:#758279}
+.fetch-card .text-button{align-self:flex-start;display:inline-flex;align-items:center;gap:4px;font-size:11px;margin-top:4px}
+.fetch-planner{display:flex;flex-direction:column;gap:10px}
+.fetch-planner .primary{align-self:flex-start;display:inline-flex;align-items:center;gap:6px}
+.fetch-plan{padding:12px;border:1px solid #e2e6e3;border-radius:6px;background:#fff;display:flex;flex-direction:column;gap:8px}
+.fetch-plan small{color:#758279;font-size:11px}.fetch-plan ol{margin:0;padding-left:20px;font-size:12px}.fetch-plan ol>li{margin:4px 0}
+.fetch-plan ul{margin:2px 0;padding-left:16px;color:#59665e;font-size:11px}
+.fetch-issues{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.fetch-issues li{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 10px;border:1px solid #e2e6e3;border-radius:6px;background:#fff;font-size:12px}
+.fetch-issues a{display:inline-flex;align-items:center;gap:3px;font-weight:600;color:#355c43}.fetch-issues span{flex:1;min-width:120px}
+.fetch-issues em{font-style:normal;font-size:11px;color:#3d9a68}.fetch-issues .error{flex-basis:100%;color:#8a3b2a}
+.fetch-activity{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.fetch-activity li{padding:10px 0;border-bottom:1px solid #eef1ee;font-size:12px}
+.fetch-activity .fetch-who{font-weight:600;margin-right:8px}.fetch-activity small{color:#758279}
+.fetch-activity p{margin:4px 0 0}.fetch-activity summary{cursor:pointer;margin-top:4px}
+.fetch-lines p{margin:2px 0;font-size:12px;line-height:1.5}
+.ticket-agents{margin:16px 0;padding:12px;border:1px solid #e2e6e3;border-radius:6px;background:#fff;display:flex;flex-direction:column;gap:6px}
+.ticket-agents header{display:flex;align-items:center;gap:6px;font-size:13px}.ticket-agents header a{margin-left:auto;display:inline-flex;align-items:center;gap:3px;font-size:12px;color:#355c43}
+.ticket-agents small{font-size:11px;color:#758279}.ticket-agents .secondary{align-self:flex-start;display:inline-flex;align-items:center;gap:6px}

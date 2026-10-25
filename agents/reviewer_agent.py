@@ -22,6 +22,7 @@ from uagents import Agent, Context, Protocol
 sys.path.insert(0, str(Path(__file__).parent))
 from llm import api_key, ask_json  # noqa: E402
 from office_core import OfficeClient, OfficeError  # noqa: E402
+from office_link import HEARTBEAT_SECONDS, OfficeLink  # noqa: E402
 from review_core import review  # noqa: E402
 from siblings import LocalFirst, OfficeAlert, ReviewRequest, ReviewResult, address, ensure_seed, port  # noqa: E402
 
@@ -49,6 +50,7 @@ agent = Agent(
     description="Reviews work from an Iteration1 office of coding agents: which acceptance criteria the evidence actually supports.",
 )
 team = Protocol(name="iteration1-reviewer", version="0.2.0")
+link = OfficeLink(client, "reviewer", agent.address, lambda: {"model": bool(api_key())}, say)
 
 
 def judge(room_id: str, task_id: str) -> str:
@@ -58,13 +60,29 @@ def judge(room_id: str, task_id: str) -> str:
         return f"I couldn't review that task: {e}"
 
 
-async def send_review(ctx: Context, room_id: str, task_id: str, requester: str = "") -> None:
-    office = address("office")
-    if not office:
-        return
+async def run_review(room_id: str, task_id: str) -> str:
     say(f"Reviewing task {task_id}" + (" (model)" if api_key() else " (office checks only)"))
     text = await asyncio.to_thread(judge, room_id, task_id)
-    await ctx.send(office, ReviewResult(task_id=task_id, text=text, requester=requester))
+    await asyncio.to_thread(link.report, "review", text, room_id, task_id)
+    return text
+
+
+async def send_review(ctx: Context, room_id: str, task_id: str, requester: str = "") -> None:
+    text = await run_review(room_id, task_id)
+    office = address("office")
+    if office:
+        await ctx.send(office, ReviewResult(task_id=task_id, text=text, requester=requester))
+
+
+@agent.on_interval(period=HEARTBEAT_SECONDS)
+async def check_in(ctx: Context):
+    # Reviews asked for in the office app; the verdict shows on the ticket, so it isn't sent to ASI:One.
+    for job in await asyncio.to_thread(link.beat):
+        if job["kind"] == "review" and job.get("taskId"):
+            text = await run_review(job["roomId"], job["taskId"])
+            await asyncio.to_thread(link.finish, job["id"], not text.startswith("I couldn't"), {"text": text})
+        else:
+            await asyncio.to_thread(link.finish, job["id"], False, {"error": "I only review tickets."})
 
 
 @agent.on_event("startup")

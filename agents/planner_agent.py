@@ -28,6 +28,8 @@ from uagents_core.contrib.protocols.chat import (
 sys.path.insert(0, str(Path(__file__).parent))
 from jira_cloud import Jira, JiraError, load_config  # noqa: E402
 from llm import api_key, ask_json  # noqa: E402
+from office_core import OfficeClient  # noqa: E402
+from office_link import HEARTBEAT_SECONDS, OfficeLink  # noqa: E402
 from planner_core import HELP, PlannerAgent  # noqa: E402
 from siblings import DispatchRequest, DispatchResult, LocalFirst, OfficeAlert, address, ensure_seed, owners, port  # noqa: E402
 
@@ -65,6 +67,24 @@ agent = Agent(
 )
 chat = Protocol(spec=chat_protocol_spec)
 team = Protocol(name="iteration1-planner", version="0.2.0")
+ROOT = Path(__file__).resolve().parent.parent
+client = OfficeClient(os.environ.get("ITERATION1_URL", "http://127.0.0.1:4314"), os.environ.get("ITERATION1_PROJECT", str(ROOT)))
+link = OfficeLink(client, "planner", agent.address, lambda: {"jira": planner.jira.project if planner.jira else "", "site": planner.jira.site if planner.jira else "", "model": bool(planner.ask)}, say)
+
+
+def dispatch(room_id: str, prompt: str) -> None:
+    client.request(f"/rooms/{room_id}/dispatch", {"prompt": prompt[:12000]})
+
+
+@agent.on_interval(period=HEARTBEAT_SECONDS)
+async def check_in(ctx: Context):
+    for job in await asyncio.to_thread(link.beat):
+        ok, result = await asyncio.to_thread(planner.run_job, job["kind"], job.get("payload") or {}, job["roomId"], dispatch)
+        await asyncio.to_thread(link.finish, job["id"], ok, result)
+        if ok and job["kind"] == "create":
+            await asyncio.to_thread(link.report, "jira", f"Created {len(result['issues'])} {result['project']} stories" + (f" under {result['epic']}" if result.get("epic") else ""), job["roomId"])
+        elif ok and job["kind"] == "start":
+            await asyncio.to_thread(link.report, "mission", f"Started {result['key']}: {result['summary']}", job["roomId"])
 
 
 def reply(text: str) -> ChatMessage:
@@ -126,6 +146,7 @@ async def on_alert(ctx: Context, sender: str, msg: OfficeAlert):
         line = await asyncio.to_thread(planner.on_event, event.kind, event.title, event.detail, event.verified)
         if line:
             say(f"Jira {line}")
+            await asyncio.to_thread(link.report, "jira", line, event.room_id, event.task_id)
 
 
 agent.include(chat, publish_manifest=True)

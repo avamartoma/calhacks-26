@@ -10,6 +10,7 @@ Environment (all optional): ITERATION1_URL, ITERATION1_PROJECT, OFFICE_WATCHER_P
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import queue
 import sys
@@ -22,6 +23,7 @@ from uagents import Agent, Context
 
 sys.path.insert(0, str(Path(__file__).parent))
 from office_core import OfficeClient, OfficeError  # noqa: E402
+from office_link import HEARTBEAT_SECONDS, OfficeLink  # noqa: E402
 from siblings import LocalFirst, OfficeAlert, OfficeEvent, address, ensure_seed, port  # noqa: E402
 from watch_core import Change, Repeats, events, parse_sse  # noqa: E402
 
@@ -53,6 +55,8 @@ agent = Agent(
     description="Watches a local Iteration1 office of coding agents and tells its office agent when tasks block, finish or need approval.",
 )
 found: "queue.Queue[Change]" = queue.Queue()
+watching = {"live": False}
+link = OfficeLink(client, "watcher", agent.address, lambda: {"watching": watching["live"]}, say)
 
 
 def verdict(room_id: str, task_id: str) -> tuple[bool | None, str]:
@@ -74,6 +78,7 @@ def follow() -> None:
         try:
             with client.stream() as res:
                 say("Watching the office.")
+                watching["live"] = True
                 if down:
                     found.put(Change("The office is back online.", "online", ""))
                 down, delay = False, 2.0
@@ -82,6 +87,7 @@ def follow() -> None:
                         found.put(change)
                     last = state
         except (OfficeError, OSError) as e:
+            watching["live"] = False
             if not down:
                 say(f"Office stream lost ({e}). Retrying with backoff.")
                 if last is not None:
@@ -98,6 +104,11 @@ repeats = Repeats()
 async def start(ctx: Context):
     say(f"Watcher address: {agent.address}")
     threading.Thread(target=follow, daemon=True).start()
+
+
+@agent.on_interval(period=HEARTBEAT_SECONDS)
+async def check_in(ctx: Context):
+    await asyncio.to_thread(link.beat)
 
 
 @agent.on_interval(period=BATCH_SECONDS)
@@ -120,6 +131,8 @@ async def flush(ctx: Context):
     for target in targets.values():
         if target:
             await ctx.send(target, alert)
+    for change in batch:
+        await asyncio.to_thread(link.report, change.kind, change.line, change.room_id, change.task_id)
 
 
 if __name__ == "__main__":

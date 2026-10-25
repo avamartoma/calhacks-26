@@ -30,6 +30,7 @@ from uagents_core.contrib.protocols.chat import (
 
 sys.path.insert(0, str(Path(__file__).parent))
 from office_core import HELP, Gate, OfficeAgent, OfficeClient, OfficeError  # noqa: E402
+from office_link import HEARTBEAT_SECONDS, OfficeLink  # noqa: E402
 from siblings import (  # noqa: E402
     OFFICE_CONFIG, DispatchRequest, DispatchResult, LocalFirst, OfficeAlert, ReviewRequest, ReviewResult,
     address, port, read_json, write_private,
@@ -76,6 +77,7 @@ agent = Agent(
 )
 chat = Protocol(spec=chat_protocol_spec)
 team = Protocol(name="iteration1-office-team", version="0.2.0")
+link = OfficeLink(office.office, "office", agent.address, lambda: {"owners": len(office.gate.owners), "pairingLocked": office.gate.locked}, say)
 
 
 def reply(text: str) -> ChatMessage:
@@ -97,6 +99,11 @@ async def announce(ctx: Context):
     say("=" * 64)
 
 
+@agent.on_interval(period=HEARTBEAT_SECONDS)
+async def check_in(ctx: Context):
+    await asyncio.to_thread(link.beat)
+
+
 @chat.on_message(ChatMessage)
 async def on_chat(ctx: Context, sender: str, msg: ChatMessage):
     await ctx.send(sender, ChatAcknowledgement(timestamp=datetime.now(timezone.utc), acknowledged_msg_id=msg.msg_id))
@@ -110,6 +117,8 @@ async def on_chat(ctx: Context, sender: str, msg: ChatMessage):
         return
     # Office calls are blocking HTTP to localhost; keep them off the event loop.
     answer = await asyncio.to_thread(office.handle, sender, text[:12000])
+    if office.gate.allowed(sender):
+        await asyncio.to_thread(link.report, "chat", f"ASI:One: {text[:160]}")
     while office.outbox:
         kind, requester, room_id, task_id = office.outbox.pop(0)
         reviewer = address("reviewer")
@@ -161,6 +170,7 @@ async def on_dispatch(ctx: Context, sender: str, msg: DispatchRequest):
     except OfficeError as e:
         text, ok = f"The office said: {e}", False
     say(f"Mission from planner for {msg.requester}: {'started' if ok else text}")
+    await asyncio.to_thread(link.report, "mission", f"Planner started a mission from ASI:One: {msg.prompt.splitlines()[0][:160]}" if ok else text)
     await ctx.send(sender, DispatchResult(ok=ok, text=text, requester=msg.requester))
 
 

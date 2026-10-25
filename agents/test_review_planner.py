@@ -152,5 +152,63 @@ class PlannerTest(unittest.TestCase):
         self.assertIsNone(ask_json("sys", "hi", post=lambda *a: (_ for _ in ()).throw(OSError()), key="k1"))
 
 
+class AppJobsTest(unittest.TestCase):
+    """Work queued from the office app: draft, create and start without a chat."""
+
+    setUp = PlannerTest.setUp
+
+    def test_plan_create_and_start_from_the_app(self):
+        sent = []
+        ok, drafted = self.planner.run_job("plan", {"idea": "keyboard-friendly search"}, "r1", lambda *a: sent.append(a))
+        self.assertTrue(ok and drafted["modeled"])
+        self.assertEqual(drafted["plan"]["epic"]["summary"], "Keyboard search")
+        ok, created = self.planner.run_job("create", {"plan": drafted["plan"]}, "r1", lambda *a: sent.append(a))
+        self.assertEqual((ok, created["epic"], [i["key"] for i in created["issues"]], created["site"]), (True, "ONB-1", ["ONB-2", "ONB-3"], "https://team.atlassian.net"))
+        ok, started = self.planner.run_job("start", {"key": "onb-2"}, "r1", lambda *a: sent.append(a))
+        self.assertTrue(ok)
+        self.assertEqual(sent[0][0], "r1")
+        self.assertTrue(sent[0][1].startswith("ONB-2: Tab to search"))
+
+    def test_app_jobs_refuse_bad_input(self):
+        nothing = lambda *a: self.fail("should not dispatch")
+        self.assertEqual(self.planner.run_job("plan", {"idea": "x"}, "r1", nothing)[0], False)
+        self.assertIn("incomplete", self.planner.run_job("create", {"plan": {"epic": {}}}, "r1", nothing)[1]["error"])
+        self.assertIn("only work with ONB", self.planner.run_job("start", {"key": "WEB-1"}, "r1", nothing)[1]["error"])
+        self.assertIn("Jira isn't set up", PlannerAgent(None, owners=lambda: set()).run_job("plan", {"idea": "anything"}, "r1", nothing)[1]["error"])
+
+        from office_core import OfficeError
+
+        def refuse(*a):
+            raise OfficeError("Pause the office before starting a new mission.")
+        self.assertIn("The office said: Pause", self.planner.run_job("start", {"key": "ONB-2"}, "r1", refuse)[1]["error"])
+
+
+class OfficeLinkTest(unittest.TestCase):
+    def test_check_in_takes_jobs_and_goes_quiet_when_the_office_is_down(self):
+        from office_core import OfficeError
+        from office_link import OfficeLink
+        calls, logged, down = [], [], [False]
+
+        class Office:
+            def request(self, route, body):
+                if down[0]:
+                    raise OfficeError("unavailable")
+                calls.append((route, body))
+                return {"jobs": [{"id": "j1", "kind": "review"}]} if route == "/fetch/heartbeat" else {}
+        link = OfficeLink(Office(), "reviewer", "agent1qx", lambda: {"model": False}, logged.append)
+        self.assertEqual(link.beat(), [{"id": "j1", "kind": "review"}])
+        self.assertEqual(calls[0], ("/fetch/heartbeat", {"name": "reviewer", "address": "agent1qx", "details": {"model": False}}))
+        link.report("review", "Looks ready", "r1", "t1")
+        link.finish("j1", True, {"text": "ok"})
+        self.assertEqual(calls[1], ("/fetch/activity", {"name": "reviewer", "kind": "review", "text": "Looks ready", "roomId": "r1", "taskId": "t1"}))
+        self.assertEqual(calls[2], ("/fetch/jobs/j1", {"name": "reviewer", "status": "done", "result": {"text": "ok"}}))
+        down[0] = True
+        self.assertEqual((link.beat(), link.beat()), ([], []))
+        self.assertEqual(len(logged), 1)
+        down[0] = False
+        link.beat()
+        self.assertEqual(logged[-1], "Back in touch with the office app.")
+
+
 if __name__ == "__main__":
     unittest.main()

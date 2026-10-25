@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
-import type { ReviewState, Room, WorkItem } from './types';
+import type { FetchState, ReviewState, Room, WorkItem } from './types';
 import { reporterName, selfReported } from './reporters';
 import { officeApi, WorkDetail } from './Operations';
 import { HandoffsPanel } from './HandoffsPanel';
 import { TicketForm } from './TicketForm';
 import { agentLine } from './identity';
+import { TicketAgents } from './FetchAgents';
 export type Action=(fn:()=>Promise<unknown>,success?:string)=>Promise<void>;
 
-export function TaskWorkspace({room,itemId,connected,busy,action,onAgent,onTask,onConnect,onInbox}:{room:Room;itemId:string|null;connected:boolean;busy:boolean;action:Action;onAgent:(id:string)=>void;onTask:(id:string)=>void;onConnect:()=>void;onInbox:()=>void}) {
+export function TaskWorkspace({room,fetch,itemId,connected,busy,action,onAgent,onTask,onConnect,onInbox}:{room:Room;fetch?:FetchState;itemId:string|null;connected:boolean;busy:boolean;action:Action;onAgent:(id:string)=>void;onTask:(id:string)=>void;onConnect:()=>void;onInbox:()=>void}) {
   const item=room.workItems.find(t=>t.id===itemId);
   const [editing,setEditing]=useState(false),[role,setRole]=useState('Implementation');
   if(!item)return <p className="quiet-copy">This ticket is no longer on the active board. Its recorded work is available in Replay.</p>;
@@ -31,6 +32,7 @@ export function TaskWorkspace({room,itemId,connected,busy,action,onAgent,onTask,
       null}
     </section>}
     <WorkDetail hideHeading room={room} itemId={item.id} onSelect={onAgent} onTask={onTask}/>
+    {!room.demo && <TicketAgents fetch={fetch} room={room} item={item}/>}
     {!item.archived && <TicketReview key={item.id+':'+item.updatedAt} room={room} item={item} busy={busy} action={action} connected={signedIn} active={active}/>}
     <details className="task-conversations"><summary>Agent handoffs · {room.messages.filter(m=>(m.workItemId===item.id || m.evidenceLinks?.some(l=>l.workItemId===item.id))).length}</summary><HandoffsPanel room={room} taskId={item.id} onAgent={onAgent} onTask={onTask}/></details>
   </div>;
