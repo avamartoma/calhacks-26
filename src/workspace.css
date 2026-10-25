@@ -171,5 +171,12 @@
 /* No preview: a small note in the corner instead of an empty panel. */
 .preview-dock.preview-empty{width:auto;height:auto;flex-direction:row;align-items:center;gap:7px;padding:7px 12px;border-radius:99px;font:600 11.5px Urbanist,sans-serif;color:#59665e;cursor:default}
 .preview-dot{width:7px;height:7px;border-radius:50%;background:#b7c0bb}
+.preview-dot.live{background:#38a169}
+.preview-actions{display:inline-flex;align-items:center;gap:6px}
+.preview-action{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border:0;border-radius:4px;background:none;color:#59665e;cursor:pointer}
+.preview-action:hover{background:#eef2ef;color:#24362d}
+.preview-dock.preview-minimized{padding:3px 4px 3px 4px;gap:2px}
+.preview-restore{display:inline-flex;align-items:center;gap:7px;padding:4px 8px;border:0;border-radius:99px;background:none;font:inherit;color:inherit;cursor:pointer}
+.preview-restore:hover{background:#eef2ef}
 .preview-dot.starting{background:#d9a441;animation:preview-pulse 1.2s ease-in-out infinite}
 @keyframes preview-pulse{50%{opacity:.35}}
