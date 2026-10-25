@@ -235,6 +235,7 @@ function DownloadButton({ projectId }: { projectId: Id<'projects'> }) {
 function SharePanel({ row, onClose }: { row: SkyRow; onClose: () => void }) {
   const setVisibility = useMutation(api.sharing.setVisibility);
   const invite = useMutation(api.sharing.invite);
+  const emails = useQuery(api.sharing.emailEnabled, {});
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'viewer' | 'editor'>('viewer');
   const [note, setNote] = useState('');
@@ -247,14 +248,14 @@ function SharePanel({ row, onClose }: { row: SkyRow; onClose: () => void }) {
       <label className="web-check"><input type="checkbox" checked={row.visibility === 'public'} onChange={e => void setVisibility({ projectId: row.id as Id<'projects'>, visibility: e.target.checked ? 'public' : 'private' })} /> Anyone signed in can view</label>
       <form className="web-invite" onSubmit={async event => {
         event.preventDefault(); setNote('');
-        try { await invite({ projectId: row.id as Id<'projects'>, email, role }); setNote(`Shared with ${email.trim()}`); setEmail(''); } catch (e) { setNote(message(e)); }
+        try { await invite({ projectId: row.id as Id<'projects'>, email, role }); setNote(emails ? `Shared with ${email.trim()}. We've emailed them a link.` : `Shared with ${email.trim()}.`); setEmail(''); } catch (e) { setNote(message(e)); }
       }}>
         <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="teammate@email.com" required />
         <select value={role} onChange={e => setRole(e.target.value as 'viewer' | 'editor')}><option value="viewer">Can view</option><option value="editor">Can edit</option></select>
         <button className="primary">Invite</button>
       </form>
       {note && <p className="web-note">{note}</p>}
-      <p className="web-note">People you invite see this project on their sky once they sign in with that email. Editors can start agents on their own key.</p>
+      <p className="web-note">{emails ? 'People you invite get an email with a link, and see this project on their sky once they sign in with that address.' : 'People you invite see this project on their sky once they sign in with that email. Invite emails aren’t set up yet, so let them know.'} Editors can start agents on their own key.</p>
     </> : <p className="web-note">Only the owner can change who has access.</p>}
   </aside>;
 }
