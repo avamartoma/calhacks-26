@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Auth0Provider, useAuth0 } from '@auth0/auth0-react';
-import { ConvexReactClient } from 'convex/react';
-import { ConvexProviderWithAuth0 } from 'convex/react-auth0';
+import { ConvexProviderWithAuth, ConvexReactClient } from 'convex/react';
 import { LoaderCircle } from 'lucide-react';
 import hosted from '../../hosted.json';
 import { localHour, paletteAt } from '../sky/time-of-day';
@@ -52,8 +51,31 @@ export default function WebApp() {
       window.dispatchEvent(new PopStateEvent('popstate'));
     }}
   >
-    <ConvexProviderWithAuth0 client={convex}><Gate /></ConvexProviderWithAuth0>
+    <ConvexProviderWithAuth client={convex} useAuth={useAuthFromAuth0}><Gate /></ConvexProviderWithAuth>
   </Auth0Provider>;
+}
+
+/**
+ * Convex's own Auth0 adapter asks for a brand-new token right after the first one is accepted, with
+ * the cache off. Auth0 gets that through a hidden frame on its own domain, which needs third-party
+ * cookies; every iPhone browser blocks them, so it failed ("Failed Silent Auth: login required"),
+ * and the Auth0 library then signed the person out: sign-in finished and bounced straight back.
+ * This gives Convex the ID token the sign-in saved for as long as it's valid (hours), and only asks
+ * Auth0 again once it has expired, which then means signing in again rather than a loop.
+ */
+function useAuthFromAuth0() {
+  const { isLoading, isAuthenticated, getIdTokenClaims, getAccessTokenSilently } = useAuth0();
+  const fetchAccessToken = useCallback(async () => {
+    try {
+      const claims = await getIdTokenClaims();
+      if (claims?.__raw && typeof claims.exp === 'number' && claims.exp * 1000 > Date.now() + 60_000) return claims.__raw;
+      const response = await getAccessTokenSilently({ detailedResponse: true });
+      return response?.id_token ?? null;
+    } catch {
+      return null;
+    }
+  }, [getIdTokenClaims, getAccessTokenSilently]);
+  return useMemo(() => ({ isLoading, isAuthenticated, fetchAccessToken }), [isLoading, isAuthenticated, fetchAccessToken]);
 }
 
 function Gate() {
