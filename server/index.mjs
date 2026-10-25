@@ -32,6 +32,7 @@ import { officeHostMiddleware } from './host.mjs';
 import { createCloud } from './cloud.mjs';
 import { editPaths } from './cloud-sync.mjs';
 import { createFetchHub, createFetchLauncher } from './fetch-agents.mjs';
+import { createSearch, roomDocs, searchRequest } from './search.mjs';
 
 function loadLocalEnv(file) {
   let text;
@@ -97,6 +98,8 @@ await syncIdentity();
 const cursor = createCursorDesk({ state, changed, isStarting: id => startingAgents.has(id), currentIdentity: () => liveIdentity });
 const toolName = a => reporters[a.provider]?.name || 'Cursor';
 const fetchHub = createFetchHub({ changed });
+const search = createSearch({ cacheDir: path.join(dataDir, 'models') });
+search.warm();
 const fetchLauncher = createFetchLauncher({ root, url: `http://127.0.0.1:${Number(process.env.PORT || 4314)}`, changed, online: () => fetchHub.snapshot().agents.some(a => a.online) });
 const codexCallback = createCodexCallback();
 let codexLoginId = null;
@@ -576,6 +579,14 @@ app.get('/api/feed', wrap(async () => ({ runs: runFeed(state) })));
 app.post('/api/fetch/heartbeat', wrap(async req => fetchHub.heartbeat(req.body)));
 app.post('/api/fetch/activity', wrap(async req => fetchHub.activity(req.body)));
 app.post('/api/fetch/jobs', wrap(async req => fetchHub.request(req.body, id => state.rooms.some(r => r.id === id && !r.demo))));
+// The sky's search: what the page shows, with each office project's agents and tickets added here.
+app.post('/api/search', wrap(async req => {
+  const { query, items } = searchRequest.parse(req.body);
+  return search.search(query, items.map(item => {
+    const room = state.rooms.find(r => r.id === item.id && !r.archived);
+    return { id: item.id, docs: room ? [{ text: item.text, label: '' }, ...roomDocs(room)] : [{ text: item.text, label: '' }] };
+  }));
+}));
 app.post('/api/fetch/start', wrap(async () => fetchLauncher.start()));
 app.post('/api/fetch/jobs/:id', wrap(async req => fetchHub.finish(req.params.id, req.body)));
 // A Cursor agent the office launches and owns: unlike an MCP session it can be stopped,
