@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Iteration1 share",
-  description: "Open a shared Iteration1 project.",
+  title: "opencloud share",
+  description: "Open a shared opencloud project.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

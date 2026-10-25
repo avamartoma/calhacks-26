@@ -11,10 +11,10 @@ function person(room: Room, id?: string, name?: string) {
   return room.agents.find(agent => agent.name === name && agent.status !== 'ejected') || room.agents.find(agent => agent.name === name);
 }
 
-export function HandoffsPanel({room,onAgent,onTask,taskId}:{room:Room;onAgent:(id:string)=>void;onTask:(id:string)=>void;taskId?:string}) {
+export function HandoffsPanel({room,onAgent,onTask,taskId,fromId}:{room:Room;onAgent:(id:string)=>void;onTask:(id:string)=>void;taskId?:string;fromId?:string}) {
   const [pending,setPending]=useState(false);
-  const messages=room.messages.filter(m=>(!taskId || m.workItemId===taskId || m.evidenceLinks?.some(l=>l.workItemId===taskId)) && (!pending || m.disposition==='investigate' || (m.status && m.status!=='acknowledged'))).slice().reverse();
-  return <section className="handoffs-panel"><h2>Handoffs</h2>
+  const messages=room.messages.filter(m=>(!fromId || m.fromId===fromId) && (!taskId || m.workItemId===taskId || m.evidenceLinks?.some(l=>l.workItemId===taskId)) && (!pending || m.disposition==='investigate' || (m.status && m.status!=='acknowledged'))).slice().reverse();
+  return <section className="handoffs-panel"><h2>{fromId ? 'Handoffs to subagents' : 'Handoffs'}</h2>
     <div className="handoff-filter"><button aria-pressed={!pending} onClick={()=>setPending(false)}>All</button><button aria-pressed={pending} onClick={()=>setPending(true)}>Needs follow-up</button></div>
     {room.demo && <p className="quiet-copy">Demo exchanges · no model execution.</p>}
     {!messages.length && <p className="quiet-copy">{pending?'No handoffs awaiting acknowledgment.':'No handoffs yet.'}</p>}

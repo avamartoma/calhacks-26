@@ -28,6 +28,7 @@ import { modes, templates, initOffice, record, waitingReason, completionGaps, up
 import { checkpoint, restoreState, branchCheckpoint } from './checkpoints.mjs';
 import { homedir } from 'node:os';
 import { createCodexCallback, createClaudeLogin, createCursorLogin } from './provider-login.mjs';
+import { officeHostMiddleware } from './host.mjs';
 import { createCloud } from './cloud.mjs';
 import { editPaths } from './cloud-sync.mjs';
 import { createFetchHub } from './fetch-agents.mjs';
@@ -508,11 +509,8 @@ const team=await createTeam({state,dataDir,port:Number(process.env.OFFICE_TEAM_P
   catch {message.deliveryError='Waiting for the recipient’s next turn.';}
 }});
 app.disable('x-powered-by');
+app.use(officeHostMiddleware({ port, sandbox: process.env.E2B_SANDBOX }));
 app.use((req, res, next) => {
-  const validHosts = [`127.0.0.1:${port}`, `localhost:${port}`];
-  if (!validHosts.includes(req.headers.host)) return res.status(403).json({ error: 'Local access only' });
-  const origin = req.headers.origin;
-  if (origin && !validHosts.some(h => origin === `http://${h}`)) return res.status(403).json({ error: 'Origin not allowed' });
   if (req.path.startsWith('/api')) {
     const cookie = req.headers.cookie?.split(';').map(s => s.trim()).find(s => s.startsWith(sessionName+'='))?.slice(sessionName.length+1) || '';
     if (cookie.length !== secret.length || !timingSafeEqual(Buffer.from(cookie), Buffer.from(secret))) return res.status(401).json({ error: 'Open the office page to establish a local session.' });
@@ -535,6 +533,16 @@ app.post('/api/rooms/:id/team/message',wrap(async req=>{
   const sender=agentBy(room,senderId);if(sender.status==='ejected')throw new Error('Choose a current local agent.');
   const message=team.queue(room,{...sender,peerMessagesThisTurn:0},args);if(!message)throw new Error('Choose a teammate agent.');
   message.sentByOwner=true;changed();return {message};
+}));
+app.post('/api/rooms/:id/handoffs', wrap(async req => {
+  const room = roomBy(state, req.params.id);
+  const { fromId, ...args } = z.object({ fromId: z.string(), agentId: z.string(), message: z.string().trim().min(1).max(6000), kind: z.enum(['finding', 'question', 'answer']).optional(), workItemId: z.string().optional() }).strict().parse(req.body);
+  const sender = agentBy(room, fromId);
+  if (sender.status === 'ejected') throw new Error('Choose a current agent.');
+  const message = queueHandoff(room, { ...sender, peerMessagesThisTurn: 0 }, args);
+  record(room, `${sender.name} handed off to ${message.to}`, 'handoff');
+  changed();
+  return { message };
 }));
 app.get('/api/integrations', wrap(async (req, res) => {
   await claudeLogin.load();
@@ -688,8 +696,18 @@ app.post('/api/rooms/:id/work',wrap(async req=>{
   if(room.capturing)throw new Error('Wait for the checkpoint to finish.');
   if(room.workItems.filter(t=>t.status!=='done' && !t.archived).length>=40)throw new Error('Finish existing tickets before creating more.');
   if(body.dependsOn.some(id=>!room.workItems.some(t=>t.id===id && !t.archived)))throw new Error('Dependency not found in this office.');
-  const item=workItem(body.title,body.description,{...body,requiredEvidence:['log'],checks:[]});room.workItems.push(item);
+  const item=workItem(body.title,body.description,{...body,requiredEvidence:['log'],checks:[]});
+  if(body.agentId){const owner=room.agents.find(a=>a.id===body.agentId && a.status!=='ejected');if(!owner)throw new Error('Choose an agent in this office.');focusTicket(room,owner,item);}
+  room.workItems.push(item);
   record(room,`Ticket created: ${item.title}`,'plan');changed();return {item};
+}));
+app.post('/api/rooms/:id/work/:workId/resolve',wrap(async req=>{
+  const room=roomBy(state,req.params.id),item=room.workItems.find(t=>t.id===req.params.workId);
+  if(!item || item.archived)throw new Error('Ticket not found');
+  if(item.status!=='done'){item.status='done';item.blocker='';item.updatedAt=Date.now();record(room,`Resolved: ${item.title}`,'work');}
+  const owner=room.agents.find(a=>a.id===item.agentId);
+  if(owner?.currentWorkItemId===item.id && !owner.turnId){owner.status='idle';delete owner.currentWorkItemId;}
+  changed();return {item};
 }));
 app.post('/api/rooms/:id/work/:workId/assign',wrap(async req=>{
   const room=roomBy(state,req.params.id);const item=room.workItems.find(t=>t.id===req.params.workId);if(!item)throw new Error('Work item not found');
@@ -799,6 +817,10 @@ app.post('/api/rooms', wrap(async req => {
 }));
 app.post('/api/rooms/:id/cloud/open', wrap(req => cloud.open(roomBy(state, req.params.id))));
 app.post('/api/rooms/:id/cloud/close', wrap(req => cloud.close(roomBy(state, req.params.id))));
+app.get('/api/rooms/:id/share', wrap(req => cloud.share(roomBy(state, req.params.id))));
+app.post('/api/rooms/:id/share/visibility', wrap(req => cloud.setVisibility(roomBy(state, req.params.id), z.object({ visibility: z.enum(['private', 'public']) }).strict().parse(req.body).visibility)));
+app.post('/api/rooms/:id/share/invite', wrap(req => { const body = z.object({ email: z.string(), role: z.enum(['viewer', 'editor']) }).strict().parse(req.body); return cloud.invite(roomBy(state, req.params.id), body.email, body.role); }));
+app.post('/api/rooms/:id/share/remove', wrap(req => cloud.removeInvite(roomBy(state, req.params.id), z.object({ email: z.string() }).strict().parse(req.body).email)));
 // The cloud canvas shows one workspace at a time, so these decide which projects share a sky.
 app.get('/api/workspaces', wrap(async () => ({ workspaces: initWorkspaces(state) })));
 app.post('/api/workspaces', wrap(async req => { const workspace = createWorkspace(state, req.body); changed(); return { workspace }; }));
@@ -855,6 +877,46 @@ app.post('/api/rooms/:id/resume',wrap(async req=>{
 }));
 app.post('/api/rooms/:id/agents/:aid/message', wrap(async req => { const r = roomBy(state, req.params.id); const a = agentBy(r, req.params.aid); const { message } = z.object({ message: textField }).parse(req.body); if (r.demo) { event(a, 'user', message); event(a, 'update', 'Demo message received. Connect a live office to execute this instruction.'); } else await sendTo(r, a, message); changed(); }));
 app.post('/api/rooms/:id/agents/:aid/stop', wrap(async req => { const r = roomBy(state, req.params.id); const a = agentBy(r, req.params.aid); if (!r.demo) await stopAgent(a); else a.status = 'paused'; setWorkStatus(r, a, 'blocked', 'Agent paused. Resume this ticket when ready.');const item=assignedWork(r,a.id);if(item)delete item.resumeOnOffice;changed(); }));
+app.post('/api/rooms/:id/agents/:aid/model', wrap(async req => {
+  const r = roomBy(state, req.params.id); const a = agentBy(r, req.params.aid);
+  const { model } = z.object({ model: z.string().trim().min(1).max(120) }).strict().parse(req.body);
+  if (a.status === 'ejected') throw new Error('This agent has left.');
+  if (selfDriven(a)) throw new Error(`This agent runs in ${toolName(a)}. Its ticket stays on this desk.`);
+  const ticketId = assignedWork(r, a.id)?.id || null;
+  if (!r.demo) { await ensureEngine(a, model); assertModelAvailable(model); }
+  setEngine(a, model);
+  if ((assignedWork(r, a.id)?.id || null) !== ticketId) throw new Error('The ticket changed.');
+  event(a, 'system', `Next turn uses ${model}. The current ticket stays with this agent.`);
+  changed();
+  return { agent: a };
+}));
+app.post('/api/rooms/:id/agents/:aid/resume', wrap(async req => {
+  const r = roomBy(state, req.params.id); const a = agentBy(r, req.params.aid);
+  if (a.status === 'ejected') throw new Error('This agent has left.');
+  if (selfDriven(a)) throw new Error(`Resume this agent in ${toolName(a)}.`);
+  if (a.turnId || startingAgents.has(a.id)) throw new Error('This agent is already working.');
+  const item = assignedWork(r, a.id);
+  if (item && item.status !== 'done' && !item.archived) { item.status = item.status === 'blocked' ? 'queued' : item.status; item.blocker = ''; }
+  if (r.demo) { a.status = 'working'; if (item && item.status !== 'done') item.status = 'working'; changed(); return { agent: a }; }
+  if (r.paused) r.paused = false;
+  await startAgent(r, a, item ? `Resume this ticket without opening a new one.\n${item.description}` : a.task || 'Continue the current assignment.');
+  changed();
+  return { agent: a };
+}));
+app.post('/api/rooms/:id/agents/clone', wrap(async req => {
+  const r = roomBy(state, req.params.id);
+  const body = z.object({ agentId: z.string().optional(), model: z.string().trim().min(1).max(120), role: z.string().trim().min(1).max(80), task: z.string().trim().min(1).max(12000), context: z.string().max(16000).optional() }).strict().parse(req.body);
+  const source = body.agentId ? agentBy(r, body.agentId) : null;
+  const model = source?.model || body.model;
+  const packet = source ? (source.handoffPacket || handoffPacket(r, source)) : { savedAt: Date.now(), task: body.task, instruction: body.context || body.task, diff: '', files: [], discoveries: [], failedAttempts: [], nextSteps: [] };
+  const next = agent('', source?.role || body.role, source?.task || body.task, r.agents.length, { model, ...(isClaudeModel(model) ? { provider: 'claude' } : {}), handoffPacket: packet });
+  if (liveIdentity?.sub) next.credentialSub = liveIdentity.sub;
+  r.agents.push(next);
+  claimIdentity(next, r);
+  record(r, `Cloned ${next.role} into this project`, 'handoff');
+  changed();
+  return { agent: next };
+}));
 app.post('/api/rooms/:id/agents/:aid/speed', wrap(async req => {
   const r = roomBy(state, req.params.id); const a = agentBy(r, req.params.aid);
   const { fast } = z.object({ fast: z.boolean() }).strict().parse(req.body);
@@ -914,7 +976,7 @@ app.get('/auth/callback', async (req, res) => {
   } catch (error) { return page('Sign-in failed', escapeHtml(error.message)); }
 });
 if (process.argv.includes('--production')) app.use(express.static(path.join(root, 'dist')));
-else { const { createServer } = await import('vite'); const vite = await createServer({ server: { middlewareMode: true, hmr: { port: port + 1, host: '127.0.0.1' } }, appType: 'spa' }); app.use(vite.middlewares); }
+else { const { createServer } = await import('vite'); const vite = await createServer({ server: { middlewareMode: true, hmr: { port: 24678, host: '127.0.0.1' } }, appType: 'spa' }); app.use(vite.middlewares); }
 const server = app.listen(port, '127.0.0.1', () => console.log(`Iteration1 office: http://127.0.0.1:${port}`));
 const expiring=new Set();
 setInterval(()=>{for(const room of state.rooms)if(!room.demo)for(const a of room.agents)if(a.turnId && a.deadline && a.deadline<Date.now() && !expiring.has(a.id)){

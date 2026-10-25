@@ -3,7 +3,7 @@ import { ConvexHttpClient } from 'convex/browser';
 import { anyApi } from 'convex/server';
 
 type ShareMember = { email: string; role: string };
-type ShareInfo = { name?: string; visibility?: string; shareSlug?: string; role?: string };
+type ShareInfo = { name?: string; visibility?: string; shareSlug?: string; role?: string; previewUrl?: string };
 
 type Call = (ref: unknown, args: Record<string, unknown>) => Promise<unknown>;
 
@@ -11,6 +11,16 @@ function officeConvexUrl(): string {
   const env = (import.meta as unknown as { env?: { VITE_CONVEX_URL?: string } }).env;
   const value = env?.VITE_CONVEX_URL?.trim();
   return value || 'http://127.0.0.1:3210';
+}
+
+async function officeShare(url: string, body?: unknown): Promise<unknown> {
+  const response = await fetch(`/api${url}`, {
+    method: body === undefined ? 'GET' : 'POST',
+    ...(body !== undefined ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(typeof data?.error === 'string' ? data.error : 'The request failed.');
+  return data;
 }
 
 function errorMessage(error: unknown): string {
@@ -34,7 +44,7 @@ function asMembers(value: unknown): ShareMember[] {
   });
 }
 
-function asShareInfo(value: unknown): ShareInfo | null {
+function asShareInfo(value: unknown): (ShareInfo & { members?: unknown }) | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
   return {
@@ -42,10 +52,12 @@ function asShareInfo(value: unknown): ShareInfo | null {
     visibility: typeof record.visibility === 'string' ? record.visibility : undefined,
     shareSlug: typeof record.shareSlug === 'string' ? record.shareSlug : typeof record.slug === 'string' ? record.slug : undefined,
     role: typeof record.role === 'string' ? record.role : undefined,
+    previewUrl: typeof record.previewUrl === 'string' ? record.previewUrl : undefined,
+    members: record.members,
   };
 }
 
-export function SharePanel({ projectId, shareSlug, projectName, roomId }: { projectId?: string; shareSlug?: string; projectName?: string; roomId?: string }) {
+export function SharePanel({ projectId, shareSlug, projectName, roomId, previewUrl }: { projectId?: string; shareSlug?: string; projectName?: string; roomId?: string; previewUrl?: string }) {
   const [info, setInfo] = useState<ShareInfo | null>(null);
   const [members, setMembers] = useState<ShareMember[]>([]);
   const [email, setEmail] = useState('');
@@ -56,13 +68,25 @@ export function SharePanel({ projectId, shareSlug, projectName, roomId }: { proj
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [version, setVersion] = useState(0);
-  const slug = shareSlug || info?.shareSlug || '';
   const name = info?.name || projectName || 'Share';
 
   useEffect(() => {
-    const client = new ConvexHttpClient(officeConvexUrl());
     let cancelled = false;
     void (async () => {
+      if (roomId) {
+        try {
+          const next = asShareInfo(await officeShare(`/rooms/${roomId}/share`));
+          if (cancelled || !next) return;
+          setInfo(next);
+          if (next.visibility === 'public' || next.visibility === 'private') setVisibility(next.visibility);
+          setMembers(asMembers(next));
+          setError('');
+        } catch (err) {
+          if (!cancelled) setError(errorMessage(err));
+        }
+        return;
+      }
+      const client = new ConvexHttpClient(officeConvexUrl());
       if (shareSlug) {
         try {
           const next = asShareInfo(await (client.query as Call)(anyApi.sharing.get, { slug: shareSlug }));
@@ -94,16 +118,16 @@ export function SharePanel({ projectId, shareSlug, projectName, roomId }: { proj
       }
     })();
     return () => { cancelled = true; };
-  }, [projectId, shareSlug, version]);
+  }, [projectId, shareSlug, roomId, version]);
 
   async function mutate(run: (client: ConvexHttpClient) => Promise<unknown>, ok: string) {
-    if (!projectId) return;
+    if (!projectId && !roomId) return;
     setBusy(true);
     setError('');
     setNotice('');
     try {
-      const client = new ConvexHttpClient(officeConvexUrl());
-      await run(client);
+      if (roomId) await run(null as unknown as ConvexHttpClient);
+      else await run(new ConvexHttpClient(officeConvexUrl()));
       setNotice(ok);
       setVersion((value) => value + 1);
     } catch (err) {
@@ -113,10 +137,10 @@ export function SharePanel({ projectId, shareSlug, projectName, roomId }: { proj
     }
   }
 
-  const officeLink = roomId ? `${window.location.origin}/?project=${encodeURIComponent(roomId)}` : '';
+  const link = previewUrl || info?.previewUrl || '';
+  const canShare = !!(projectId || roomId);
 
   async function copyLink() {
-    const link = officeLink || (slug ? `${window.location.origin}/p/${slug}` : '');
     if (!link) return;
     try {
       await navigator.clipboard.writeText(link);
@@ -129,27 +153,27 @@ export function SharePanel({ projectId, shareSlug, projectName, roomId }: { proj
 
   return <section className="share-panel" aria-label="Share">
     <h3>{name}</h3>
-    {!projectId && <p>Open a cloud project to share it.</p>}
+    {!canShare && <p>Open a project to share it.</p>}
     <div className="share-row">
       <span>Visibility</span>
-      <button type="button" className={visibility === 'private' ? 'on' : 'secondary'} disabled={busy || !projectId} aria-pressed={visibility === 'private'} onClick={() => { setVisibility('private'); void mutate((client) => (client.mutation as Call)(anyApi.sharing.setVisibility, { projectId, visibility: 'private' }), 'Visibility is private.'); }}>Private</button>
-      <button type="button" className={visibility === 'public' ? 'on' : 'secondary'} disabled={busy || !projectId} aria-pressed={visibility === 'public'} onClick={() => { setVisibility('public'); void mutate((client) => (client.mutation as Call)(anyApi.sharing.setVisibility, { projectId, visibility: 'public' }), 'Visibility is public.'); }}>Public</button>
+      <button type="button" className={visibility === 'private' ? 'on' : 'secondary'} disabled={busy || !canShare} aria-pressed={visibility === 'private'} onClick={() => { void mutate((client) => roomId ? officeShare(`/rooms/${roomId}/share/visibility`, { visibility: 'private' }) : (client.mutation as Call)(anyApi.sharing.setVisibility, { projectId, visibility: 'private' }), 'Visibility is private.'); }}>Private</button>
+      <button type="button" className={visibility === 'public' ? 'on' : 'secondary'} disabled={busy || !canShare} aria-pressed={visibility === 'public'} onClick={() => { void mutate((client) => roomId ? officeShare(`/rooms/${roomId}/share/visibility`, { visibility: 'public' }) : (client.mutation as Call)(anyApi.sharing.setVisibility, { projectId, visibility: 'public' }), 'Visibility is public.'); }}>Public</button>
     </div>
-    {officeLink ? <p>Office link <code className="share-slug">{officeLink}</code></p> : slug ? <p>Slug <code className="share-slug">{slug}</code></p> : <p>Open a project to copy its office link.</p>}
-    {(officeLink || slug) && <div className="share-row"><button type="button" className="secondary" onClick={() => void copyLink()}>{copied ? 'Copied' : 'Copy office link'}</button></div>}
+    {link ? <p>Share link <code className="share-slug">{link}</code></p> : <p>{canShare ? 'The share link appears when this preview is live.' : 'Open a project to copy its share link.'}</p>}
+    {link && <div className="share-row"><button type="button" className="secondary" onClick={() => void copyLink()}>{copied ? 'Copied' : 'Copy link'}</button></div>}
     <form className="share-row" onSubmit={(event) => {
       event.preventDefault();
       const next = email.trim();
-      if (!projectId || !next.includes('@')) return;
-      void mutate((client) => (client.mutation as Call)(anyApi.sharing.invite, { projectId, email: next, role }), `Invited ${next} as ${role}.`);
+      if (!canShare || !next.includes('@')) return;
+      void mutate((client) => roomId ? officeShare(`/rooms/${roomId}/share/invite`, { email: next, role }) : (client.mutation as Call)(anyApi.sharing.invite, { projectId, email: next, role }), `Invited ${next} as ${role}.`);
       setEmail('');
     }}>
       <label>Email<input type="email" value={email} required placeholder="name@example.com" onChange={(event) => setEmail(event.target.value)} /></label>
       <label>Role<select value={role} onChange={(event) => setRole(event.target.value === 'editor' ? 'editor' : 'viewer')}><option value="viewer">viewer</option><option value="editor">editor</option></select></label>
-      <button type="submit" className="primary" disabled={busy || !projectId}>Invite</button>
+      <button type="submit" className="primary" disabled={busy || !canShare}>Invite</button>
     </form>
     <ul className="share-members">
-      {members.map((member) => <li key={member.email}><span>{member.email}<small>{member.role || 'member'}</small></span><button type="button" disabled={busy || !projectId} onClick={() => void mutate((client) => (client.mutation as Call)(anyApi.sharing.remove, { projectId, email: member.email }), `Removed ${member.email}.`)}>Remove</button></li>)}
+      {members.map((member) => <li key={member.email}><span>{member.email}<small>{member.role || 'member'}</small></span><button type="button" disabled={busy || !canShare} onClick={() => void mutate((client) => roomId ? officeShare(`/rooms/${roomId}/share/remove`, { email: member.email }) : (client.mutation as Call)(anyApi.sharing.remove, { projectId, email: member.email }), `Removed ${member.email}.`)}>Remove</button></li>)}
     </ul>
     {error && <p className="share-error" role="alert">{error}</p>}
     {notice && <p role="status">{notice}</p>}

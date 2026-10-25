@@ -85,11 +85,17 @@ export function getSandboxProvider(): SandboxProvider {
 
 const MAX_BACKUP_BYTES = 8_000_000;
 
+/** Environment of a sandbox created by sessions.start. The office inside it allows its E2B host only when this is set. */
+export function sandboxProcessEnv(): Record<string, string> {
+  return { E2B_SANDBOX: "1" };
+}
+
 function e2bCreateOpts() {
   return {
     apiKey: e2bApiKey(),
     timeoutMs: sandboxTimeoutMs(),
     lifecycle: { onTimeout: "pause" as const, autoResume: false },
+    envs: sandboxProcessEnv(),
   };
 }
 
@@ -357,6 +363,7 @@ npm --version
 
 function previewEnvs(port: number): Record<string, string> {
   return {
+    ...sandboxProcessEnv(),
     HOST: "0.0.0.0",
     HOSTNAME: "0.0.0.0",
     PORT: String(port),
