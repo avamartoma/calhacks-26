@@ -42,7 +42,7 @@ export const save = action({
     const key = args.key.trim();
     const result = await check(args.provider, key);
     if ("ok" in result) throw new Error(result.message);
-    await ctx.runMutation(internal.keyStore.put, { userId: user.id, provider: args.provider, ...(await encryptKey(key)), last4: key.slice(-4), subscription: result.subscription });
+    await ctx.runMutation(internal.keyStore.put, { userId: user.id, provider: args.provider, method: "apiKey", ...(await encryptKey(key)), last4: key.slice(-4), subscription: result.subscription });
     return { ok: true as const, last4: key.slice(-4) };
   },
 });

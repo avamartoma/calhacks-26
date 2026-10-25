@@ -27,6 +27,8 @@ import type * as lib_previewShot from "../lib/previewShot.js";
 import type * as lib_runStream from "../lib/runStream.js";
 import type * as lib_sandbox from "../lib/sandbox.js";
 import type * as lib_workspacePath from "../lib/workspacePath.js";
+import type * as loginRunner from "../loginRunner.js";
+import type * as logins from "../logins.js";
 import type * as projects from "../projects.js";
 import type * as sessionSandbox from "../sessionSandbox.js";
 import type * as sessions from "../sessions.js";
@@ -59,6 +61,8 @@ declare const fullApi: ApiFromModules<{
   "lib/runStream": typeof lib_runStream;
   "lib/sandbox": typeof lib_sandbox;
   "lib/workspacePath": typeof lib_workspacePath;
+  loginRunner: typeof loginRunner;
+  logins: typeof logins;
   projects: typeof projects;
   sessionSandbox: typeof sessionSandbox;
   sessions: typeof sessions;

@@ -54,3 +54,15 @@
 .web-toast{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);z-index:40;display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:8px;background:#fbefde;color:#8a4b2f;font-size:12.5px;box-shadow:0 8px 24px rgba(20,32,60,.18)}
 .web-toast button{display:flex}
 .web-office .cloud-arrival{animation-delay:.3s}
+/* Signing in from Connections: the button, Codex's code to enter, and Claude's code to paste. */
+.web-connect,.web-login{display:flex;flex-direction:column;gap:10px}
+.web-connect>.primary,.web-login .primary{background:#26324a;border-color:#26324a;color:#fff}
+.web-login ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;font-size:13px;color:#2f3a52}
+.web-login a{color:#24304a;text-decoration:underline;display:inline-flex;align-items:center;gap:3px}
+.web-device-code{display:inline-flex;align-items:center;gap:6px;margin-left:6px;padding:4px 6px 4px 10px;border-radius:8px;background:#eef1f5}
+.web-device-code b{font:700 16px ui-monospace,monospace;letter-spacing:.08em;color:#24304a}
+.web-login label{margin:0}
+.web-login input{background:#fff;border-color:#d3d9e3;color:#26324a}
+.web-login .text-button,.web-connect .text-button{align-self:flex-start}
+.web-connect details summary{cursor:pointer;font-size:12.5px;color:#46506a}
+.web-note .spin,.web-login p .spin{vertical-align:-2px;margin-right:4px}

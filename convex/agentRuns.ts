@@ -5,7 +5,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { requireAccess } from "./access";
 import { recordEvent } from "./events";
 import { currentUser } from "./identity";
-import { keyRow, providerValidator } from "./keyStore";
+import { connectionProblem, keyRow, providerValidator } from "./keyStore";
 import { beginSession } from "./sessions";
 
 const MAX_PROMPT = 8000;
@@ -29,7 +29,8 @@ export const start = mutation({
     if (!prompt) throw new Error("Describe what the agent should do");
     if (prompt.length > MAX_PROMPT) throw new Error(`Keep the task under ${MAX_PROMPT} characters`);
     const agent = args.agent ?? "claude";
-    if (!(await keyRow(ctx, user.id, agent))) throw new Error(`Connect ${NAMES[agent]} first`);
+    const problem = connectionProblem(await keyRow(ctx, user.id, agent), NAMES[agent]);
+    if (problem) throw new Error(problem);
     const runs = await ctx.db.query("agentRuns").withIndex("by_project", (q) => q.eq("projectId", args.projectId)).collect();
     if (runs.filter(active).length >= MAX_ACTIVE_PER_PROJECT) {
       throw new Error(`${MAX_ACTIVE_PER_PROJECT} agents are already working on this project. Wait for one to finish.`);
