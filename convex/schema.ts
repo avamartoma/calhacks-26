@@ -128,7 +128,26 @@ export default defineSchema({
     last4: v.string(),
     // Claude only: a Claude Pro/Max token from `claude setup-token` instead of an API key.
     subscription: v.optional(v.boolean()),
+    // How it was connected. A signed-in account (ChatGPT for Codex, Claude, Cursor) stores that
+    // tool's own credentials, which a run uses and may refresh. Rows without one hold a key.
+    method: v.optional(v.union(v.literal("apiKey"), v.literal("chatgpt"), v.literal("claudeAccount"), v.literal("cursorAccount"))),
+    email: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
     updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  // A sign-in someone started from Connections and hasn't finished. The verifier and state are
+  // encrypted; the browser only ever sees the link, the code to enter and the outcome.
+  logins: defineTable({
+    userId: v.string(),
+    provider: v.union(v.literal("codex"), v.literal("claude"), v.literal("cursor")),
+    status: v.union(v.literal("preparing"), v.literal("waiting"), v.literal("done"), v.literal("error"), v.literal("cancelled")),
+    url: v.optional(v.string()),
+    code: v.optional(v.string()),
+    detail: v.optional(v.string()),
+    secret: v.optional(v.object({ ciphertext: v.string(), iv: v.string() })),
+    sandboxId: v.optional(v.string()),
+    expiresAt: v.number(),
   }).index("by_user", ["userId"]),
 
   // One agent run inside a project's sandbox, started from the web office. No agent means Claude.

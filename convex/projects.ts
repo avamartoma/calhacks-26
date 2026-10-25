@@ -237,9 +237,11 @@ const githubRepo = v.object({ id: v.number(), name: v.string(), description: v.s
 /**
  * Adds the chosen GitHub repos to the caller's sky as projects. Each clones into its sandbox the
  * first time it's opened, so adding many costs nothing until then. A repo already added is skipped.
+ * The code is already public on GitHub, so these are public by default: everyone signed in sees
+ * them, view only. The owner can choose private, here or later from Share.
  */
 export const importGithub = mutation({
-  args: { repos: v.array(githubRepo) },
+  args: { repos: v.array(githubRepo), visibility: v.optional(v.union(v.literal("public"), v.literal("private"))) },
   handler: async (ctx, args) => {
     const user = await currentUser(ctx);
     if (user.local) throw new Error("Sign in to add your GitHub repos");
@@ -253,7 +255,7 @@ export const importGithub = mutation({
         .first();
       if (existing) continue;
       const projectId = await insertProject(ctx, { name: repo.name.slice(0, 60), description: repo.description.slice(0, 280), repoUrl: repo.cloneUrl, ownerId: user.id, email: user.email });
-      await ctx.db.patch(projectId, { githubRepoId: repo.id });
+      await ctx.db.patch(projectId, { githubRepoId: repo.id, visibility: args.visibility ?? "public" });
       await recordEvent(ctx, { projectId, kind: "project.created", detail: `${repo.name} (from GitHub)` });
       added.push(projectId);
     }

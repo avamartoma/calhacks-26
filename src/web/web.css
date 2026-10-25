@@ -65,6 +65,18 @@
 .fetch-web .fetch-reviews{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .fetch-web .fetch-reviews li{display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid #e2e7e3;border-radius:8px;background:#fff}
 .fetch-web .fetch-reviews .secondary{align-self:flex-start}
+/* Signing in from Connections: the button, Codex's code to enter, and Claude's code to paste. */
+.web-connect,.web-login{display:flex;flex-direction:column;gap:10px}
+.web-connect>.primary,.web-login .primary{background:#26324a;border-color:#26324a;color:#fff}
+.web-login ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;font-size:13px;color:#2f3a52}
+.web-login a{color:#24304a;text-decoration:underline;display:inline-flex;align-items:center;gap:3px}
+.web-device-code{display:inline-flex;align-items:center;gap:6px;margin-left:6px;padding:4px 6px 4px 10px;border-radius:8px;background:#eef1f5}
+.web-device-code b{font:700 16px ui-monospace,monospace;letter-spacing:.08em;color:#24304a}
+.web-login label{margin:0}
+.web-login input{background:#fff;border-color:#d3d9e3;color:#26324a}
+.web-login .text-button,.web-connect .text-button{align-self:flex-start}
+.web-connect details summary{cursor:pointer;font-size:12.5px;color:#46506a}
+.web-note .spin,.web-login p .spin{vertical-align:-2px;margin-right:4px}
 .opencloud .github-offer{left:50%;top:50%;transform:translate(-50%,-50%);z-index:24;width:min(460px,calc(100% - 32px));max-height:min(640px,calc(100% - 40px))}
 .github-repos{display:flex;flex-direction:column;gap:8px;min-height:0}
 .github-repos ul{list-style:none;margin:0;padding:0;max-height:300px;overflow:auto;display:flex;flex-direction:column;gap:2px;border:1px solid #e2e7ee;border-radius:8px;background:#fff}
@@ -82,3 +94,6 @@
 .github-link summary{cursor:pointer;font-size:12.5px;font-weight:600;color:#46506a;padding:4px 0}
 .github-link label{margin:8px 0 0}
 .text-button.inline{display:inline;padding:0;font-size:inherit}
+.github-public{align-items:flex-start}
+.github-public input{margin-top:3px}
+.github-public small{display:block;font-size:11.5px;line-height:1.4;color:#66708a;font-weight:400}
