@@ -54,3 +54,20 @@
 .web-toast{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);z-index:40;display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:8px;background:#fbefde;color:#8a4b2f;font-size:12.5px;box-shadow:0 8px 24px rgba(20,32,60,.18)}
 .web-toast button{display:flex}
 .web-office .cloud-arrival{animation-delay:.3s}
+.opencloud .github-offer{left:50%;top:50%;transform:translate(-50%,-50%);z-index:24;width:min(460px,calc(100% - 32px));max-height:min(640px,calc(100% - 40px))}
+.github-repos{display:flex;flex-direction:column;gap:8px;min-height:0}
+.github-repos ul{list-style:none;margin:0;padding:0;max-height:300px;overflow:auto;display:flex;flex-direction:column;gap:2px;border:1px solid #e2e7ee;border-radius:8px;background:#fff}
+.github-repos li label{display:flex;gap:10px;align-items:flex-start;margin:0;padding:8px 10px;cursor:pointer;font-weight:400}
+.github-repos li label.added{cursor:default;opacity:.7}
+.github-repos li label:hover{background:#f5f7fa}
+.github-repos li input{flex:none;margin-top:3px}
+.github-repos li b{display:block;font:600 13px/1.35 Urbanist,sans-serif;color:#24304a}
+.github-repos li small{display:block;font-size:11.5px;line-height:1.4;color:#66708a}
+.github-repos li .github-description{color:#46506a}
+.github-repos .primary,.github-offer .primary{background:#26324a;border-color:#26324a;color:#fff}
+.github-user{display:flex;flex-direction:column;gap:8px}
+.github-user label{margin:0}
+.github-loading{display:flex;align-items:center;gap:8px}
+.github-link summary{cursor:pointer;font-size:12.5px;font-weight:600;color:#46506a;padding:4px 0}
+.github-link label{margin:8px 0 0}
+.text-button.inline{display:inline;padding:0;font-size:inherit}

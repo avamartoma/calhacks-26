@@ -28,7 +28,10 @@ export default defineSchema({
     backup: v.optional(v.id("_storage")),
     resumeWindowStart: v.optional(v.number()),
     resumeCount: v.optional(v.number()),
+    // Set when the project was added from the owner's GitHub repos, so a repo is only added once.
+    githubRepoId: v.optional(v.number()),
   })
+    .index("by_owner_github", ["ownerId", "githubRepoId"])
     .index("by_slug", ["slug"])
     .index("by_share_slug", ["shareSlug"]),
 
