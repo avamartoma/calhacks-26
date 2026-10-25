@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createSkyBackdrop, type ScreenCloud, type SkyCloud, type SkyRenderer } from './renderer';
 import { createRig, random } from './renderer-3d';
-import { CLOUD_WIDTH, place, type Viewport } from './sky-math';
+import { CLOUD_WIDTH, place, type Camera, type Viewport } from './sky-math';
 import type { SkyPalette } from './time-of-day';
 
 // Projects as simple vector clouds, like a clean illustrated map: a flat rounded base with
@@ -153,6 +153,10 @@ const flatSize = (c: SkyCloud) => (c.mine ? FLAT_WIDTH : FLAT_WIDTH * .82) * (c.
  * screen. Their centers keep moving with the camera, so zooming stays anchored to the cursor.
  */
 const zoomedOutBoost = (zoom: number) => zoom < 1 ? Math.pow(zoom, -.18) : 1;
+/** Screen gap kept between any two clouds, in CSS pixels. */
+const GAP = 16;
+/** The drawn cloud fills almost all of its quad's width and about 85% of its height. */
+const VISIBLE_WIDTH = .98, VISIBLE_HEIGHT = .85;
 
 /**
  * The same vector clouds on a flat 2D canvas with parallax layers: your projects move with you,
@@ -167,6 +171,56 @@ export function createSkyRendererVector2D(canvas: HTMLCanvasElement): SkyRendere
   const shared = { uFill: { value: new THREE.Vector3() }, uShade: { value: new THREE.Vector3() }, uEdge: { value: new THREE.Vector3() }, uHaze: { value: new THREE.Vector3() } };
   let view: Viewport = { width: 1, height: 1 }, dpr = 1, clouds: SkyCloud[] = [];
   const meshes = new Map<string, THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>>();
+
+  /**
+   * Where each cloud sits on screen for this camera, with overlaps pushed apart. Parallax moves
+   * layers at different speeds, so clouds would otherwise slide over each other. Shared clouds
+   * give way to yours; two of the same kind each move half. Solved once per camera position.
+   */
+  let solvedFor = '';
+  const solved = new Map<string, { x: number; y: number; width: number }>();
+  function solve(cam: Camera) {
+    const key = `${cam.x},${cam.y},${cam.zoom},${view.width},${view.height},${clouds.map(c => `${c.id}:${c.x}:${c.y}:${c.size ?? 1}`).join('|')}`;
+    if (key === solvedFor) return;
+    solvedFor = key; solved.clear();
+    const items = clouds.filter(c => c.id !== 'you').map(c => {
+      const box = place(c, cam, view, flatSize(c) * zoomedOutBoost(cam.zoom));
+      return { c, x: box.x, y: box.y, width: box.width, w: box.width * VISIBLE_WIDTH, h: box.width * CLOUD_SHAPE * VISIBLE_HEIGHT };
+    });
+    // The middle of your projects on screen: stuck shared clouds move outward, away from it.
+    const yours = items.filter(item => item.c.mine);
+    const middle = yours.length ? { x: yours.reduce((t, item) => t + item.x, 0) / yours.length, y: yours.reduce((t, item) => t + item.y, 0) / yours.length } : { x: view.width / 2, y: view.height / 2 };
+    for (let pass = 0; pass < 80; pass++) {
+      let moved = false;
+      for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
+        const a = items[i], b = items[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const overlapX = (a.w + b.w) / 2 + GAP - Math.abs(dx), overlapY = (a.h + b.h) / 2 + GAP - Math.abs(dy);
+        if (overlapX <= 0 || overlapY <= 0) continue;
+        // A shared cloud still stuck on one of yours after a few rounds is squeezed between your
+        // clouds, where every direct push hits another one. It moves outward from your cluster.
+        if (pass >= 10 && a.c.mine !== b.c.mine) {
+          const shared = a.c.mine ? b : a;
+          let ox = shared.x - middle.x, oy = shared.y - middle.y;
+          const length = Math.hypot(ox, oy) || 1;
+          if (length < 1) { ox = 0; oy = 1; }
+          const step = Math.min(overlapX, overlapY) * .6 + 4;
+          shared.x += ox / length * step; shared.y += oy / length * step;
+          moved = true;
+          continue;
+        }
+        // Otherwise move along whichever direction needs the shorter push.
+        const sideways = overlapX / (a.w + b.w) < overlapY / (a.h + b.h);
+        const sign = (sideways ? dx : dy) >= 0 ? 1 : -1, push = (sideways ? overlapX : overlapY) + .5;
+        const aShare = a.c.mine === b.c.mine ? .5 : a.c.mine ? 0 : 1, bShare = 1 - aShare;
+        if (sideways) { a.x -= sign * push * aShare; b.x += sign * push * bShare; }
+        else { a.y -= sign * push * aShare; b.y += sign * push * bShare; }
+        moved = true;
+      }
+      if (!moved) break;
+    }
+    for (const item of items) solved.set(item.c.id, { x: item.x, y: item.y, width: item.width });
+  }
   function meshFor(id: string, seed: number) {
     let mesh = meshes.get(id);
     if (!mesh) {
@@ -187,7 +241,8 @@ export function createSkyRendererVector2D(canvas: HTMLCanvasElement): SkyRendere
     },
     setClouds(next) { clouds = next; },
     project(cloud, cam): ScreenCloud {
-      const box = place(cloud, cam, view, flatSize(cloud) * zoomedOutBoost(cam.zoom));
+      solve(cam);
+      const box = solved.get(cloud.id) || place(cloud, cam, view, flatSize(cloud) * zoomedOutBoost(cam.zoom));
       const height = box.width * CLOUD_SHAPE;
       // The text sits in the body of the cloud, just below its middle.
       return { x: box.x, y: box.y, width: box.width, height, label: { x: box.x, y: box.y + height * .02, width: box.width * .5 } };
