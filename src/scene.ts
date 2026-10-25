@@ -323,7 +323,8 @@ export class OfficeScene {
     const look = modelLook(a.effectiveModel || a.model);
     // A true sphere: expression comes from the eyes, and the costume marks the role.
     const geometry = new THREE.SphereGeometry(.5, 40, 28);
-    const skin = new THREE.MeshStandardMaterial({ color: look.color, roughness: .48, metalness: 0, emissive: look.color, emissiveIntensity: .04, envMapIntensity: 0 });
+    const tone = a.blobColor || look.color;
+    const skin = new THREE.MeshStandardMaterial({ color: tone, roughness: .48, metalness: 0, emissive: tone, emissiveIntensity: .04, envMapIntensity: 0 });
     skin.customProgramCacheKey = () => 'iteration1-blob-v3';
     skin.onBeforeCompile = shader => {
       shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight = mix(outgoingLight, diffuseColor.rgb, .28);\n#include <opaque_fragment>');

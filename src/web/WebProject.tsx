@@ -40,7 +40,7 @@ function roomFor(row: SkyRow, lasting: Lasting[] = [], tickets: Ticket[] = []): 
     const current = tickets.find(ticket => ticket.agentId === agent.id && !ticket.archivedAt && (ticket.status === 'working' || ticket.status === 'planning'));
     return {
       id: `pa:${agent.id}`, name: agent.name, title: agent.role, role: agent.role, task: current?.title ?? agent.instructions, model: agent.engine, manager: agent.manager,
-      provider: deskProvider[agent.engine], status: current ? 'working' : 'idle', color: kindOf(agent.role, agent.manager).color, progress: 0, plan: [], tokens: 0, events: [],
+      provider: deskProvider[agent.engine], status: current ? 'working' : 'idle', color: kindOf(agent.role, agent.manager).color, blobColor: kindOf(agent.role, agent.manager).color, progress: 0, plan: [], tokens: 0, events: [],
     };
   });
   return {
