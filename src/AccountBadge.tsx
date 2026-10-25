@@ -5,7 +5,7 @@ import './account-badge.css';
 const initials = (name: string) => name.replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean).slice(0, 2).map(part => part[0]!.toUpperCase()).join('') || '?';
 
 /** The signed-in account in the top right corner: the profile picture, or initials without one. Opens a menu to sign out. */
-export function AccountBadge({ account }: { account: OfficeIdentity }) {
+export function AccountBadge({ account, onSignOut }: { account: OfficeIdentity; onSignOut?: () => void }) {
   const [open, setOpen] = useState(false);
   const [broken, setBroken] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -26,7 +26,7 @@ export function AccountBadge({ account }: { account: OfficeIdentity }) {
     {open && <div className="account-menu" role="menu">
       <b>{account.label}</b>
       {account.email && account.email !== account.label && <small>{account.email}</small>}
-      <button role="menuitem" onClick={() => void fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })}>Sign out</button>
+      <button role="menuitem" onClick={() => onSignOut ? onSignOut() : void fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })}>Sign out</button>
     </div>}
   </div>;
 }

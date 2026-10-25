@@ -6,6 +6,7 @@ export const LOCAL_USER_ID = "local";
 export type OfficeUser = {
   id: string;
   email: string | null;
+  name: string | null;
   local: boolean;
 };
 
@@ -17,9 +18,10 @@ type AuthCtx = {
 
 export function userFromIdentity(identity: UserIdentity | null): OfficeUser {
   const subject = identity?.subject?.trim();
-  if (!subject) return { id: LOCAL_USER_ID, email: null, local: true };
+  if (!subject) return { id: LOCAL_USER_ID, email: null, name: null, local: true };
   const email = typeof identity?.email === "string" ? identity.email.trim().toLowerCase() : "";
-  return { id: subject, email: email.includes("@") ? email : null, local: false };
+  const name = typeof identity?.name === "string" && identity.name.trim() ? identity.name.trim() : null;
+  return { id: subject, email: email.includes("@") ? email : null, name, local: false };
 }
 
 export async function currentUser(ctx: AuthCtx): Promise<OfficeUser> {
