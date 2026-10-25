@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { SkyPalette } from './time-of-day';
+import type { CloudText } from './cloud-text';
 import { cloudFragment, cloudVertex, skyDomeFragment, skyFragment, skyVertex } from './shaders';
 import { CLOUD_ASPECT, place, type Camera, type Viewport } from './sky-math';
 
@@ -8,11 +9,25 @@ import { CLOUD_ASPECT, place, type Camera, type Viewport } from './sky-math';
  * `size` scales a cloud, so one with a longer title is wider. `placed` marks one you dragged into
  * place: it stays exactly there, even on top of another. `raise` orders such clouds, latest on top.
  */
-export interface SkyCloud { id: string; x: number; y: number; depth: number; seed: number; mine: boolean; size?: number; placed?: unknown; raise?: number }
+/**
+ * Drawing order, back to front: clouds you have clicked or moved stack above the rest, most
+ * recent on top; the others go further back first, then yours.
+ */
+export function stackOrder(a: { depth: number; mine: boolean; raise?: number }, b: { depth: number; mine: boolean; raise?: number }) {
+  const ra = a.raise || 0, rb = b.raise || 0;
+  if (ra || rb) return ra - rb;
+  return a.depth - b.depth || Number(a.mine) - Number(b.mine);
+}
+
+export interface SkyCloud { id: string; x: number; y: number; depth: number; seed: number; mine: boolean; size?: number; placed?: unknown; raise?: number;
+  /** Text and agents drawn as part of the cloud, so a cloud above covers them. */
+  text?: CloudText; agentBlobs?: { color: string; working: boolean }[] }
 /** Where a cloud appears on screen: center and size in CSS pixels, y down. `labelY`, when set, is where its label hangs from. */
 export interface ScreenCloud { x: number; y: number; width: number; height: number; labelY?: number; label?: { x: number; y: number; width: number }; agents?: { x: number; y: number } }
 /** `emphasis` is how visible each object's label is, 0 to 1, so a renderer can draw a panel behind it. */
-export interface SkyFrame { camera: Camera; time: number; palette: SkyPalette; hover: { id: string | null; amount: number }; emphasis?: Map<string, number> }
+export interface SkyFrame { camera: Camera; time: number; palette: SkyPalette; hover: { id: string | null; amount: number }; emphasis?: Map<string, number>;
+  /** For each cloud drawn with its text: how visible its text is, and whether to show the description and agents. */
+  labels?: Map<string, { opacity: number; detail: boolean }> }
 
 /**
  * What the sky view needs from a renderer. The view owns navigation, labels and transitions;
@@ -29,6 +44,8 @@ export interface SkyRenderer {
   setClouds(clouds: SkyCloud[]): void;
   /** The cloud being dragged, if any: drawn on top, and nothing else moves out of its way. */
   setDragging?(id: string | null): void;
+  /** The home view's zoom: projects further back clear up as you zoom in past it. */
+  setHomeZoom?(zoom: number): void;
   project(cloud: SkyCloud, camera: Camera): ScreenCloud;
   render(frame: SkyFrame): void;
   dispose(): void;
