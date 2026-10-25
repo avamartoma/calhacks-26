@@ -22,7 +22,7 @@ export function builtinBlobs(uses: BuiltinUse[]): Map<string, SkyAgent[]> {
   const byProject = new Map<string, SkyAgent[]>();
   for (const [name, use] of latest) {
     const blobs = byProject.get(use.projectId) ?? [];
-    blobs.push({ role: `Built-in ${TITLES[name as BuiltinName]}`, status: use.working ? 'working' : 'idle' });
+    blobs.push({ name: TITLES[name as BuiltinName], role: `Built-in ${TITLES[name as BuiltinName]}`, status: use.working ? 'working' : 'idle' });
     byProject.set(use.projectId, blobs);
   }
   return byProject;

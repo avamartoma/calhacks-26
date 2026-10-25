@@ -103,7 +103,7 @@ export default function App() {
         detail: cloudStatusLabel(cloudStatus(item, waiting, !!item.viewOnly)),
         agents: [
           // Colored by type: from the agent's title or role when that says, otherwise from its task.
-          ...item.agents.filter(agent => agent.status !== 'ejected').map(agent => ({ role: agentKinds.some(kind => kind.match.test(agent.title || agent.role)) ? agent.title || agent.role : taskRole(`${agent.role} ${agent.task}`), status: agent.status, manager: !!agent.manager })),
+          ...item.agents.filter(agent => agent.status !== 'ejected').map(agent => ({ name: [agent.name, agent.title].filter(Boolean).join(' · '), role: agentKinds.some(kind => kind.match.test(agent.title || agent.role)) ? agent.title || agent.role : taskRole(`${agent.role} ${agent.task}`), status: agent.status, manager: !!agent.manager })),
           ...(builtins.get(item.id) ?? []),
         ],
         mine: true,

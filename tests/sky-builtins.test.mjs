@@ -10,8 +10,8 @@ test('a built-in agent appears only once used, on the cloud it last worked on', 
     { name: 'reviewer', projectId: 'b', at: 5, working: true },
     { name: 'office', projectId: 'a', at: 3, working: false },
   ]);
-  assert.deepEqual(blobs.get('a'), [{ role: 'Built-in Office', status: 'idle' }]);
-  assert.deepEqual(blobs.get('b'), [{ role: 'Built-in Reviewer', status: 'working' }]);
+  assert.deepEqual(blobs.get('a'), [{ name: 'Office', role: 'Built-in Office', status: 'idle' }]);
+  assert.deepEqual(blobs.get('b'), [{ name: 'Reviewer', role: 'Built-in Reviewer', status: 'working' }]);
 });
 
 test('built-in agents are gray and coding agents are colored by their task', () => {

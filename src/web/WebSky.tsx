@@ -10,6 +10,8 @@ import type { Room, Workspace } from '../types';
 import { SkyView, type SkyProject } from '../sky/SkyView';
 import { seedOf } from '../sky/sky-math';
 import { builtinBlobs, taskRole } from '../sky/builtins';
+
+const engines: Record<string, string> = { claude: 'Claude', codex: 'Codex', cursor: 'Cursor' };
 import { ConnectionsPanel } from './Connections';
 import { GithubRepos } from './GithubRepos';
 import { NewProject } from './NewProject';
@@ -78,7 +80,7 @@ export function WebSky({ go }: { go: (path: string) => void }) {
       return {
         // Everything on your web sky is a project you can view, so every cloud opens.
         id: row.id, name: row.name, description: describe(row), mine: row.mine, enterable: true, owner: row.owner?.split('@')[0],
-        agents: [...row.runs.map(run => ({ role: taskRole(run.prompt), status: agentStatus(run.status) })), ...(builtins.get(row.id) ?? [])],
+        agents: [...row.runs.map(run => ({ name: `${engines[run.agent] ?? 'Claude'} · ${run.userLabel}`, role: taskRole(run.prompt), status: agentStatus(run.status) })), ...(builtins.get(row.id) ?? [])],
         x: Math.cos(angle) * radius, y: Math.sin(angle) * radius * (row.mine ? .8 : .6), depth: row.mine ? 1 : .45 + .35 * seed, seed,
         ...(row.placed ? { placed: row.placed } : {}),
       };

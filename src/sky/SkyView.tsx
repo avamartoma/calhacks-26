@@ -7,6 +7,7 @@ import { LABEL_SHARE, YOUR_SCALE, createSkyRendererVector, createSkyRendererVect
 import { localHour, paletteAt } from './time-of-day';
 import { CLOUD_WIDTH, CLOUD_ASPECT, MAX_ZOOM, layerScale, baseDistance, easeInOut, fly, flyRelative, look, panBy, rayThrough, zoomAt, type Camera, type Viewport } from './sky-math';
 import { agentKinds, builtinKind, isWorking, kindOf, type SkyAgent } from './agents';
+import { keywordMatches } from './search';
 import './sky.css';
 
 /**
@@ -214,7 +215,7 @@ function useSemanticSearch(terms: string, list: { current: SkyProject[] }): Rank
     const timer = setTimeout(() => {
       const items = list.current.filter(p => p.kind !== 'you').slice(0, 150).map(p => ({
         id: p.id,
-        text: [p.name, p.description, p.detail, ...(p.agents || []).map(a => a.role)].filter(Boolean).join('. ').slice(0, 400),
+        text: [p.name, p.description, p.detail, ...(p.agents || []).map(a => [a.name, a.role].filter(Boolean).join(', '))].filter(Boolean).join('. ').slice(0, 400),
       }));
       fetch('/api/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: terms.slice(0, 200), items }), signal: abort.signal })
         .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
@@ -594,8 +595,10 @@ function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyM
   const terms = query.trim().toLowerCase();
   const ranked = useSemanticSearch(terms, list);
   const byId = new Map(list.current.map(p => [p.id, p]));
-  const semantic = ranked?.query === terms && !ranked.failed ? ranked.results.flatMap(r => { const p = byId.get(r.id); return p && p.kind !== 'you' ? [{ p, match: r.match }] : []; }) : null;
-  const results = semantic || (terms ? list.current.filter(p => p.kind !== 'you' && `${p.name} ${p.description}`.toLowerCase().includes(terms)).slice(0, 6).map(p => ({ p, match: '' })) : []);
+  // Results by meaning when the office could rank them; otherwise every word you typed, matched
+  // against project names and descriptions and the names and types of their agents.
+  const semantic = ranked?.query === terms && !ranked.failed && ranked.mode === 'semantic' ? ranked.results.flatMap(r => { const p = byId.get(r.id); return p && p.kind !== 'you' ? [{ p, match: r.match }] : []; }) : null;
+  const results = semantic || keywordMatches(list.current, terms);
   function choose(p: SkyProject) { setQuery(''); setSearchOpen(false); host.current?.focus({ preventScroll: true }); flyTo(p); }
 
   return <div ref={host} className={`sky-view ${balloons ? 'balloon-sky' : style === 'clouds' || style === 'clouds3d' ? 'vector-sky' : 'cloud-sky'} ${style === 'clouds' ? 'drawn-text' : ''}`} tabIndex={0} role="application" aria-label="Workspace sky. Drag or use arrow keys to move, scroll or plus and minus to zoom. Click a project to fly to it; open yours from its label."
@@ -622,7 +625,7 @@ function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyM
       {terms && <div className="sky-results" role="listbox">
         {results.length ? results.map(({ p, match }) => <button key={p.id} role="option" aria-selected={false} onClick={() => choose(p)}><b>{p.name}</b><span>{match || (p.mine ? 'Your project' : p.detail || 'In this workspace')}</span></button>)
           : semantic || ranked?.mode === 'keyword' ? <p>No matches.</p> : <p>Searching…</p>}
-        <p className="sky-results-note">{semantic && ranked?.mode === 'semantic' ? 'Matched by meaning, across projects, agents and tickets.' : ranked?.mode === 'keyword' ? 'Matching words only: semantic search isn’t available.' : 'Matching words while semantic search runs…'}</p>
+        <p className="sky-results-note">{semantic && ranked?.mode === 'semantic' ? 'Matched by meaning, across projects, agents and tickets.' : ranked?.mode === 'keyword' ? 'Matching words in project and agent names: search by meaning isn’t available.' : 'Matching words in project and agent names while search by meaning runs…'}</p>
       </div>}
     </div>}
     <div className="sky-legend" aria-label="Agent colors">{(projects.some(p => p.agents?.some(a => /built-in/i.test(a.role))) ? [...agentKinds, builtinKind] : agentKinds).map(k => <span key={k.id}><i style={{ background: k.color }} />{k.label}</span>)}</div>

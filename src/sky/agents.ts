@@ -21,5 +21,6 @@ export function kindOf(role: string, manager = false): AgentKind {
 }
 
 /** An agent as the sky shows it: its type and whether it is working right now. */
-export interface SkyAgent { role: string; status: string; manager?: boolean }
+/** `name` (like "Sage", or "Claude · Ava") is what search matches, along with the role. */
+export interface SkyAgent { role: string; status: string; manager?: boolean; name?: string }
 export const isWorking = (status: string) => ['working', 'talking', 'approval'].includes(status);
