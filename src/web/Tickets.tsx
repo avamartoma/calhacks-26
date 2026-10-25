@@ -1,4 +1,4 @@
-import { useState, type ComponentType } from 'react';
+import { useState, type ComponentType, type ReactNode } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import { ArrowRight, Play, RotateCcw, Send, Square, Trash2 } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
@@ -87,14 +87,15 @@ export function TicketItem({ ticket, team, editor, Log }: { ticket: Ticket; team
 }
 
 /** The archive folder at the bottom: archived tickets, to restore or delete for good. */
-export function TicketArchive({ tickets, team, editor }: { tickets: Ticket[]; team: TeamAgent[]; editor: boolean }) {
+/** Archived tickets, plus any finished runs the office passes in as children (`runs` counts them). */
+export function TicketArchive({ tickets, team, editor, runs = 0, children }: { tickets: Ticket[]; team: TeamAgent[]; editor: boolean; runs?: number; children?: ReactNode }) {
   const archive = useMutation(api.tickets.archive);
   const remove = useMutation(api.tickets.remove);
   const [error, setError] = useState('');
   const act = (fn: () => Promise<unknown>) => { setError(''); fn().catch(e => setError(message(e))); };
-  if (!tickets.length) return null;
+  if (!tickets.length && !runs) return null;
   return <details className="web-archive">
-    <summary><Trash2 size={13} /> Archive <span>{tickets.length}</span></summary>
+    <summary><Trash2 size={13} /> Archive <span>{tickets.length + runs}</span></summary>
     <ul>
       {tickets.slice().sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0)).map(ticket => <li key={ticket.id}>
         <span><b>{ticket.title}</b><small>{team.find(agent => agent.id === ticket.agentId)?.name ?? 'Unassigned'} · {ticketLabel[ticket.status]}</small></span>
@@ -104,6 +105,7 @@ export function TicketArchive({ tickets, team, editor }: { tickets: Ticket[]; te
         </>}
       </li>)}
     </ul>
+    {children}
     {error && <p className="web-error" role="alert">{error}</p>}
   </details>;
 }

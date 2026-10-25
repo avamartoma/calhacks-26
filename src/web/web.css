@@ -173,8 +173,10 @@
 .web-archive .icon-button{width:24px;height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;background:none;border:0;color:#66708a}
 .web-archive .icon-button.danger:hover{color:#b55c48}
 /* Which program and model the agents run on, up top and on each agent. */
-.web-program{display:flex;flex-direction:column;gap:6px}
 .web-model,.web-agent-program label{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:#55607a}
 .web-model select,.web-agent-program select{flex:1;width:auto;height:auto;margin:0;padding:5px 8px;font-size:12px;font-weight:400;background:#fff;border-color:#d3d9e3;color:#26324a}
 .web-agent-program{display:flex;flex-wrap:wrap;gap:6px 10px;margin:4px 0 2px 16px}
 .web-agent-program label{flex:1;min-width:130px}
+.web-archive .web-runs li{display:block;font-size:inherit}
+.web-archive .web-runs{margin-top:6px}
+.web-archive .web-runs li b{text-decoration:none}
