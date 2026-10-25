@@ -12,6 +12,7 @@ export const sessionLocationValidator = v.union(v.literal("local"), v.literal("c
 export const sessionStatusValidator = v.union(
   v.literal("provisioning"),
   v.literal("ready"),
+  v.literal("paused"),
   v.literal("stopped"),
   v.literal("error"),
 );
@@ -34,6 +35,10 @@ export const memberRoleValidator = v.union(
   v.literal("builder"),
   v.literal("viewer"),
 );
+
+export const accessRoleValidator = v.union(v.literal("viewer"), v.literal("editor"));
+
+export const fileChangeOpValidator = v.union(v.literal("write"), v.literal("delete"));
 
 export const placeValidator = v.union(v.literal("local"), v.literal("cloud"));
 

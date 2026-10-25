@@ -8,6 +8,8 @@ import {
   sessionLocationValidator,
   sessionStatusValidator,
   visibilityValidator,
+  accessRoleValidator,
+  fileChangeOpValidator,
 } from "./validators";
 
 export default defineSchema({
@@ -18,9 +20,17 @@ export default defineSchema({
     description: v.string(),
     builtOn: v.optional(v.id("projects")),
     slug: v.string(),
+    shareSlug: v.optional(v.string()),
     visibility: visibilityValidator,
     linkRole: linkRoleValidator,
-  }).index("by_slug", ["slug"]),
+    sandboxId: v.optional(v.string()),
+    lastSnapshot: v.optional(v.id("_storage")),
+    backup: v.optional(v.id("_storage")),
+    resumeWindowStart: v.optional(v.number()),
+    resumeCount: v.optional(v.number()),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_share_slug", ["shareSlug"]),
 
   sessions: defineTable({
     projectId: v.id("projects"),
@@ -70,10 +80,30 @@ export default defineSchema({
   members: defineTable({
     projectId: v.id("projects"),
     userId: v.string(),
+    email: v.optional(v.string()),
     role: memberRoleValidator,
   })
     .index("by_project", ["projectId"])
     .index("by_user", ["userId"]),
+
+  projectAccess: defineTable({
+    projectId: v.id("projects"),
+    email: v.string(),
+    role: accessRoleValidator,
+    invitedBy: v.string(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_project_email", ["projectId", "email"]),
+
+  fileChanges: defineTable({
+    projectId: v.id("projects"),
+    sessionId: v.optional(v.id("sessions")),
+    path: v.string(),
+    author: v.string(),
+    contentHash: v.string(),
+    op: fileChangeOpValidator,
+    at: v.number(),
+  }).index("by_project", ["projectId"]),
 
   presence: defineTable({
     projectId: v.id("projects"),
@@ -85,9 +115,13 @@ export default defineSchema({
 
   tokens: defineTable({
     userId: v.string(),
+    projectId: v.optional(v.id("projects")),
     hashedToken: v.string(),
+    label: v.optional(v.string()),
     createdAt: v.number(),
+    revokedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
-    .index("by_hash", ["hashedToken"]),
+    .index("by_hash", ["hashedToken"])
+    .index("by_project", ["projectId"]),
 });

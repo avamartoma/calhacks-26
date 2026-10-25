@@ -4,9 +4,10 @@ import path from 'node:path';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { z } from 'zod';
 
-// Authorization Code with PKCE against Auth0. The office is a public client: there is no
-// client secret on this machine, the verifier never leaves it, and the browser redirect
-// lands on loopback. The OIDC `sub` becomes the credentialSub every run is attributed to.
+// Authorization Code with PKCE against Auth0. The verifier never leaves this machine, and
+// the browser redirect lands on loopback. A confidential client may set
+// ITERATION1_AUTH0_CLIENT_SECRET; it is sent only on the token request and never logged.
+// The OIDC `sub` becomes the credentialSub every run is attributed to.
 const SCOPE = 'openid profile email offline_access';
 const base64url = buffer => buffer.toString('base64url');
 const challengeFor = verifier => base64url(createHash('sha256').update(verifier).digest());
@@ -91,7 +92,7 @@ export function createAuth({ dataDir, port, fetchImpl = fetch, createJwks = crea
     const claims = await verifyIdToken(tokens.id_token, nonce);
     session = {
       sub: claims.sub, name: claims.name || claims.nickname || claims.email || claims.sub, email: claims.email || '', picture: claims.picture || '',
-      refreshToken: tokens.refresh_token || null, accessToken: tokens.access_token || null,
+      refreshToken: tokens.refresh_token || null, accessToken: tokens.access_token || null, idToken: tokens.id_token,
       expiresAt: tokens.expires_in ? now() + tokens.expires_in * 1000 : null, signedInAt: now()
     };
     await writeJson(sessionFile, session);
@@ -99,7 +100,9 @@ export function createAuth({ dataDir, port, fetchImpl = fetch, createJwks = crea
   }
 
   async function exchange(endpoint, body) {
-    const res = await fetchImpl(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body).toString(), signal: AbortSignal.timeout(15000) });
+    const secret = process.env.ITERATION1_AUTH0_CLIENT_SECRET;
+    const form = secret ? { ...body, client_secret: secret } : body;
+    const res = await fetchImpl(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(form).toString(), signal: AbortSignal.timeout(15000) });
     const payload = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(`Auth0 rejected the sign-in: ${payload.error_description || payload.error || res.status}`);
     return payload;
@@ -122,8 +125,8 @@ export function createAuth({ dataDir, port, fetchImpl = fetch, createJwks = crea
     try {
       const { token_endpoint } = await discover();
       const { clientId } = requireProvider();
-      const tokens = await exchange(token_endpoint, { grant_type: 'refresh_token', client_id: clientId, refresh_token: session.refreshToken });
-      session = { ...session, accessToken: tokens.access_token || session.accessToken, refreshToken: tokens.refresh_token || session.refreshToken, expiresAt: tokens.expires_in ? now() + tokens.expires_in * 1000 : null };
+      const tokens = await exchange(token_endpoint, { grant_type: 'refresh_token', client_id: clientId, refresh_token: session.refreshToken, scope: 'openid profile email' });
+      session = { ...session, accessToken: tokens.access_token || session.accessToken, refreshToken: tokens.refresh_token || session.refreshToken, idToken: tokens.id_token || session.idToken, expiresAt: tokens.expires_in ? now() + tokens.expires_in * 1000 : null };
       await writeJson(sessionFile, session);
     } catch { session = { ...session, stale: true }; }
     return session;

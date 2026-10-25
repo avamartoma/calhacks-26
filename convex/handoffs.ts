@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAccess } from "./access";
 import { recordEvent } from "./events";
 import { assertNonEmpty, placeValidator } from "./validators";
 
@@ -16,6 +17,7 @@ export const create = mutation({
     if (!session) {
       throw new Error(`Session ${args.sessionId} not found`);
     }
+    await requireAccess(ctx, session.projectId, "editor");
     if (args.from === args.to) {
       throw new Error("handoff from and to must differ");
     }
@@ -46,6 +48,7 @@ export const latest = query({
     if (!session) {
       throw new Error(`Session ${args.sessionId} not found`);
     }
+    await requireAccess(ctx, session.projectId, "viewer");
     const [handoff] = await ctx.db
       .query("handoffs")
       .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))

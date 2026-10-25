@@ -4,8 +4,10 @@ declare const process: { env: Record<string, string | undefined> };
 
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalAction } from "./_generated/server";
-import { getSandboxProvider, sandboxMaxExtensions, sandboxProviderName, sandboxTimeoutMs } from "./lib/sandbox";
+import { internalAction, type ActionCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { capturePreview } from "./lib/previewShot";
+import { getSandboxProvider, sandboxMaxExtensions, sandboxProviderName, sandboxTimeoutMs, type SandboxHandle, type SandboxProvider } from "./lib/sandbox";
 import { workspacePath } from "./lib/workspacePath";
 
 function preserveScript(workspaceDir: string): string {
@@ -31,6 +33,57 @@ function preserveDelayMs(): number {
   return Math.max(15_000, sandboxTimeoutMs() - 60_000);
 }
 
+async function resumeSandbox(provider: SandboxProvider, sandboxId: string): Promise<SandboxHandle | null> {
+  if (provider.name !== "e2b") return null;
+  const state = await provider.sandboxState(sandboxId);
+  if (state === "missing") return null;
+  try {
+    return await provider.resume(sandboxId);
+  } catch (error) {
+    console.error(`sandbox ${sandboxId} resume failed: ${error instanceof Error ? error.message : "resume failed"}`);
+    return null;
+  }
+}
+
+async function previewAfterResume(provider: SandboxProvider, handle: SandboxHandle): Promise<{ previewUrl: string } | null> {
+  try {
+    if (await provider.portOpen(handle.sandboxId, 3000)) return { previewUrl: handle.url };
+  } catch {
+    // The dev server is not answering. Start it again.
+  }
+  try {
+    return await provider.startPreview(handle.sandboxId, { port: 3000 });
+  } catch (error) {
+    console.error(`preview restart failed: ${error instanceof Error ? error.message : "preview failed"}`);
+    return null;
+  }
+}
+
+async function finishReady(
+  ctx: ActionCtx,
+  sessionId: Id<"sessions">,
+  providerName: string,
+  handle: SandboxHandle,
+  started: number,
+  preview: { previewUrl: string } | null,
+  via: string,
+): Promise<boolean> {
+  const ms = Date.now() - started;
+  console.log(`session ${sessionId} ready in ${ms}ms via ${providerName} ${handle.url}`);
+  const marked = await ctx.runMutation(internal.sessions.markReady, {
+    sessionId,
+    envUrl: handle.url,
+    sandboxId: handle.sandboxId,
+    detail: `${providerName} ${handle.url} in ${ms}ms`,
+    ...(preview ? { previewUrl: preview.previewUrl } : {}),
+  });
+  if (!marked.skipped && preview) console.log(`session ${sessionId} open-to-live in ${ms}ms via ${via}`);
+  if (!marked.skipped && providerName === "e2b") {
+    await ctx.scheduler.runAfter(preserveDelayMs(), internal.sessionSandbox.preserve, { sessionId });
+  }
+  return !marked.skipped;
+}
+
 export const launch = internalAction({
   args: { sessionId: v.id("sessions") },
   handler: async (ctx, args) => {
@@ -46,6 +99,27 @@ export const launch = internalAction({
     const started = Date.now();
     try {
       const provider = getSandboxProvider();
+      const resumed = info.projectSandboxId ? await resumeSandbox(provider, info.projectSandboxId) : null;
+      if (resumed) {
+        const preview = await previewAfterResume(provider, resumed);
+        const marked = await finishReady(ctx, args.sessionId, provider.name, resumed, started, preview, "resume");
+        if (marked) return;
+      }
+      if (info.backupId) {
+        const blob = await ctx.storage.get(info.backupId as Id<"_storage">);
+        if (blob) {
+          const handle = await provider.createEmpty();
+          await provider.restore(handle.sandboxId, new Uint8Array(await blob.arrayBuffer()));
+          let preview: { previewUrl: string } | null = null;
+          try {
+            preview = await provider.startPreview(handle.sandboxId, { port: 3000 });
+          } catch (error) {
+            console.error(`session ${args.sessionId} preview after backup failed: ${error instanceof Error ? error.message : "preview failed"}`);
+          }
+          const marked = await finishReady(ctx, args.sessionId, provider.name, handle, started, preview, "backup");
+          if (marked) return;
+        }
+      }
       const handle = info.repoUrl
         ? await provider.create({
             repoCloneUrl: info.repoUrl,
@@ -98,7 +172,7 @@ export const preserve = internalAction({
   args: { sessionId: v.id("sessions") },
   handler: async (ctx, args) => {
     const info = await ctx.runQuery(internal.sessions.getInternal, { sessionId: args.sessionId });
-    if (!info?.sandboxId || info.status === "stopped") return;
+    if (!info?.sandboxId || info.status === "stopped" || info.status === "paused") return;
     if (sandboxProviderName() !== "e2b") return;
     const provider = getSandboxProvider();
     let pushed = false;
@@ -129,19 +203,54 @@ export const preserve = internalAction({
         pushError = error instanceof Error ? error.message : "sandbox extension failed";
       }
     }
-    try {
-      await provider.destroy(info.sandboxId);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "sandbox destroy failed";
-      pushError = pushError ? `${pushError}; ${message}` : message;
-    }
-    const reason = !active ? "idle for 10 minutes" : atCap ? `sandbox ended after ${extensions} extensions` : "sandbox extension failed";
+    const reason = !active ? "idle for 10 minutes" : atCap ? `sandbox paused after ${extensions} extensions` : "sandbox extension failed";
     await ctx.runMutation(internal.sessions.noteSandbox, {
       sessionId: args.sessionId,
-      kind: "session.ended",
+      kind: "session.paused",
       detail: pushError ? `${reason}; ${pushError}` : reason,
-      stop: true,
+      stop: false,
+      pause: true,
     });
+    await ctx.scheduler.runAfter(0, internal.sessionSandbox.pause, { sessionId: args.sessionId });
+  },
+});
+
+export const pause = internalAction({
+  args: { sessionId: v.id("sessions") },
+  handler: async (ctx, args) => {
+    const info = await ctx.runQuery(internal.sessions.getInternal, { sessionId: args.sessionId });
+    const sandboxId = info?.sandboxId ?? info?.projectSandboxId;
+    if (!info || !sandboxId || sandboxProviderName() !== "e2b") return;
+    const provider = getSandboxProvider();
+    try {
+      const state = await provider.sandboxState(sandboxId);
+      if (state === "running") {
+        const shot = info.previewUrl ? await capturePreview(info.previewUrl) : null;
+        if (shot) {
+          const snapshot = await ctx.storage.store(new Blob([shot], { type: "image/png" }));
+          await ctx.runMutation(internal.sessions.savePauseArtifacts, { projectId: info.projectId, snapshot });
+        }
+        try {
+          const archive = await provider.archive(sandboxId);
+          if (archive) {
+            const backup = await ctx.storage.store(new Blob([archive], { type: "application/gzip" }));
+            await ctx.runMutation(internal.sessions.savePauseArtifacts, { projectId: info.projectId, backup });
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "backup failed";
+          console.error(`session ${args.sessionId} backup failed: ${message}`);
+        }
+        await provider.pause(sandboxId);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "sandbox pause failed";
+      console.error(`sessionSandbox.pause ${args.sessionId}: ${message}`);
+      await ctx.runMutation(internal.sessions.recordSessionEvent, {
+        sessionId: args.sessionId,
+        kind: "session.pause_failed",
+        detail: message.slice(0, 500),
+      });
+    }
   },
 });
 

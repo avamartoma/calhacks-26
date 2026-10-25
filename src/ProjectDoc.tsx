@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { ArrowRight, Box, Check, Cloud, Link2, Play } from 'lucide-react';
-import type { Agent, Room, SandboxState } from './types';
+import type { Agent, CloudPreview, Room } from './types';
 import { agentWork, workColors, workLabels } from './Operations';
 import { modelLabel } from './identity';
 import './project-doc.css';
@@ -94,7 +94,7 @@ export function ProjectDoc({ room, workspaceName, selected, onAgent, onTask, onS
         </button></li>; })}</ul>
       </section>}
 
-      {!room.demo && room.sandbox && <SandboxSection sandbox={room.sandbox} />}
+      {!room.demo && room.preview && <SandboxSection sandbox={room.preview} />}
 
       <section aria-labelledby="doc-activity">
         <h2 id="doc-activity">Recent activity</h2>
@@ -105,7 +105,7 @@ export function ProjectDoc({ room, workspaceName, selected, onAgent, onTask, onS
   </div>;
 }
 
-function SandboxSection({ sandbox }: { sandbox: SandboxState }) {
+function SandboxSection({ sandbox }: { sandbox: CloudPreview }) {
   return <section aria-labelledby="doc-preview">
     <h2 id="doc-preview">Live preview <small className={`doc-preview-${sandbox.status}`}>{sandbox.status === 'live' ? 'Live' : sandbox.status === 'error' ? 'Unavailable' : 'Starting'}</small></h2>
     {sandbox.status === 'live' && sandbox.previewUrl
