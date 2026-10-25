@@ -41,6 +41,10 @@ export default function WebApp() {
     clientId={hosted.auth0.clientId}
     cacheLocation="localstorage"
     useRefreshTokens={false}
+    // Keep a sign-in in progress in a cookie, not this tab's sessionStorage, so it survives GitHub
+    // or Google opening in their own app and coming back in another tab. /callback and the share
+    // pages use the same setting.
+    useCookiesForTransactions
     authorizationParams={{ redirect_uri: callback(), scope: 'openid profile email' }}
     onRedirectCallback={appState => {
       const next = typeof appState?.returnTo === 'string' && appState.returnTo.startsWith('/') && !appState.returnTo.startsWith('//') ? appState.returnTo : '/';

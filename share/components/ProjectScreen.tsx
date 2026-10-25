@@ -49,6 +49,7 @@ export function ProjectScreen({ slug }: { slug: string }) {
       domain={domain}
       clientId={clientId}
       cacheLocation="localstorage"
+      useCookiesForTransactions
       useRefreshTokens={false}
       authorizationParams={{ scope: "openid profile email", redirect_uri: `${window.location.origin}${callbackPath}` }}
     >
