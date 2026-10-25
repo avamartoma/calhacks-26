@@ -9,6 +9,8 @@
  */
 
 import type * as access from "../access.js";
+import type * as agentRunner from "../agentRunner.js";
+import type * as agentRuns from "../agentRuns.js";
 import type * as agentTokens from "../agentTokens.js";
 import type * as contributions from "../contributions.js";
 import type * as crons from "../crons.js";
@@ -16,9 +18,13 @@ import type * as events from "../events.js";
 import type * as fileChanges from "../fileChanges.js";
 import type * as handoffs from "../handoffs.js";
 import type * as identity from "../identity.js";
+import type * as keyStore from "../keyStore.js";
+import type * as keys from "../keys.js";
 import type * as leases from "../leases.js";
+import type * as lib_keyCrypto from "../lib/keyCrypto.js";
 import type * as lib_previewCommand from "../lib/previewCommand.js";
 import type * as lib_previewShot from "../lib/previewShot.js";
+import type * as lib_runStream from "../lib/runStream.js";
 import type * as lib_sandbox from "../lib/sandbox.js";
 import type * as lib_workspacePath from "../lib/workspacePath.js";
 import type * as projects from "../projects.js";
@@ -35,6 +41,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   access: typeof access;
+  agentRunner: typeof agentRunner;
+  agentRuns: typeof agentRuns;
   agentTokens: typeof agentTokens;
   contributions: typeof contributions;
   crons: typeof crons;
@@ -42,9 +50,13 @@ declare const fullApi: ApiFromModules<{
   fileChanges: typeof fileChanges;
   handoffs: typeof handoffs;
   identity: typeof identity;
+  keyStore: typeof keyStore;
+  keys: typeof keys;
   leases: typeof leases;
+  "lib/keyCrypto": typeof lib_keyCrypto;
   "lib/previewCommand": typeof lib_previewCommand;
   "lib/previewShot": typeof lib_previewShot;
+  "lib/runStream": typeof lib_runStream;
   "lib/sandbox": typeof lib_sandbox;
   "lib/workspacePath": typeof lib_workspacePath;
   projects: typeof projects;

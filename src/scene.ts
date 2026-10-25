@@ -149,7 +149,7 @@ export class OfficeScene {
     this.renderer.xr.addEventListener('sessionstart', this.syncRendering);
     this.renderer.xr.addEventListener('sessionend', this.sessionEnded);
     navigator.xr?.isSessionSupported('immersive-vr').then(s => { this.xrSupported = s; }).catch(() => {});
-    new GLTFLoader().load('/models/office-shell.glb', gltf => {
+    new GLTFLoader().load(`${import.meta.env.BASE_URL}models/office-shell.glb`, gltf => {
       if (this.disposed) return;
       this.neighborId='';this.shell = gltf.scene; this.renderer.domElement.dataset.asset = 'blender-office-shell';
       if (this.room) { this.build(this.room); this.update(this.room, this.selected); }

@@ -68,7 +68,8 @@ async function hasFreshPresence(ctx: MutationCtx, projectId: Id<"projects">, cut
   return rows.some((row) => row.lastSeenAt >= cutoff);
 }
 
-async function beginSession(ctx: MutationCtx, projectId: Id<"projects">, agent: AgentName) {
+/** Opens the project's sandbox for this caller, reusing a ready session when there is one. */
+export async function beginSession(ctx: MutationCtx, projectId: Id<"projects">, agent: AgentName) {
   await requireAccess(ctx, projectId, "viewer");
   const user = await currentUser(ctx);
   const project = await ctx.db.get(projectId);

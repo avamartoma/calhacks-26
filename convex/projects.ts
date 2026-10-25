@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
-import { requireAccess, visibleProjects } from "./access";
+import { grantedRole, requireAccess, visibleProjects } from "./access";
 import { recordEvent } from "./events";
 import { currentUser } from "./identity";
 import { assertHttpsGitUrl, assertNonEmpty, slugify } from "./validators";
@@ -147,5 +147,78 @@ export const lineage = query({
       project.builtOn && visibleIds.has(project.builtOn) ? [{ from: project.builtOn, to: project._id }] : [],
     );
     return { nodes, edges };
+  },
+});
+
+const MAX_UPLOAD_BYTES = 20_000_000;
+
+/** Where the browser uploads a project folder, packed as a .tar.gz. */
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await currentUser(ctx);
+    if (user.local) throw new Error("Sign in to upload a project");
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+/**
+ * A project from an uploaded folder. The archive becomes the project's backup, so its first
+ * sandbox starts from those files the same way a paused project is restored.
+ */
+export const createFromUpload = mutation({
+  args: { name: v.string(), description: v.string(), storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    const user = await currentUser(ctx);
+    if (user.local) throw new Error("Sign in to upload a project");
+    const file = await ctx.db.system.get(args.storageId);
+    if (!file) throw new Error("The upload did not arrive. Try again.");
+    if (file.size > MAX_UPLOAD_BYTES) {
+      await ctx.storage.delete(args.storageId);
+      throw new Error("That folder is over 20 MB once packed. Leave out build output and dependencies.");
+    }
+    const projectId = await insertProject(ctx, { name: args.name, description: args.description, ownerId: user.id, email: user.email });
+    await ctx.db.patch(projectId, { backup: args.storageId });
+    await recordEvent(ctx, { projectId, kind: "project.created", detail: `${args.name.trim()} (uploaded)` });
+    return projectId;
+  },
+});
+
+/**
+ * Everything on the caller's sky: their own projects, ones shared with them, and public ones,
+ * each with its preview and agents.
+ */
+export const sky = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await currentUser(ctx);
+    const projects = await ctx.db.query("projects").order("desc").collect();
+    const rows = [];
+    for (const project of projects) {
+      const role = await grantedRole(ctx, project, user);
+      if (!role) continue;
+      const mine = project.ownerId === user.id;
+      // Signed out, the sky is only the unsigned office's own projects.
+      if (!mine && user.local) continue;
+      const owner = await ctx.db.query("members").withIndex("by_project", (q) => q.eq("projectId", project._id)).collect();
+      const sessions = await ctx.db.query("sessions").withIndex("by_project", (q) => q.eq("projectId", project._id)).order("desc").take(1);
+      const runs = await ctx.db.query("agentRuns").withIndex("by_project", (q) => q.eq("projectId", project._id)).order("desc").take(6);
+      const snapshotUrl = project.lastSnapshot ? await ctx.storage.getUrl(project.lastSnapshot) : null;
+      rows.push({
+        id: project._id,
+        name: project.name,
+        description: project.description,
+        slug: project.shareSlug ?? project.slug,
+        visibility: project.visibility,
+        role,
+        mine,
+        owner: owner.find((member) => member.role === "owner")?.email ?? null,
+        repoUrl: project.repoUrl ?? null,
+        session: sessions[0] ? { id: sessions[0]._id, status: sessions[0].status, previewUrl: sessions[0].previewUrl ?? null, previewStatus: sessions[0].previewStatus ?? null } : null,
+        snapshotUrl,
+        runs: runs.map((run) => ({ id: run._id, status: run.status, userLabel: run.userLabel, prompt: run.prompt.slice(0, 120) })),
+      });
+    }
+    return rows;
   },
 });

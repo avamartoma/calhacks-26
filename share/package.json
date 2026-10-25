@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 4315",
-    "build": "next build",
+    "build": "npm run build:office && next build",
+    "build:office": "npm --prefix .. ci --no-audit --no-fund && npm --prefix .. run build:web",
     "start": "next start -p 4315"
   },
   "dependencies": {

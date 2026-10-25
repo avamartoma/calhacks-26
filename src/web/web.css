@@ -1,0 +1,56 @@
+/* The web office: the same sky and office as the local app, with panels for keys, sharing and agent runs. */
+.web-office .opencloud-actions{flex-wrap:wrap;max-width:calc(100% - 120px)}
+.web-title{display:flex;flex-direction:column;margin-left:6px;padding:4px 10px;border-radius:8px;background:#ffffffd8;font:700 13px/1.3 Urbanist,sans-serif;color:#24304a}
+.web-title small{font:500 11px Urbanist,sans-serif;color:#5b6680}
+.web-panel{position:absolute;top:58px;left:14px;z-index:22;width:min(400px,calc(100% - 28px));max-height:calc(100% - 72px);overflow:auto;display:flex;flex-direction:column;gap:12px;padding:16px;border:1px solid #d7ded8;border-radius:10px;background:#fbfcfdf5;box-shadow:0 10px 30px rgba(20,32,60,.18)}
+.web-panel header{display:flex;align-items:center;justify-content:space-between}
+.web-panel h2{font:700 18px Urbanist,sans-serif;margin:0}
+.web-panel p,.web-note{font-size:12.5px;line-height:1.55;color:#55607a;margin:0}
+.web-error{font-size:12.5px;line-height:1.5;color:#a3402e;margin:0}
+.key-form,.web-start{display:flex;flex-direction:column;gap:8px}
+.key-form label{margin:0;font-size:12px}
+.key-form input,.web-start textarea,.web-invite input,.web-invite select{margin:0;background:#fff;border-color:#d3d9e3;color:#26324a;font-size:13px}
+.key-form .primary,.web-start .primary{background:#26324a;border-color:#26324a;color:#fff}
+.key-form .text-link{justify-content:flex-start;padding:2px 0;color:#46506a}
+.key-saved{display:flex;flex-direction:column;gap:6px}
+.key-actions{display:flex;gap:14px}
+.text-button.danger{color:#b55c48}
+.opencloud .web-new-project{gap:10px;left:50%;top:50%;bottom:auto;transform:translate(-50%,-50%);z-index:24;width:min(400px,calc(100% - 32px));padding:18px;border-radius:12px;box-shadow:0 18px 50px rgba(20,32,60,.25)}
+.web-new-project input[type=file]{display:none}
+.web-new-project input{background:#fff;border-color:#d3d9e3;color:#26324a}
+.web-new-project .primary{background:#26324a;border-color:#26324a;color:#fff}
+.web-new-project .secondary{background:#f3f5f8;border-color:#d3d9e3;color:#36405a}
+.web-new-project label{margin:0}
+.web-new-project input{margin-top:6px}
+.web-tabs{display:flex;gap:4px;padding:3px;border-radius:8px;background:#eef1f5}
+.web-tabs button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:7px;border-radius:6px;font-size:12px;font-weight:600;color:#56607a}
+.web-tabs button[aria-selected="true"]{background:#fff;color:#24304a;box-shadow:0 1px 3px #24304a22}
+.web-side{gap:12px}
+.web-side textarea{resize:vertical;min-height:70px}
+.web-key-needed{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:8px;background:#f3f5f8}
+.web-key-needed b{font-size:12.5px;color:#24304a}
+.web-runs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.web-runs li{border:1px solid #e2e7e3;border-radius:8px;background:#fff;padding:2px 8px 8px}
+.web-runs li.open{border-color:#9bb6c8}
+.web-run{display:flex;gap:8px;align-items:flex-start;width:100%;padding:6px 0 2px;text-align:left}
+.web-run i{flex:none;width:8px;height:8px;margin-top:6px;border-radius:50%}
+.web-run b{display:block;font:600 12.5px/1.4 Urbanist,sans-serif;color:#24304a}
+.web-run small{display:block;font-size:11px;color:#66708a}
+.web-last{margin:2px 0 0 16px;font-size:11.5px;line-height:1.45;color:#55607a;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
+.web-log{margin:4px 0 0;max-height:300px;overflow:auto;display:flex;flex-direction:column;gap:4px;padding:8px;border-radius:6px;background:#f6f8fa}
+.web-line{margin:0;font-size:11.5px;line-height:1.45;color:#2f3a52;white-space:pre-wrap;overflow-wrap:anywhere}
+.web-line.tool{font:11px/1.45 ui-monospace,monospace;color:#56607a}
+.web-line.result{color:#1f6b4f;font-weight:600}
+.web-line.error{color:#a3402e}
+.web-link{display:flex;gap:6px;align-items:center}
+.web-link code{flex:1;min-width:0;overflow-wrap:anywhere;font-size:11.5px;padding:7px 8px;border-radius:6px;background:#f1f3f6}
+.web-link .secondary{padding:8px}
+.web-check{display:flex;align-items:center;gap:8px;margin:0;font-size:12.5px;color:#36405a}
+.web-invite{display:flex;gap:6px}
+.web-invite input{flex:1;min-width:0}
+.web-invite select{width:auto;height:auto}
+.web-start-preview{position:absolute;left:16px;bottom:56px;z-index:30;display:flex;flex-direction:column;gap:4px;max-width:300px}
+.web-start-preview small{font-size:11px;color:#a3402e;background:#fff;padding:4px 8px;border-radius:6px}
+.web-toast{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);z-index:40;display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:8px;background:#fbefde;color:#8a4b2f;font-size:12.5px;box-shadow:0 8px 24px rgba(20,32,60,.18)}
+.web-toast button{display:flex}
+.web-office .cloud-arrival{animation-delay:.3s}

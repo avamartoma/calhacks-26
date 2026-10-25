@@ -113,6 +113,39 @@ export default defineSchema({
     lastSeenAt: v.number(),
   }).index("by_project", ["projectId"]),
 
+  // A person's own Anthropic API key, encrypted with KEY_ENCRYPTION_SECRET. Only agent runs decrypt it.
+  userKeys: defineTable({
+    userId: v.string(),
+    ciphertext: v.string(),
+    iv: v.string(),
+    last4: v.string(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  // One Claude Code run inside a project's sandbox, started from the web office.
+  agentRuns: defineTable({
+    projectId: v.id("projects"),
+    userId: v.string(),
+    userLabel: v.string(),
+    sessionId: v.optional(v.id("sessions")),
+    prompt: v.string(),
+    status: v.union(v.literal("starting"), v.literal("running"), v.literal("done"), v.literal("error"), v.literal("stopped")),
+    detail: v.optional(v.string()),
+    pid: v.optional(v.number()),
+    offset: v.number(),
+    costUsd: v.optional(v.number()),
+    startedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+  }).index("by_project", ["projectId"]),
+
+  // What a run said and did, in order: its messages, the tools it used, and its result.
+  runLines: defineTable({
+    runId: v.id("agentRuns"),
+    at: v.number(),
+    kind: v.union(v.literal("text"), v.literal("tool"), v.literal("result"), v.literal("error")),
+    text: v.string(),
+  }).index("by_run", ["runId"]),
+
   tokens: defineTable({
     userId: v.string(),
     projectId: v.optional(v.id("projects")),
