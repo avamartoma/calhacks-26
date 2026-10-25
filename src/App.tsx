@@ -19,6 +19,7 @@ import { placeholderNeighbors } from './sky/neighbors';
 import { cloudStatus, cloudStatusLabel, liveAgentCount, sharedProjectRoom } from './office-panel';
 import { WorkspaceRail } from './WorkspaceRail';
 import { SignIn } from './SignIn';
+import { AccountBadge } from './AccountBadge';
 import { localHour, paletteAt } from './sky/time-of-day';
 import './style.css';
 import './quiet-office.css';
@@ -206,7 +207,7 @@ export default function App() {
 
   if (!data.account && !(signedOut && !data.signIn?.ready)) return <SignIn ready={!!data.signIn?.ready} redirectUri={data.signIn?.redirectUri || ''} onSkip={() => { sessionStorage.setItem('opencloud-signed-out', '1'); setSignedOut(true); }} />;
 
-  return <div className={`app quiet-office opencloud has-rail ${altitude === 'sky' ? 'sky-shell' : 'project-shell'}`}>
+  return <div className={`app quiet-office opencloud has-rail ${data.account ? 'has-account' : ''} ${altitude === 'sky' ? 'sky-shell' : 'project-shell'}`}>
     <WorkspaceRail workspaces={workspaces} current={workspace} rooms={data.rooms} busy={busy} onChoose={chooseWorkspace} onCreate={name => action(async () => { const result = await api('/workspaces', { name }); chooseWorkspace(result.workspace.id); }, 'Workspace created')} onPicture={(id, image) => action(() => api(`/workspaces/${id}`, { image }, 'PATCH'), image ? 'Workspace picture updated' : 'Workspace picture removed')} onRename={(id, name) => action(() => api(`/workspaces/${id}`, { name }, 'PATCH'), 'Workspace renamed')} onRemove={id => action(async () => { await api(`/workspaces/${id}`, undefined, 'DELETE'); if (id === workspace?.id) setWorkspaceId(''); }, 'Projects moved to the remaining workspace')} />
     <main className="workspace">
       <div className="opencloud-actions">
@@ -218,6 +219,7 @@ export default function App() {
       </div>
       <div className="world">
         <div ref={container} className="world-canvas" />
+        {altitude === 'sky' && data.account && <AccountBadge account={data.account} />}
         {altitude === 'sky' && <SkyView projects={skyProjects} returnFrom={skyReturn.current} onMove={(id, x, y) => { if (!id.startsWith('shared:') && !id.startsWith('sample-')) api(`/rooms/${id}/cloud`, { x, y, sky: true }).catch(e => setError((e as Error).message)); }} onEnter={id => { if (!id.startsWith('sample-')) setArrival(count => count + 1); openProject(id); }} />}
         {arrival > 0 && altitude === 'project' && <div key={arrival} className="cloud-arrival" style={{ background: `rgb(${paletteAt(localHour()).cloudLight.map(value => Math.round(value * 255)).join(',')})` }} />}
         {altitude === 'sky' && !skyRooms.length && <div className="sky-hint"><Cloud size={16} /><span>This workspace has no projects yet</span><button className="primary" onClick={() => setCreating(true)}>New project</button></div>}

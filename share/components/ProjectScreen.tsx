@@ -29,24 +29,28 @@ function auth0Domain(value: string | undefined): string {
   return (value ?? "").trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
+/**
+ * Every sign-in returns to /callback, which then opens the page it started from. Auth0 only
+ * accepts exact callback URLs, so a per-project URL would need allowing for every project.
+ */
+export const callbackPath = "/callback";
+
+export function auth0Settings() {
+  return { domain: auth0Domain(process.env.NEXT_PUBLIC_AUTH0_DOMAIN), clientId: process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID?.trim() ?? "" };
+}
+
 export function ProjectScreen({ slug }: { slug: string }) {
-  const domain = auth0Domain(process.env.NEXT_PUBLIC_AUTH0_DOMAIN);
-  const clientId = process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID?.trim() ?? "";
+  const { domain, clientId } = auth0Settings();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted || !domain || !clientId) return <ProjectSession slug={slug} auth={null} />;
-  const redirectUri = `${window.location.origin}/p/${encodeURIComponent(slug)}`;
   return (
     <Auth0Provider
       domain={domain}
       clientId={clientId}
       cacheLocation="localstorage"
       useRefreshTokens={false}
-      authorizationParams={{ scope: "openid profile email", redirect_uri: redirectUri }}
-      onRedirectCallback={(appState) => {
-        const next = typeof appState?.returnTo === "string" ? appState.returnTo : `/p/${slug}`;
-        window.history.replaceState({}, document.title, next);
-      }}
+      authorizationParams={{ scope: "openid profile email", redirect_uri: `${window.location.origin}${callbackPath}` }}
     >
       <AuthedSession slug={slug} />
     </Auth0Provider>
@@ -71,14 +75,14 @@ function AuthedSession({ slug }: { slug: string }) {
       return null;
     },
     login() {
-      const path = `${window.location.origin}${window.location.pathname}`;
       void loginWithRedirect({
         appState: { returnTo: window.location.pathname },
-        authorizationParams: { redirect_uri: path, scope: "openid profile email" },
+        authorizationParams: { redirect_uri: `${window.location.origin}${callbackPath}`, scope: "openid profile email" },
       });
     },
     logout() {
-      void logout({ logoutParams: { returnTo: `${window.location.origin}${window.location.pathname}` } });
+      // Like callbacks, logout URLs must match exactly, so sign-out lands on the home page.
+      void logout({ logoutParams: { returnTo: window.location.origin } });
     },
   }), [getAccessTokenSilently, getIdTokenClaims, isAuthenticated, isLoading, loginWithRedirect, logout, user?.email]);
   return <ProjectSession slug={slug} auth={auth} />;
