@@ -117,8 +117,21 @@ mkdir -p "$WORKSPACE_DIR"
 tar -xzf /tmp/iteration1-backup.tgz -C "$WORKSPACE_DIR"
 `;
 
+// Whether the preview really answers: an HTTP request, not just an open port, since a server can hold
+// the port and hang (a hung one shows E2B's 502 "port closed" page). Any status counts as answering.
 const PORT_PROBE = `
-node -e "const n=require('net');const s=n.connect(Number(process.env.PREVIEW_PORT),'127.0.0.1',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),800)"
+node -e "const h=require('http');const r=h.get({host:'127.0.0.1',port:Number(process.env.PREVIEW_PORT),path:'/',timeout:4000},res=>{res.resume();process.exit(0)});r.on('timeout',()=>{r.destroy();process.exit(1)});r.on('error',()=>process.exit(1))"
+`;
+
+// Stops whatever still holds the preview port (a hung server, or one an agent started), so a fresh one can bind it.
+const FREE_PORT = `
+pids=$(ss -ltnpH "sport = :$PREVIEW_PORT" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u)
+[ -z "$pids" ] && exit 0
+kill $pids 2>/dev/null
+for i in 1 2 3 4 5; do sleep 0.5; ss -ltnH "sport = :$PREVIEW_PORT" 2>/dev/null | grep -q . || exit 0; done
+kill -9 $pids 2>/dev/null
+sleep 0.5
+true
 `;
 
 function e2bApiKey(): string {
@@ -333,6 +346,7 @@ export class E2BProvider implements SandboxProvider {
         throw new Error(installed.stderr.slice(0, 500) || installed.stdout.slice(0, 500) || "npm install failed");
       }
     }
+    await runIn(sandbox, FREE_PORT, { cwd, timeoutMs: 15_000, envs: { PREVIEW_PORT: String(input.port) } });
     const handle = await sandbox.commands.run(shell(serve ?? command), {
       background: true,
       cwd,
