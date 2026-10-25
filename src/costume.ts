@@ -39,6 +39,7 @@ function mixId(id: string) {
 /** One accessory per worker, stable for that agent: half a hat, a quarter a bow tie, a quarter a coffee cup. */
 export function accessoriesFor(agent: { id?: string; role?: string; manager?: boolean }) {
   const kind = costumeFor(agent);
+  if (String(agent.id || '').startsWith('fetch:')) return { kind: 'generic' as const, hat: false, bow: false, coffee: false };
   const roll = mixId(String(agent.id || kind)) % 4;
   return { kind, hat: roll < 2, bow: roll === 2, coffee: roll === 3 };
 }

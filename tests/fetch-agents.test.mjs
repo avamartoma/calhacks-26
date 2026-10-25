@@ -49,6 +49,15 @@ test('jobs are limited to what each agent does, in real projects', () => {
   assert.ok(h.request({ agent: 'planner', kind: 'create', roomId: 'r1', payload: { plan: {} } }, exists).job.id);
 });
 
+test('the office agent takes chat messages from the page', () => {
+  const { h } = hub();
+  assert.throws(() => h.request({ agent: 'office', kind: 'chat', roomId: 'r1', payload: {} }, exists), /message/);
+  assert.throws(() => h.request({ agent: 'office', kind: 'chat', roomId: 'r1', payload: { text: 'x'.repeat(4001) } }, exists), /message/);
+  const first = h.request({ agent: 'office', kind: 'chat', roomId: 'r1', payload: { text: 'status' } }, exists).job;
+  const second = h.request({ agent: 'office', kind: 'chat', roomId: 'r1', payload: { text: 'status' } }, exists).job;
+  assert.notEqual(first.id, second.id, 'asking twice is two messages, not a duplicate request');
+});
+
 test('activity is kept for the page, newest last and bounded', () => {
   const { h } = hub();
   for (let i = 0; i < 130; i++) h.activity({ name: 'watcher', kind: 'blocked', text: `Blocked: task ${i}`, roomId: 'r1', taskId: 't' });

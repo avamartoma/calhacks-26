@@ -12,8 +12,10 @@ export const agentKinds: AgentKind[] = [
   { id: 'build', label: 'Build', color: '#3f7cc4', match: /implement|front|back|engineer|dev|build|fix|integrat|migrat|site|game|design|system/i }
 ];
 export const otherKind: AgentKind = { id: 'other', label: 'Other', color: '#8a93a4', match: /$^/ };
+export const builtinKind: AgentKind = { id: 'builtin', label: 'Built-in', color: '#8b9298', match: /built-in/i };
 
 export function kindOf(role: string, manager = false): AgentKind {
+  if (/built-in/i.test(role)) return builtinKind;
   if (manager) return agentKinds[0];
   return agentKinds.find(k => k.match.test(role)) || otherKind;
 }

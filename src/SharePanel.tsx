@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ConvexHttpClient } from 'convex/browser';
 import { anyApi } from 'convex/server';
+import hosted from '../hosted.json';
 
 type ShareMember = { email: string; role: string };
 type ShareInfo = { name?: string; visibility?: string; shareSlug?: string; role?: string; previewUrl?: string };
@@ -10,7 +11,7 @@ type Call = (ref: unknown, args: Record<string, unknown>) => Promise<unknown>;
 function officeConvexUrl(): string {
   const env = (import.meta as unknown as { env?: { VITE_CONVEX_URL?: string } }).env;
   const value = env?.VITE_CONVEX_URL?.trim();
-  return value || 'http://127.0.0.1:3210';
+  return value || hosted.convexUrl;
 }
 
 async function officeShare(url: string, body?: unknown): Promise<unknown> {

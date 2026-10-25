@@ -3,8 +3,11 @@ import { lstat, mkdir, unlink, writeFile } from 'node:fs/promises';
 import chokidar from 'chokidar';
 import { ConvexHttpClient } from 'convex/browser';
 import { anyApi } from 'convex/server';
+import { readFileSync } from 'node:fs';
 import { gitHttpsRemote, listProjectFiles, readProjectFile, remotePath, sameRepo } from './project-files.mjs';
 import { busyMessage, contentHash, ignoredSegments, isConflictSidecar, isGitignored, isOfficeEcho, localEditsWin, projectRelative, sandboxDead, supersededByUpload } from './cloud-sync.mjs';
+
+const hosted = JSON.parse(readFileSync(new URL('../hosted.json', import.meta.url), 'utf8'));
 
 const HEARTBEAT_MS = 15_000;
 const CLOSE_DELAY_MS = 1200;
@@ -29,7 +32,7 @@ export function createCloud({ changed, authToken }) {
   const ensuring = new Map();
 
   async function convex() {
-    const url = process.env.CONVEX_URL || process.env.VITE_CONVEX_URL || 'http://127.0.0.1:3210';
+    const url = process.env.CONVEX_URL || process.env.VITE_CONVEX_URL || hosted.convexUrl;
     const client = new ConvexHttpClient(url);
     const token = await authToken?.();
     if (typeof token === 'string' && token.split('.').length === 3) client.setAuth(token);

@@ -116,6 +116,18 @@ class OfficeAgentTest(unittest.TestCase):
         self.agent.handle(OWNER, "mission: add a dark mode toggle")
         self.assertIn("The office said: Pause the office", self.agent.handle(OWNER, "confirm"))
 
+    def test_app_messages_need_no_pairing_and_answer_for_the_open_project(self):
+        self.fake.room["path"] = os.path.dirname(self.project)  # the open project, even outside this folder
+        self.assertIn("Make search keyboard accessible", self.agent.local("r1", "status"))
+        self.assertIn("No pairing needed", self.agent.local("r1", "pair 1234abcd"))
+        self.assertEqual(self.gate.owners, set())
+        self.agent.local("r1", "mission: add a dark mode toggle")
+        self.assertIn("no mission waiting", self.agent.local("other", "confirm"))
+        self.assertIn("Mission sent", self.agent.local("r1", "confirm"))
+        self.assertEqual(self.fake.posts, [{"prompt": "add a dark mode toggle"}])
+        self.assertIn("Asked the reviewer", self.agent.local("r1", "review search"))
+        self.assertEqual(self.agent.outbox, [("review", "local:r1", "r1", "w1")])
+
     def test_other_projects_and_demo_rooms_are_ignored(self):
         self.pair()
         self.fake.room["path"] = os.path.dirname(self.project)

@@ -346,13 +346,24 @@ class OfficeAgent:
         except OfficeError as e:
             return f"The office said: {e}"
 
+    def local(self, room_id: str, text: str) -> str:
+        """A message typed in the office app. The person at this computer owns the office, so no pairing,
+        and the answer is about the project they have open."""
+        intent = parse(text)
+        if intent.kind == "pair":
+            return "No pairing needed here: you're already in the office app. Pairing is for ASI:One."
+        try:
+            return self._owner(f"local:{room_id}", intent, room_id)
+        except OfficeError as e:
+            return f"The office said: {e}"
+
     def _room(self, create: bool = False):
         rooms = self.office.rooms()
         if rooms:
             return rooms[0]
         return self.office.open(self.office_name) if create else None
 
-    def _owner(self, sender: str, intent: Intent) -> str:
+    def _owner(self, sender: str, intent: Intent, room_id: str = "") -> str:
         if intent.kind == "help":
             return HELP
         if intent.kind == "alerts":
@@ -370,9 +381,9 @@ class OfficeAgent:
             prompt, expires = self.pending.pop(sender, ("", 0))
             if not prompt or expires < self.clock():
                 return "There is no mission waiting for confirmation. Say `mission: <what to build>` first."
-            return self.dispatch(prompt)
+            return self.dispatch(prompt, room_id)
         state = self.office.state()
-        room = next(iter(self.office.rooms(state)), None)
+        room = next((r for r in state["rooms"] if r["id"] == room_id), None) if room_id else next(iter(self.office.rooms(state)), None)
         if room is None:
             return "There's no office for this project yet. Say `mission: <what to build>` to start one."
         approvals = [a for a in state.get("approvals", []) if a.get("roomId") == room["id"]]
@@ -393,8 +404,9 @@ class OfficeAgent:
             return f"Asked the reviewer agent to check **{_clip(task['title'], 100)}** against its acceptance criteria. Its answer will follow."
         return "I didn't catch that. " + HELP
 
-    def dispatch(self, prompt: str) -> str:
+    def dispatch(self, prompt: str, room_id: str = "") -> str:
         """Start a mission. Used after an owner confirms here, or when the planner starts a Jira story an owner chose."""
-        room = self._room(create=True)
+        room = next((r for r in self.office.state()["rooms"] if r["id"] == room_id), None) if room_id else None
+        room = room or self._room(create=True)
         self.office.dispatch(room["id"], prompt[:12000])
         return f"Mission sent to **{room['name']}**. Say `status` to follow it; any command approvals appear in the office app."

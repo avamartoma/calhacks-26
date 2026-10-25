@@ -4,9 +4,10 @@ import { Check, Copy } from "lucide-react";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import "./connect-agent.css";
+import hosted from "../hosted.json";
 
-const DEFAULT_CONVEX_URL = "http://127.0.0.1:3210";
-const DEFAULT_SHARE_ORIGIN = "http://127.0.0.1:4315";
+const DEFAULT_CONVEX_URL = hosted.convexUrl;
+const DEFAULT_SHARE_ORIGIN = hosted.shareOrigin;
 
 type Issued = {
   id: Id<"tokens">;

@@ -30,5 +30,7 @@ export type Altitude = 'sky' | 'project';
 export type FetchAgentName = 'office' | 'watcher' | 'reviewer' | 'planner';
 export interface FetchAgent { name: FetchAgentName; address: string; lastSeen: number; details: Record<string, string | number | boolean> }
 export interface FetchActivity { id: string; time: number; name: FetchAgentName; kind: string; text: string; roomId?: string; taskId?: string }
-export interface FetchJob { id: string; agent: 'reviewer' | 'planner'; kind: string; roomId: string; taskId?: string; payload: Record<string, unknown>; status: 'queued' | 'running' | 'done' | 'failed'; result?: Record<string, unknown>; createdAt: number; finishedAt?: number }
-export interface FetchState { agents: FetchAgent[]; activity: FetchActivity[]; jobs: FetchJob[] }
+export interface FetchJob { id: string; agent: 'office' | 'reviewer' | 'planner'; kind: string; roomId: string; taskId?: string; payload: Record<string, unknown>; status: 'queued' | 'running' | 'done' | 'failed'; result?: Record<string, unknown>; createdAt: number; finishedAt?: number }
+/** The office server can start the agents itself (agents/run_all.py) when someone connects to one. */
+export interface FetchLauncher { running: boolean; startedAt: number; error: string; ready: boolean }
+export interface FetchState { agents: FetchAgent[]; activity: FetchActivity[]; jobs: FetchJob[]; launcher?: FetchLauncher }

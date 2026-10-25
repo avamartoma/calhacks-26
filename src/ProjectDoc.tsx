@@ -1,14 +1,15 @@
 import { useRef, useState } from 'react';
 import { ArrowRight, Box, Check, Cloud, Link2, Play } from 'lucide-react';
-import type { Agent, CloudPreview, FetchState, Room } from './types';
+import type { Agent, CloudPreview, FetchAgentName, FetchState, Room } from './types';
 import { FetchRoster } from './FetchAgents';
+import { isFetchCharacter } from './fetch-characters';
 import { agentWork, workColors, workLabels } from './Operations';
 import { modelLabel } from './identity';
 import './project-doc.css';
 
 const statusLabels: Record<string, string> = { working: 'Working', talking: 'Collaborating', done: 'Finished', idle: 'Ready', paused: 'Paused', approval: 'Needs you', error: 'Blocked', ejected: 'Left' };
 const engines: Record<string, string> = { claude: 'Claude', 'claude-code': 'Claude Code', cursor: 'Cursor', 'cursor-sdk': 'Cursor', 'codex-cli': 'Codex CLI' };
-export const engineName = (a: Agent) => engines[a.provider || ''] || 'Codex';
+export const engineName = (a: Agent) => isFetchCharacter(a) ? 'Built-in' : engines[a.provider || ''] || 'Codex';
 
 const firstLine = (text: string, max = 180) => { const line = text.trim().split('\n')[0]; return line.length > max ? line.slice(0, max - 1) + '…' : line; };
 /** One line on what the agent is doing: its latest progress update, or its task. */
@@ -29,9 +30,9 @@ function ago(time: number) {
  * page (agents and what each is doing, tickets, recent activity, the live preview), and opens
  * an agent's panel, where you chat with it, on click.
  */
-export function ProjectDoc({ room, workspaceName, selected, fetch, onAgent, onTask, onStartWork, onFetch, onSky, onOffice }: {
-  room: Room; workspaceName?: string; selected?: string | null; fetch?: FetchState;
-  onAgent: (id: string) => void; onTask: (id: string) => void; onStartWork: () => void; onFetch: () => void; onSky: () => void; onOffice: () => void;
+export function ProjectDoc({ room, workspaceName, selected, fetch, usedFetch, onAgent, onTask, onStartWork, onFetch, onSky, onOffice }: {
+  room: Room; workspaceName?: string; selected?: string | null; fetch?: FetchState; usedFetch?: FetchAgentName[];
+  onAgent: (id: string) => void; onTask: (id: string) => void; onStartWork: () => void; onFetch: (name?: FetchAgentName) => void; onSky: () => void; onOffice: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   // Leaving fades the page back to cloud white, then the sky pulls back out of the cloud.
@@ -74,11 +75,10 @@ export function ProjectDoc({ room, workspaceName, selected, fetch, onAgent, onTa
         </div>
       </header>
 
-      <section aria-labelledby="doc-fetch">
-        <h2 id="doc-fetch">Fetch.ai agents <small>ASI:One</small></h2>
-        <p className="doc-quiet">Office, planner, watcher and reviewer run on this computer. Open one to talk to it, plan in Jira, or see what it did here.</p>
-        <FetchRoster fetch={fetch} onOpen={onFetch} layout="cards" />
-      </section>
+      {(!usedFetch || usedFetch.length < 4) && <section aria-labelledby="doc-fetch">
+        <h2 id="doc-fetch">Fetch agents</h2>
+        <FetchRoster fetch={fetch} hide={usedFetch} onOpen={onFetch} layout="cards" />
+      </section>}
 
       <section aria-labelledby="doc-agents">
         <h2 id="doc-agents">Office desks <small>{agents.length}</small></h2>
@@ -86,10 +86,10 @@ export function ProjectDoc({ room, workspaceName, selected, fetch, onAgent, onTa
           : <div className="doc-agents">{agents.map(a => {
             const ticket = agentWork(room, a);
             const steps = a.plan.length ? `${a.plan.filter(s => s.status === 'completed').length}/${a.plan.length} steps` : '';
-            return <button key={a.id} className={`doc-agent status-${a.status} ${selected === a.id ? 'selected' : ''}`} onClick={() => onAgent(a.id)}>
+            return <button key={a.id} className={`doc-agent status-${a.status} ${isFetchCharacter(a) ? 'built-in' : ''} ${selected === a.id ? 'selected' : ''}`} onClick={() => onAgent(a.id)}>
               <span className="doc-agent-top"><i className="doc-dot" /><b>{a.name}</b><span className="doc-role">{a.title || a.role}{a.manager ? ' · Manager' : ''}</span></span>
               <span className="doc-agent-summary">{summary(a)}</span>
-              <span className="doc-agent-foot"><span className="doc-engine">{engineName(a)} · {modelLabel(a.effectiveModel || a.model)}</span><span>{statusLabels[a.status] || a.status}</span>{steps && <span>{steps}</span>}{ticket && <span className="doc-ticket">{ticket.title}</span>}</span>
+              <span className="doc-agent-foot"><span className="doc-engine">{isFetchCharacter(a) ? 'Built-in' : `${engineName(a)} · ${modelLabel(a.effectiveModel || a.model)}`}</span><span>{statusLabels[a.status] || a.status}</span>{steps && <span>{steps}</span>}{ticket && <span className="doc-ticket">{ticket.title}</span>}</span>
             </button>;
           })}</div>}
       </section>

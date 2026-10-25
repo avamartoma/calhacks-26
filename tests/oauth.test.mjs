@@ -163,3 +163,16 @@ test('sign-in is refused until a tenant is connected', async t => {
   assert.equal(auth.configured, false);
   await assert.rejects(auth.begin(), /Connect Auth0 first/);
 });
+
+test('the team tenant is used until this office connects its own', async t => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), 'iteration1-oauth-'));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  const auth = createAuth({ dataDir, port: 4314, fallback: provider });
+  await auth.load();
+  assert.equal(auth.configured, true);
+  assert.deepEqual(auth.publicProvider(), { ...provider, fromEnv: false });
+  await auth.configure({ domain: 'other.eu.auth0.com', clientId: 'client-xyz98765' });
+  const reloaded = createAuth({ dataDir, port: 4314, fallback: provider });
+  await reloaded.load();
+  assert.equal(reloaded.publicProvider().domain, 'other.eu.auth0.com');
+});

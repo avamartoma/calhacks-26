@@ -19,7 +19,8 @@ export const providerFields = z.object({
 }).strict();
 
 /** Domain and client id are public for a PKCE client; only tokens are secret. */
-export function createAuth({ dataDir, port, fetchImpl = fetch, createJwks = createRemoteJWKSet, now = () => Date.now() }) {
+/** `fallback` is the team's Auth0 application, used when neither the environment nor this office names one. */
+export function createAuth({ dataDir, port, fallback = null, fetchImpl = fetch, createJwks = createRemoteJWKSet, now = () => Date.now() }) {
   const configFile = path.join(dataDir, 'auth0.json');
   const sessionFile = path.join(dataDir, 'session.json');
   const redirectUri = `http://127.0.0.1:${port}/auth/callback`;
@@ -31,7 +32,7 @@ export function createAuth({ dataDir, port, fetchImpl = fetch, createJwks = crea
   async function writeJson(file, value) { await writeFile(file + '.tmp', JSON.stringify(value, null, 2), { mode: 0o600 }); await rename(file + '.tmp', file); }
 
   async function load() {
-    provider = fromEnv() || await readJson(configFile);
+    provider = fromEnv() || await readJson(configFile) || (fallback ? providerFields.parse(fallback) : null);
     session = await readJson(sessionFile);
     return { provider, session };
   }

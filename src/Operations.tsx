@@ -7,7 +7,10 @@ import './operations.css';
 import { WorkArtifacts } from './WorkArtifacts';
 export async function officeApi(url:string,body?:unknown) {
   const r=await fetch('/api'+url,{method:body===undefined?'GET':'POST',...(body!==undefined?{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})});
-  const data=await r.json();if(!r.ok)throw new Error(data.error || 'Request failed');return data;
+  // A route the running server doesn't have answers with an empty body, not JSON.
+  const data=await r.json().catch(()=>null);
+  if(!r.ok || !data)throw new Error(data?.error || (r.status===404?'The office server is out of date. Restart it (npm run dev) and try again.':`Request failed (${r.status})`));
+  return data;
 }
 export type Action=(fn:()=>Promise<unknown>,success?:string)=>Promise<void>;
 export const workLabels={ready:'Ready',queued:'Queued',working:'Working',blocked:'Blocked',review:'Review',done:'Verified'};

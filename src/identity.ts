@@ -13,6 +13,7 @@ export function agentLine(agent?: { name: string; title?: string } | null) {
 
 export function modelLabel(model?: string) {
   if (!model) return 'No model assigned';
+  if (model === 'Built-in') return 'Built-in';
   if (model === 'Account default') return model;
   const parts = model.split('-');
   if (parts[0].toLowerCase() === 'gpt' && parts.length >= 2) {
@@ -24,5 +25,6 @@ export function modelLabel(model?: string) {
 
 export function agentSpeech(agent: Pick<Agent, 'name' | 'title' | 'model' | 'effectiveModel' | 'status'>) {
   const who = agent.title ? `${agent.name}, ${agent.title}` : agent.name;
+  if ((agent.effectiveModel || agent.model) === 'Built-in') return `${who}, built-in, ${agent.status}`;
   return `${who}, running ${modelLabel(agent.effectiveModel || agent.model)}, status: ${agent.status}`;
 }
