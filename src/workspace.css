@@ -86,6 +86,7 @@
 .project-rail button:hover,.project-rail button[aria-current]{background:#e7eee9;color:#254b35}
 .app.sky-shell{background:#6fa0c6}
 .sky-shell .workspace{background:#6fa0c6}
+.sky-shell .world{visibility:hidden;pointer-events:none}
 .quiet-office .desk-badge b { max-width: 116px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media(max-width:750px) {
   .quiet-office .desk-badge:not(.selected) b { display: none; }
@@ -143,6 +144,13 @@
 .opencloud .agent-side-handoffs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .opencloud .agent-side-handoffs li{display:flex;flex-direction:column;gap:2px;font-size:12px}
 .opencloud .sky-return{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:6px;background:#fff;border:1px solid #d7ded8;font-size:12px}
+.opencloud .sky-return[aria-pressed="true"]{background:#e7efe8;border-color:#9bb6a2}
+.opencloud .accounts-panel{position:absolute;top:58px;left:14px;bottom:14px;z-index:22;width:min(440px,calc(100vw - 28px));overflow:auto;padding:16px 16px 24px;border:1px solid #d7ded8;border-radius:8px;background:#fafbf9f5}
+.opencloud .accounts-panel .accounts-close{margin:0 0 8px}
+.opencloud .accounts-panel h2{font-size:20px}
+.opencloud .accounts-panel label{display:block;font-size:12px;font-weight:600;color:#536158;margin:12px 0}
+.opencloud .accounts-panel input,.opencloud .accounts-panel textarea,.opencloud .accounts-panel select{display:block;width:100%;margin-top:6px;padding:8px;border:1px solid #d3dbd5;border-radius:4px;background:#fff;font-size:13px}
+@media(max-width:750px){.opencloud .accounts-panel{right:14px;width:auto;bottom:auto;max-height:70%}}
 .opencloud .workspace-switch{display:flex;align-items:center;gap:8px;font-size:12px;color:#536158}
 .opencloud .workspace-switch select{margin:0;padding:6px 8px}
 .opencloud .new-project{position:absolute;left:16px;bottom:16px;z-index:14;width:min(360px,calc(100% - 32px));display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid #d7ded8;border-radius:8px;background:#fafbf9f5}

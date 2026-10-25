@@ -12,7 +12,7 @@ import { PreviewDock } from './PreviewDock';
 import { ConflictNotice } from './ConflictNotice';
 import { SharePanel } from './SharePanel';
 import { ConnectAgent } from './ConnectAgent';
-import { FetchPanel } from './FetchAgents';
+import { IntegrationsPanel, type ConnectionProvider } from './IntegrationsPanel';
 import { SkyView, type SkyProject } from './sky/SkyView';
 import { seedOf } from './sky/sky-math';
 import { placeholderNeighbors } from './sky/neighbors';
@@ -26,6 +26,15 @@ async function api(url: string, body?: unknown, method = 'POST') {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'The request failed.');
   return data;
+}
+
+function AccountsPanel({ room, connection, focus, onClose }: { room?: Room; connection: OfficeState['connection']; focus: { provider: ConnectionProvider; request: number } | null; onClose: () => void }) {
+  return <aside className="accounts-panel" aria-label="Accounts">
+    <button type="button" className="text-button accounts-close" onClick={onClose}><X size={14} /> Close</button>
+    {room
+      ? <IntegrationsPanel room={room} connection={connection} focus={focus} onContinue={onClose} />
+      : <div className="integrations-panel connections-panel"><h2>Accounts</h2><p>Create a project first. Codex, Claude, and Cursor sign-in is saved for that office.</p></div>}
+  </aside>;
 }
 
 export default function App() {
@@ -42,6 +51,8 @@ export default function App() {
   const [sceneReady, setSceneReady] = useState(false);
   const [creating, setCreating] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [accountsOpen, setAccountsOpen] = useState(false);
+  const [connectionFocus, setConnectionFocus] = useState<{ provider: ConnectionProvider; request: number } | null>(null);
   const container = useRef<HTMLDivElement>(null);
   const scene = useRef<OfficeScene | null>(null);
   const skyReturn = useRef<string | null>(null);
@@ -93,8 +104,15 @@ export default function App() {
     setSelection(null);
     setCreating(false);
     setShareOpen(false);
+    setAccountsOpen(false);
     scene.current?.setWalk(false);
   }, [sharedId, roomId]);
+  const openAccounts = useCallback((provider?: ConnectionProvider) => {
+    setConnectionFocus(current => provider ? { provider, request: (current?.request || 0) + 1 } : current);
+    setAccountsOpen(true);
+    setShareOpen(false);
+    setCreating(false);
+  }, []);
   const openProject = useCallback((id: string) => {
     if (id.startsWith('sample-')) return;
     setSelection(null);
@@ -127,6 +145,10 @@ export default function App() {
     history.replaceState(null, '', location.pathname);
   }, [!!data]);
   useEffect(() => {
+    if (altitude === 'sky') {
+      if (scene.current) { scene.current.dispose(); scene.current = null; setSceneReady(false); }
+      return;
+    }
     if (sceneError || !container.current || scene.current) return;
     try {
       scene.current = new OfficeScene(container.current, select);
@@ -136,7 +158,7 @@ export default function App() {
       scene.current.onGraphicsLost = () => { setSceneReady(false); setSceneError('The browser lost its graphics connection.'); };
       setSceneReady(true);
     } catch (e) { console.error('Office graphics initialization failed', e); setSceneError('The browser could not start 3D graphics.'); }
-  }, [!!data, select, sceneError, openProject, showSky]);
+  }, [!!data, altitude, select, sceneError, openProject, showSky]);
   useEffect(() => () => { scene.current?.dispose(); scene.current = null; }, []);
   useEffect(() => { if (room && altitude === 'project') scene.current?.update({ ...room, workItems: room.workItems.filter(item => !item.archived) }, selection); }, [room, selection, sceneReady, altitude]);
   useEffect(() => { scene.current?.setSky(skyRooms, workspace?.color, waitingIds); }, [skyRooms, workspace?.color, sceneReady, waitingIds]);
@@ -152,11 +174,12 @@ export default function App() {
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if ((event.target as HTMLElement).closest('input,textarea,select')) return;
+      if (event.key === 'Escape' && accountsOpen) { setAccountsOpen(false); return; }
       if (event.key === 'Escape' && altitude === 'project') showSky();
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [altitude, showSky]);
+  }, [altitude, showSky, accountsOpen]);
 
   async function action(fn: () => Promise<unknown>, success?: string) {
     setBusy(true); setError('');
@@ -171,7 +194,8 @@ export default function App() {
     <main className="workspace">
       <div className="opencloud-actions">
         {workspaces.length > 1 && <label className="workspace-switch">Workspace<select aria-label="Workspace" value={workspace?.id || ''} onChange={event => { setWorkspaceId(event.target.value); showSky(); }}>{workspaces.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
-        {altitude === 'project' && room && !room.demo && !room.viewOnly && <button className="sky-return" aria-pressed={shareOpen} onClick={() => setShareOpen(open => !open)}><ExternalLink size={16} /> Share</button>}
+        <button className="sky-return" aria-pressed={accountsOpen} onClick={() => accountsOpen ? setAccountsOpen(false) : openAccounts()}>Accounts</button>
+        {altitude === 'project' && room && !room.demo && !room.viewOnly && <button className="sky-return" aria-pressed={shareOpen} onClick={() => { setShareOpen(open => !open); setAccountsOpen(false); }}><ExternalLink size={16} /> Share</button>}
         {altitude === 'project' && <button className="sky-return" onClick={showSky}><Cloud size={16} /> Sky</button>}
         {altitude === 'sky' && <button className="sky-return" onClick={() => setCreating(true)}><Plus size={16} /> New project</button>}
       </div>
@@ -186,7 +210,8 @@ export default function App() {
           <div className="new-project-actions"><button type="button" className="secondary" onClick={() => setCreating(false)}>Cancel</button><button className="primary" disabled={busy}>Create project</button></div>
         </form>}
         {altitude === 'project' && sceneError && <div className="scene-fallback" role="status"><p>{sceneError}</p><button className="primary" onClick={() => { scene.current?.dispose(); scene.current = null; setSceneReady(false); setSceneError(''); }}>Retry 3D</button></div>}
-        {altitude === 'project' && room && <AgentSide room={room} identities={data.identities || []} ownRoomId={ownRoomId} busy={busy} selectedId={selection} models={data.connection.models} fetch={data.fetchAgents} action={action} onSelect={select} onCloned={(id, agentId) => { setSharedId(null); setRoomId(id); setAltitude('project'); setSelection(agentId); setShareOpen(false); }} share={shareOpen && !room.demo && !room.viewOnly ? <><SharePanel projectId={room.preview?.projectId} projectName={room.name} roomId={room.id} previewUrl={room.preview?.status === 'live' ? room.preview.previewUrl : undefined} /><ConnectAgent projectId={room.preview?.projectId} /></> : undefined} />}
+        {accountsOpen && <AccountsPanel room={(altitude === 'project' && room && !room.viewOnly ? room : ownedRooms.find(item => !item.demo && !item.archived)) || ownedRooms[0]} connection={data.connection} focus={connectionFocus} onClose={() => setAccountsOpen(false)} />}
+        {altitude === 'project' && room && <AgentSide room={room} identities={data.identities || []} ownRoomId={ownRoomId} busy={busy} selectedId={selection} models={[...(data.connection.account ? data.connection.models : []), ...(data.claude?.configured ? data.claude.models : [])]} fetch={data.fetchAgents} action={action} onSelect={select} onCloned={(id, agentId) => { setSharedId(null); setRoomId(id); setAltitude('project'); setSelection(agentId); setShareOpen(false); }} share={shareOpen && !room.demo && !room.viewOnly ? <><SharePanel projectId={room.preview?.projectId} projectName={room.name} roomId={room.id} previewUrl={room.preview?.status === 'live' ? room.preview.previewUrl : undefined} /><ConnectAgent projectId={room.preview?.projectId} /></> : undefined} />}
       </div>
       {altitude === 'project' && room && !room.demo && !room.viewOnly && <section className="floor-preview" aria-label="Live preview below the office floor">
         <PreviewDock cloud={room.preview} />
