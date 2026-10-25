@@ -5,6 +5,7 @@ import { internalMutation, internalQuery, mutation, query, type MutationCtx, typ
 import { requireAccess } from "./access";
 import { recordEvent } from "./events";
 import { currentUser } from "./identity";
+import { keyRow } from "./keyStore";
 import { openSession } from "./sessions";
 
 // The four ASI:One (Fetch.ai) agents, hosted on Agentverse, work with the web office through here,
@@ -29,7 +30,7 @@ async function context(ctx: QueryCtx, projectId: Id<"projects">, runId?: Id<"age
     project: project ? { id: project._id, name: project.name, description: project.description, slug: project.shareSlug ?? project.slug } : null,
     run: run ? {
       id: run._id, prompt: run.prompt, status: run.status, detail: run.detail ?? null, by: run.userLabel,
-      agent: (run as { agent?: string }).agent ?? "claude",
+      agent: run.agent ?? "claude",
       lines: lines.reverse().map((line) => ({ kind: line.kind, text: clip(line.text, 1500) })),
     } : null,
   };
@@ -40,13 +41,10 @@ async function startRunAsOwner(ctx: MutationCtx, project: Doc<"projects">, promp
   if (!text) throw new Error("Describe the work to start");
   if (text.length > 8000) throw new Error("Keep the task under 8000 characters");
   // Runs started by an agent use the project owner's own Claude connection, as if they'd started it.
-  const keys = await ctx.db.query("userKeys").withIndex("by_user", (q) => q.eq("userId", project.ownerId)).collect();
-  if (!keys.some((row) => ((row as { provider?: string }).provider ?? "claude") === "claude")) {
-    throw new Error("The project owner hasn't connected Claude in the web office yet");
-  }
+  if (!(await keyRow(ctx, project.ownerId, "claude"))) throw new Error("The project owner hasn't connected Claude in the web office yet");
   const sessionId = await openSession(ctx, project._id, "claude", project.ownerId);
   const runId = await ctx.db.insert("agentRuns", {
-    projectId: project._id, userId: project.ownerId, userLabel: `${via} (Fetch.ai)`, sessionId,
+    projectId: project._id, agent: "claude", userId: project.ownerId, userLabel: `${via} (Fetch.ai)`, sessionId,
     prompt: text, status: "starting", offset: 0, startedAt: Date.now(),
   });
   await ctx.scheduler.runAfter(0, internal.agentRunner.launch, { runId });

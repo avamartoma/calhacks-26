@@ -1,6 +1,11 @@
 # Iteration1
 
-A spatial workspace for AI-assisted software development. A **workspace** is a working set of projects. Each project is a **cloud** on that workspace’s sky; zooming into a cloud opens the agents, tickets, and desks for that project only. Agents run on **Codex** or **Claude**, side by side, and Cursor sessions can join too.
+A spatial workspace for AI-assisted software development. A **workspace** is a working set of projects. Each project is a **cloud** on that workspace’s sky; zooming into a cloud opens the agents, tickets, and desks for that project only. Agents run on **Codex**, **Claude** or **Cursor**, side by side.
+
+There are two ways to use it:
+
+- **Online at [calhacks-26.vercel.app](https://calhacks-26.vercel.app).** Sign in, add projects from a folder or from GitHub, and run agents in each project's cloud sandbox on your own Codex, Claude or Cursor key. Nothing to install. See [Use it online](#use-it-online).
+- **On your own computer** (`npm run dev`). The full office: agents work in local project folders, plus team pairing, Cursor and Claude Code sessions over MCP, and the ASI:One agents. See [Run locally](#run-locally).
 
 ![The Iteration1 office](assets/blender-office-review.png)
 
@@ -8,9 +13,9 @@ A spatial workspace for AI-assisted software development. A **workspace** is a w
 
 There are two layers here, and they are easy to mix up.
 
-**What is live** is a local workspace sky in the companion. Pick a workspace, see only that workspace’s projects as clouds, zoom into a cloud to open its project page. Codex, Claude, Cursor, tickets, and pairing all still run against those desks.
+**The local app** has a workspace sky in the companion. Pick a workspace, see only that workspace’s projects as clouds, zoom into a cloud to open its project page. Codex, Claude, Cursor, tickets, and pairing all run against those desks.
 
-**What is not live** is sharing those workspaces — a shared drive crossed with Slack, with invites, per-project access, and search. That contract lives in `src/cloud/` so sharing and search can be built against one shape. Do not route companion traffic through it.
+**Sharing** is live online: in the web app, projects belong to accounts in Convex, and owners share them by email or make them public (see [Use it online](#use-it-online)). The fuller model of shared workspaces, with per-project levels like commenter and switches for code and agent copying, is still only a contract in `src/cloud/`, so sharing and search can be built against one shape. Do not route companion traffic through it.
 
 Why the city went away: the office-block downtown put every checkout in one implied neighborhood. An unrelated side quest looked like a neighbor, and there was no way to keep one working set on screen. A workspace is that working set.
 
@@ -20,11 +25,11 @@ The left rail lists your workspaces, as in Slack or Discord: one circle each, wi
 
 The sky is a 2D canvas with parallax layers, painted for the local time of day (`?hour=19` previews another hour). Each project is a simple vector cloud:
 
-- **Your projects** sit in front in a tight cluster, with a light yellow band along the base. **Projects shared with you** sit on layers further back and come into focus as you zoom toward them. For now these are placeholder projects from `src/cloud/seed.json`.
+- **Your projects** sit in front in a tight cluster, with a light yellow band along the base. **Projects shared with you** sit on layers further back and come into focus as you zoom toward them. In the local app these are still placeholder projects from `src/cloud/seed.json`; the web app shows real ones.
 - Every cloud shows its title; a cloud is sized to its title, so the title always fits. Zooming in shows the description and the agents, drawn as small blob people colored by type (the legend is bottom right). Your clouds show these at the home view.
 - Drag, swipe or use the arrow keys to move; pinch or scroll to zoom. Zoomed out, clouds pack closer together. Click a cloud to go to it. Zooming into one of yours fills the screen with white and opens its office; press Esc to return. The office's **Document** view shows the project as a page.
 - Bottom left: **Home** returns to your projects, and **Sky | Folders** switches to a folder view of every project as a card.
-- The search bar is a placeholder that matches names and descriptions; semantic search replaces the matching. **Only show my projects** hides everyone else's clouds.
+- Search (top right) ranks projects, agents and tickets by meaning in the local app (`server/search.mjs`), showing word matches until the ranked results arrive. Online it matches words only. **Only show my projects** hides everyone else's clouds.
 
 Older save files have no workspaces. On load, `initWorkspaces` in `server/workspaces.mjs` gathers every existing room into **My workspace**, so nothing disappears. Saved state stays `version: 1` and is migrated in place: bumping the version would make the server reject the file and reseed, which would destroy existing projects. Removing a workspace moves its projects to another one; the last workspace cannot be removed; there is a cap of 24.
 
@@ -50,7 +55,7 @@ The access model below is the contract for joining and sharing. It is not wired 
 - **Workspaces** there are company or public worlds joined by invite or email. Nothing is shared or searchable across them.
 - **Projects as clouds** would show your active work in front and other people’s visible projects as faint background clouds.
 - **Share links** would open a project document for people with access.
-- **Work still runs locally.** Each person runs their own agent on their own account and computer; a future host stores and shares projects, it does not run agents.
+- **Agents run on each person's own account.** In the local app they run on that person's computer; in the web app they run in the project's cloud sandbox on that person's own key.
 - **Copying an agent** would take name, role, instructions, skills, tools and engine, never history or the project’s code.
 - **Search** comes later: find agents and projects in your workspace that do similar things.
 
@@ -69,6 +74,38 @@ Two switches apply to viewers and commenters: **code and history**, and **copy a
 `src/cloud/model.ts` defines that shape and `accessFor()`. `src/cloud/seed.json` is placeholder data (two workspaces, 18 projects, 29 agents, including projects hidden from the signed-in user). `src/cloud/data.ts` loads it. Change those files if you are working on sharing or search. The running sky uses `server/workspaces.mjs` and `state.workspaces`.
 
 
+## Use it online
+
+The web app at **[calhacks-26.vercel.app](https://calhacks-26.vercel.app)** is the same sky and office, backed by Convex instead of the local server.
+
+1. **Sign in** with email, Google or GitHub (Auth0). Your sky shows your projects up front, and projects shared with you or made public behind them. Your picture or initials are in the top right, with Sign out.
+2. **Connect an agent** under **Accounts**, which has the same Codex, Claude and Cursor tabs as the local app:
+   - **Codex:** an OpenAI API key. Signing in with a ChatGPT account works in the local app only.
+   - **Claude:** an Anthropic API key, or, on a Claude Pro or Max plan, the token `claude setup-token` prints.
+   - **Cursor:** a Cursor API key.
+
+   Codex and Claude keys are checked with OpenAI and Anthropic when saved; Cursor checks its key when a run starts. Keys are stored encrypted, used only for agents you start, and never sent back to a browser.
+3. **Add projects** with **New project**:
+   - **Upload a folder.** It's packed in the browser, leaving out `node_modules`, `.git`, build output and files over 5 MB, up to 20 MB packed.
+   - **From GitHub.** Your public repos, with recent ones that aren't forks or archived already checked. Signing in with GitHub offers them the first time; otherwise enter a GitHub username. A repo already added is skipped, and nothing runs until you open a project.
+   - **Any repository link.**
+4. **Open a project** to see its office. Choose Codex, Claude or Cursor, describe the task, and **Start agent**. The first run in a project takes a minute or two to start the sandbox and install the agent. The **Agents** panel streams what each agent says and does, with its cost when the agent reports one, and you can stop your own runs. **Start preview** runs the project's dev server and shows it in the corner box.
+5. **Share** from the project: copy its link, let anyone signed in view it, or invite people by email as viewers or editors. Invited people see it on their sky when they sign in with that email; editors start agents on their own keys.
+
+Not online yet: workspaces (the web app has one sky per person), the ASI:One agents, Cursor and Claude Code sessions over MCP, team pairing, and deleting projects. Use the local app for those.
+
+**How it works.** The share site in `share/` (Next.js on Vercel) also builds the web app: `npm run build:office` builds the Vite app with `VITE_WEB=1` into `share/public/app`, and `share/next.config.ts` serves it at `/` and `/project/<id>`. `/p/<slug>`, `/callback` and `/api/mcp` stay with the Next app. Each push to `main` redeploys it. The web code is in `src/web/`. On Convex:
+
+- `projects.sky` lists what's on your sky; `projects.createFromUpload` stores an uploaded folder as the project's backup, which its first sandbox restores; `github.repos` and `projects.importGithub` add GitHub repos.
+- `agentRuns.start` checks access and your key, then `agentRunner` installs and runs Codex (`codex exec --json`), Claude Code (`claude -p --output-format stream-json`) or Cursor (`cursor-agent -p --output-format stream-json`) in the project's E2B sandbox and reads its output into `runLines` (`convex/lib/runStream.ts`).
+- `keys.save` and `keyStore` hold the encrypted keys.
+
+`hosted.json` names the team's Auth0 application, Convex deployment and share site for both the web and local apps; environment variables override it. The Convex deployment needs `E2B_API_KEY`, `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `SANDBOX_GIT_TOKEN` (also used to list GitHub repos without hitting GitHub's rate limit) and `KEY_ENCRYPTION_SECRET`. **Don't change or delete `KEY_ENCRYPTION_SECRET`**: saved keys can't be read without it.
+
+To work on the web app locally, run `npm run dev:web` and open **http://localhost:4317**. Development builds offer **Continue as the test user**, who sees only unsigned projects and can't save keys.
+
+**Deploying the backend.** `npx convex deploy` replaces every Convex function at once, so a deploy from a checkout missing someone's work removes it from the live site. Merge `origin/main` first, deploy, then push to `main` right away.
+
 ## Run locally
 
 Requires Node.js 20.19+ and npm. Live agent work needs at least one engine: a ChatGPT account for Codex, or an Anthropic API key for Claude.
@@ -78,9 +115,9 @@ npm ci
 npm run dev
 ```
 
-Open **http://127.0.0.1:4314**. For a production build, run `npm run build`, then `npm start`.
+Open **http://127.0.0.1:4314** and sign in with the team's Auth0 account (email, Google or GitHub). Until a tenant is configured, the sign-in screen asks for one and offers to continue without an account. For a production build, run `npm run build`, then `npm start`.
 
-The sample office works without signing in and is explicitly simulated. For live work, connect an engine from the top bar and choose an existing local project folder:
+The sample office is explicitly simulated. For live work, connect an engine under **Accounts** and choose an existing local project folder:
 
 - **Codex** signs in from **Connections → Codex**. It installs the pinned Codex CLI into the project if it is missing, then opens ChatGPT sign-in in your browser; the page continues on its own when you finish, or you can paste its localhost callback URL. Iteration1 uses its own sign-in profile in `~/.iteration1/codex`; it does not switch the Codex desktop app's account. Account model availability and usage limits apply.
 - **Claude** connects from **Connections → Claude**: sign in with Claude into an app-owned profile, or paste an Anthropic API key, which is checked with Anthropic and saved only on this computer.
@@ -93,8 +130,8 @@ On Windows, `npm run runtime:install` installs the pinned project-local Codex ru
 ## Use it
 
 1. **Pick a workspace, then a project.** Choose a workspace in the left rail; its sky shows your projects up front and projects shared with you behind. Click or zoom into one of your clouds to open its office; press Esc to return.
-2. **Describe the work.** Start work applies a reusable workflow. Choose the **Manager model**, from Codex or Claude. The manager delegates bounded research and review for substantial tasks and remains the implementation owner. A new ticket can also stay in the backlog without running a model.
-3. **Follow the project.** The expanded view is still the office desks: published progress, commands, changes, and task state. The sidebar keeps tickets, agents, start work, connections, and settings next to that view. Private reasoning is not displayed.
+2. **Direct the work.** The **Agents** panel on the right lists the project's desks. Pick an agent to choose its model (Codex or Claude), pause or resume it, or tell it what to do next. The manager delegates bounded research and review for substantial tasks and remains the implementation owner.
+3. **Follow the project.** The office shows each desk's published progress, commands, changes, and task state. The selected agent's tickets and their diffs are in the panel. Private reasoning is not displayed.
 4. **Coordinate.** Handoffs connect findings to assignments. Declared file scopes and dependencies help sequence work. Pair a teammate's office to exchange status and context across separate checkouts.
 5. **Inspect the result.** Open the diff, recorded checks, and feature URL. Verification requires acceptance checks and evidence; an agent's completion message alone is insufficient. The feature's development server must remain running.
 
@@ -126,7 +163,8 @@ Open **http://127.0.0.1:4351** and **http://127.0.0.1:4352**. Pair Alex and Blai
 | Overview / Map / Walk | Change the expanded project view |
 | WASD / arrows | Move in walk mode |
 | E | Inspect the focused desk |
-| Sidebar | Tickets, agents, start work, connections, settings, plus handoffs, team, Inbox, history, and tools |
+| Agents panel (right) | The project's agents; pick one for its model, pause and resume, directions, tickets and diffs, plus the ASI:One agents |
+| Accounts / Share / Sky (top left) | Connections for Codex, Claude and Cursor; the project's share link; back to the sky |
 
 Tools includes workflows, skills, Cursor & Claude setup, development modes, and presentation controls. The recording studio selects camera stops and a clean view; it does not record video.
 

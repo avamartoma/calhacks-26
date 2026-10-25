@@ -1,0 +1,14 @@
+/* Parts of the local office brought to the web: a run's changed files and their diffs. */
+.web-changes{margin:6px 0 0;display:flex;flex-direction:column;gap:4px}
+.web-changes>b{font:600 12px Urbanist,sans-serif;color:#24304a}
+.web-changes ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.web-changes li>button{display:flex;justify-content:space-between;gap:8px;width:100%;padding:4px 6px;border-radius:5px;text-align:left;font:11.5px/1.4 ui-monospace,monospace;color:#2f3a52}
+.web-changes li>button:hover,.web-changes li>button[aria-expanded="true"]{background:#eef2f7}
+.web-changes li>button span{min-width:0;overflow-wrap:anywhere}
+.web-changes li>button small{flex:none;font-size:11px}
+.web-changes i{font-style:normal}
+.web-changes i.added{color:#1f7a45}
+.web-changes i.removed{color:#a33b32}
+.web-changes .agent-side-diff{margin:4px 0 6px;max-height:260px;overflow:auto;font:11px/1.45 ui-monospace,monospace;white-space:pre-wrap;background:#fff;border:1px solid #e2e7e3;border-radius:4px;padding:8px}
+.web-changes .diff-added{color:#1f7a45;background:#eaf6ee}
+.web-changes .diff-removed{color:#a33b32;background:#fbecea}
