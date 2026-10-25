@@ -6,13 +6,13 @@
 .fetch-rail-agent i,.fetch-card header i,.fetch-dot{flex:none;width:7px;height:7px;border-radius:50%;background:#c9d0cb}
 .fetch-rail-agent i.on,.fetch-card.on header i,.fetch-dot.on{background:#3d9a68;box-shadow:0 0 0 3px #3d9a6822}
 .fetch-roster{display:flex;flex-direction:column;margin:0 0 22px}
-.fetch-roster h3{margin:0 0 4px;font:600 13px/1.4 Manrope,sans-serif}
+.fetch-roster h3{margin:0 0 4px;font:600 13px/1.4 Urbanist,sans-serif}
 .fetch-roster .quiet-copy{margin:0 0 10px}
 .fetch-roster .agent-row{gap:10px}
-.roster-heading{margin:18px 0 8px;font:600 13px/1.4 Manrope,sans-serif}
+.roster-heading{margin:18px 0 8px;font:600 13px/1.4 Urbanist,sans-serif}
 .fetch-rail-agent span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-.fetch-panel h3{font:600 14px/1.4 Manrope,sans-serif;margin:24px 0 10px}
+.fetch-panel h3{font:600 14px/1.4 Urbanist,sans-serif;margin:24px 0 10px}
 .fetch-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin:16px 0}
 .fetch-card{display:flex;flex-direction:column;gap:4px;padding:12px;border:1px solid #e2e6e3;border-radius:6px;background:#fff}
 .fetch-card header{display:flex;align-items:center;gap:8px}.fetch-card header b{flex:1;font-size:13px}.fetch-card header i{margin-top:0}

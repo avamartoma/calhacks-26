@@ -31,7 +31,7 @@ const cssColor = (rgb: number[]) => `rgb(${rgb.map(c => Math.round(c * 255)).joi
 const LABEL_WIDTH = 150;
 // Fonts of a cloud's label (see .vector-sky .sky-label in sky.css), for measuring text.
 // Your clouds' titles are a little larger than those of projects further back.
-const TITLE_FONT = '600 18px Sora, sans-serif', YOUR_TITLE_FONT = '600 21px Sora, sans-serif', OTHER_TITLE_FONT = '600 20px Sora, sans-serif', BODY_FONT = '500 12.5px Manrope, sans-serif';
+const TITLE_FONT = '600 18px Urbanist, sans-serif', YOUR_TITLE_FONT = '600 21px Urbanist, sans-serif', OTHER_TITLE_FONT = '600 20px Urbanist, sans-serif', BODY_FONT = '500 12.5px Urbanist, sans-serif';
 let measurer: CanvasRenderingContext2D | null | undefined;
 function textWidth(text: string, font = TITLE_FONT) {
   if (measurer === undefined) measurer = document.createElement('canvas').getContext('2d');

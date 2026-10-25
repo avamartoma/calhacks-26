@@ -1,6 +1,6 @@
 .tour-stops{display:flex;flex-direction:column;margin:24px 0;gap:8px}
 .tour-stops>button{display:flex;align-items:center;gap:14px;padding:16px 12px;text-align:left;border:1px solid #ced9c8;border-radius:8px;background:#f9faf1;color:#304c38}
-.tour-stops>button:hover{background:#e9efdf}.tour-stops>button>span{font:500 16px 'Sora',sans-serif;color:#65795d}.tour-stops>button>div{flex:1}.tour-stops b{font-size:14px}.tour-stops small{display:block;font-size:12px;line-height:1.6;margin-top:4px;color:#53654f}
+.tour-stops>button:hover{background:#e9efdf}.tour-stops>button>span{font:500 16px 'Urbanist',sans-serif;color:#65795d}.tour-stops>button>div{flex:1}.tour-stops b{font-size:14px}.tour-stops small{display:block;font-size:12px;line-height:1.6;margin-top:4px;color:#53654f}
 .recording-studio .quiet-copy{font-size:13px;line-height:1.8}.recording-studio kbd{margin-left:auto;font-size:12px}
 .recording-mode .topbar,.recording-mode .detail-panel,.recording-mode .spatial-badges,.recording-mode .office-pulse,.recording-mode .compact-hotbar,.recording-mode .walk-hint,.recording-mode .crosshair,.recording-mode .touch-pad,.recording-mode .camera-controls,.recording-mode .toast,.recording-mode .help-panel{display:none!important}
 .recording-strip{position:absolute;z-index:80;bottom:18px;left:24px;right:24px;display:flex;justify-content:space-between;align-items:center;pointer-events:none;color:#eef3e6;font-size:11px;letter-spacing:1px}

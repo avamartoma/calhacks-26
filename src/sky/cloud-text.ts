@@ -6,9 +6,9 @@ export interface CloudText { title: string; description: string; mine: boolean; 
 
 const INK = '#26324a';
 const PADDING_X = 10, PADDING_Y = 8, GAP = 5;
-const titleFont = (mine: boolean) => `600 ${mine ? 21 : 20}px Sora, sans-serif`;
+const titleFont = (mine: boolean) => `600 ${mine ? 21 : 20}px Urbanist, sans-serif`;
 const titleSize = (mine: boolean) => mine ? 21 : 20;
-const BODY_FONT = '500 12.5px Manrope, sans-serif', BODY_SIZE = 12.5;
+const BODY_FONT = '500 12.5px Urbanist, sans-serif', BODY_SIZE = 12.5;
 
 /** Lines of `text` that fit `width`, breaking only between words; past `max` lines, an ellipsis. */
 function wrap(ctx: CanvasRenderingContext2D, text: string, width: number, max: number) {

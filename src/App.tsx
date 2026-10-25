@@ -1,12 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, Bell, Box, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clock3, Cloud, Coffee, Command, Compass, DoorOpen, Expand, ExternalLink, Eye, FileCode2, FileText, Folder, Glasses, Grip, GitBranch, Layers, LayoutGrid, LoaderCircle, MessageSquare, Minus, Monitor, MousePointer2, Pause, Play, Plus, Radio, RotateCcw, Send, Settings2, ShieldCheck, Sparkles, Terminal, Users, Wind, X, Zap } from 'lucide-react';
-import '@fontsource/manrope/400.css';
-import '@fontsource/manrope/500.css';
-import '@fontsource/manrope/600.css';
-import '@fontsource/manrope/700.css';
-import '@fontsource/sora/400.css';
-import '@fontsource/sora/500.css';
-import '@fontsource/sora/600.css';
+import '@fontsource/urbanist/400.css';
+import '@fontsource/urbanist/500.css';
+import '@fontsource/urbanist/600.css';
+import '@fontsource/urbanist/700.css';
+import '@fontsource/urbanist/800.css';
 import { MissionControl, OfficePulse, ModesPanel, ReplayPanel, HandoffDossier, agentWork, officeApi, workColors, workLabels } from './Operations';
 import { WhipOverlay, WhipIcon } from './WhipOverlay';
 import { OfficeScene } from './scene';

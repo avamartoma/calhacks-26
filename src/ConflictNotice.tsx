@@ -12,7 +12,7 @@ export function ConflictNotice({ conflicts }: { conflicts?: CloudConflict[] | nu
       border: '1px solid #e2c7b8',
       borderRadius: 8,
       color: '#5c3b32',
-      font: '12px/1.45 Manrope, sans-serif',
+      font: '12px/1.45 Urbanist, sans-serif',
     }}>
       <strong style={{ display: 'block', marginBottom: 4 }}>Cloud edits kept aside</strong>
       <p style={{ margin: '0 0 6px' }}>The remote copy is beside the file as .remote.</p>
