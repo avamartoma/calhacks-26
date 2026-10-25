@@ -124,6 +124,7 @@ export const launch = internalAction({
       }
       const paths = files(args.runId);
       const script = args.testCommand ? `cd "${WORKSPACE}" 2>/dev/null; (${args.testCommand}) > "$OUT" 2> "$ERR"; echo $? > "$EXIT"` : startScript(agent);
+      await ctx.runAction(internal.runChanges.baseline, { runId: args.runId, sandboxId: info.session.sandboxId });
       const handle = await sandbox.commands.run(script, {
         background: true,
         envs: {

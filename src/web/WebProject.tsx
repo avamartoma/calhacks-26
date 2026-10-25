@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAction, useMutation, useQuery } from 'convex/react';
-import { Check, Cloud, Copy, ExternalLink, Play, Square, X } from 'lucide-react';
+import { Check, Cloud, Copy, Download, ExternalLink, Play, Square, X } from 'lucide-react';
+import { diffFiles } from '../office-panel';
+import './office-extras.css';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import hosted from '../../hosted.json';
@@ -109,6 +111,7 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
       <div className="opencloud-actions">
         <button className="sky-return" aria-pressed={accountsOpen} onClick={() => { setAccountsOpen(open => !open); setShareOpen(false); }}>Accounts</button>
         <button className="sky-return" aria-pressed={shareOpen} onClick={() => { setShareOpen(open => !open); setAccountsOpen(false); }}><ExternalLink size={16} /> Share</button>
+        {editor && <DownloadButton projectId={projectId} />}
         <button className="sky-return" onClick={() => go('/')}><Cloud size={16} /> Sky</button>
         <span className="web-title">{row.name}<small>{describe(row)}</small></span>
       </div>
@@ -182,7 +185,47 @@ function RunLog({ runId }: { runId: Id<'agentRuns'> }) {
   useEffect(() => { end.current?.scrollIntoView({ block: 'nearest' }); }, [lines?.length]);
   if (!lines) return null;
   if (!lines.length) return <p className="web-last">Getting the sandbox ready…</p>;
-  return <div className="web-log">{lines.map(line => <p key={line.id} className={`web-line ${line.kind}`}>{line.text}</p>)}<div ref={end} /></div>;
+  return <>
+    <div className="web-log">{lines.map(line => <p key={line.id} className={`web-line ${line.kind}`}>{line.text}</p>)}<div ref={end} /></div>
+    <RunChanges runId={runId} />
+  </>;
+}
+
+/** The files a run changed, each opening its diff, like a ticket's files in the local office. */
+function RunChanges({ runId }: { runId: Id<'agentRuns'> }) {
+  const changes = useQuery(api.runChangesStore.forRun, { runId });
+  const [patch, setPatch] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  useEffect(() => {
+    if (!changes?.patchUrl) return;
+    let cancelled = false;
+    fetch(changes.patchUrl).then(response => response.text()).then(text => { if (!cancelled) setPatch(text); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [changes?.patchUrl]);
+  if (!changes) return null;
+  if (!changes.files) return changes.error ? <p className="web-last">{changes.error}</p> : null;
+  const bodies = new Map(diffFiles(patch ?? '').map(file => [file.path, file.body]));
+  return <div className="web-changes">
+    <b>{changes.files.length ? `Changed ${changes.files.length} file${changes.files.length === 1 ? '' : 's'}` : 'No files changed'}</b>
+    <ul>{changes.files.map(file => <li key={file.path}>
+      <button type="button" aria-expanded={open === file.path} onClick={() => setOpen(current => current === file.path ? null : file.path)}>
+        <span>{file.path}</span><small><i className="added">+{file.added}</i> <i className="removed">−{file.removed}</i></small>
+      </button>
+      {open === file.path && (bodies.get(file.path)
+        ? <pre className="agent-side-diff">{bodies.get(file.path)!.split('\n').map((line, index) => <span key={index} className={line.startsWith('+') && !line.startsWith('+++') ? 'diff-added' : line.startsWith('-') && !line.startsWith('---') ? 'diff-removed' : ''}>{line || ' '}{'\n'}</span>)}</pre>
+        : <p className="web-last">{patch === null ? 'Loading the diff…' : changes.truncated ? 'This diff was too large to keep.' : 'No text diff for this file.'}</p>)}
+    </li>)}</ul>
+  </div>;
+}
+
+function DownloadButton({ projectId }: { projectId: Id<'projects'> }) {
+  const download = useAction(api.runChanges.download);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  return <button className="sky-return" disabled={busy} title={error || 'Download the project as a .tar.gz'} onClick={async () => {
+    setBusy(true); setError('');
+    try { const { url } = await download({ projectId }); window.location.assign(url); } catch (e) { setError(message(e)); alert(message(e)); } finally { setBusy(false); }
+  }}><Download size={15} /> {busy ? 'Packing…' : 'Download'}</button>;
 }
 
 function SharePanel({ row, onClose }: { row: SkyRow; onClose: () => void }) {

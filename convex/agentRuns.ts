@@ -99,6 +99,8 @@ export const stop = mutation({
     if (!active(run)) return { ok: true as const };
     await ctx.db.patch(run._id, { status: "stopped", detail: "Stopped", finishedAt: Date.now() });
     await ctx.scheduler.runAfter(0, internal.agentRunner.kill, { runId: run._id });
+    // What it changed before it was stopped, once the process is gone.
+    await ctx.scheduler.runAfter(5000, internal.runChanges.capture, { runId: run._id });
     return { ok: true as const };
   },
 });
@@ -166,6 +168,7 @@ export const finish = internalMutation({
       kind: `agent.${status}`,
       detail: `${run.userLabel}: ${(args.detail ?? run.prompt).slice(0, 200)}`,
     });
+    await ctx.scheduler.runAfter(0, internal.runChanges.capture, { runId: args.runId });
   },
 });
 
