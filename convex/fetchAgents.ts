@@ -218,7 +218,7 @@ export const modelKey = internalQuery({
 
 /** Starts an agent run for the person who asked, on the first of their connections that's set up. */
 export const startFor = internalMutation({
-  args: { projectId: v.id("projects"), userId: v.string(), userLabel: v.string(), prompt: v.string(), via: v.string(), prefer: v.optional(v.union(v.literal("codex"), v.literal("claude"), v.literal("cursor"))) },
+  args: { projectId: v.id("projects"), userId: v.string(), userLabel: v.string(), prompt: v.string(), via: v.string(), prefer: v.optional(v.union(v.literal("codex"), v.literal("claude"), v.literal("cursor"))), model: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const text = args.prompt.trim();
     if (!text) throw new Error("Describe the work to start");
@@ -230,6 +230,8 @@ export const startFor = internalMutation({
     const runId = await ctx.db.insert("agentRuns", {
       projectId: args.projectId, agent, userId: args.userId, userLabel: args.userLabel, sessionId,
       prompt: clip(text, 8000), status: "starting", offset: 0, startedAt: Date.now(),
+      // The model only goes with the program it was chosen for.
+      ...(args.model && agent === args.prefer ? { model: args.model } : {}),
     });
     await ctx.scheduler.runAfter(0, internal.agentRunner.launch, { runId });
     await ctx.db.insert("fetchActivity", { name: args.via, kind: "dispatch", text: `Started work for ${args.userLabel}: ${clip(text, 300)}`, projectId: args.projectId });

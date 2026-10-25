@@ -193,6 +193,8 @@ export default defineSchema({
     createdBy: v.string(),
     // The project manager: every project has one. It splits requests into tickets for the others.
     manager: v.optional(v.boolean()),
+    // The model it runs, as its program names it. None is that program's default.
+    model: v.optional(v.string()),
   }).index("by_project", ["projectId"]),
 
   // A task one of a project's agents does. The project manager splits a request into tickets for
@@ -207,6 +209,9 @@ export default defineSchema({
     title: v.string(),
     description: v.string(),
     role: v.string(),
+    // On a plan ticket: the program and model to give any agent the manager brings in.
+    engine: v.optional(v.union(v.literal("codex"), v.literal("claude"), v.literal("cursor"))),
+    model: v.optional(v.string()),
     status: v.union(v.literal("planning"), v.literal("todo"), v.literal("working"), v.literal("done"), v.literal("failed")),
     runId: v.optional(v.id("agentRuns")),
     note: v.optional(v.string()),
@@ -236,6 +241,8 @@ export default defineSchema({
     // A follow-up continues an earlier run's conversation: the first run of the thread, and the
     // agent's own session to resume. agentSession is the session this run reported.
     parentRunId: v.optional(v.id("agentRuns")),
+    // The model it ran, as its program names it. None is that program's default.
+    model: v.optional(v.string()),
     resumeSession: v.optional(v.string()),
     agentSession: v.optional(v.string()),
   }).index("by_project", ["projectId"]),

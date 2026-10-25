@@ -55,23 +55,23 @@ const AGENTS: Record<Agent, { name: string; bin: string; install: string; start:
     name: "Claude Code",
     bin: "claude",
     install: 'npm install -g --prefix "$HOME/.local" @anthropic-ai/claude-code',
-    start: 'claude -p "$TASK" --output-format stream-json --verbose --dangerously-skip-permissions',
-    resume: 'claude -p "$TASK" --resume "$SESSION" --output-format stream-json --verbose --dangerously-skip-permissions',
+    start: 'claude -p "$TASK" ${MODEL:+--model "$MODEL"} --output-format stream-json --verbose --dangerously-skip-permissions',
+    resume: 'claude -p "$TASK" --resume "$SESSION" ${MODEL:+--model "$MODEL"} --output-format stream-json --verbose --dangerously-skip-permissions',
   },
   codex: {
     name: "Codex",
     bin: "codex",
     install: 'npm install -g --prefix "$HOME/.local" @openai/codex@0.156.1',
     // A Codex home per conversation, so one person's sessions never mix with another's in a shared sandbox.
-    start: 'CODEX_HOME="/tmp/codex-$THREAD" && mkdir -p "$CODEX_HOME" && export CODEX_HOME && codex -c cli_auth_credentials_store="file" exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox "$TASK"',
+    start: 'CODEX_HOME="/tmp/codex-$THREAD" && mkdir -p "$CODEX_HOME" && export CODEX_HOME && codex -c cli_auth_credentials_store="file" exec ${MODEL:+-m "$MODEL"} --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox "$TASK"',
     resume: 'CODEX_HOME="/tmp/codex-$THREAD" && mkdir -p "$CODEX_HOME" && export CODEX_HOME && codex -c cli_auth_credentials_store="file" exec resume --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox "$SESSION" "$TASK"',
   },
   cursor: {
     name: "Cursor",
     bin: "cursor-agent",
     install: "curl -fsSL https://cursor.com/install | bash",
-    start: 'cursor-agent -p --output-format stream-json --force --trust "$TASK"',
-    resume: 'cursor-agent -p --resume "$SESSION" --output-format stream-json --force --trust "$TASK"',
+    start: 'cursor-agent -p ${MODEL:+--model "$MODEL"} --output-format stream-json --force --trust "$TASK"',
+    resume: 'cursor-agent -p --resume "$SESSION" ${MODEL:+--model "$MODEL"} --output-format stream-json --force --trust "$TASK"',
   },
 };
 
@@ -181,6 +181,7 @@ export const launch = internalAction({
           RUN: args.runId,
           THREAD: thread,
           ...(row.resumeSession ? { SESSION: row.resumeSession } : {}),
+          ...(row.model ? { MODEL: row.model } : {}),
           OUT: paths.out, ERR: paths.err, EXIT: paths.exit,
           IS_SANDBOX: "1",
           ...(stored ? keyEnv(agent, stored, secret, thread) : {}),

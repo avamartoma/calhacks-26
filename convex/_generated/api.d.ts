@@ -29,6 +29,7 @@ import type * as leases from "../leases.js";
 import type * as lib_claudeCode from "../lib/claudeCode.js";
 import type * as lib_inviteMessage from "../lib/inviteMessage.js";
 import type * as lib_keyCrypto from "../lib/keyCrypto.js";
+import type * as lib_models from "../lib/models.js";
 import type * as lib_numstat from "../lib/numstat.js";
 import type * as lib_previewCommand from "../lib/previewCommand.js";
 import type * as lib_previewShot from "../lib/previewShot.js";
@@ -78,6 +79,7 @@ declare const fullApi: ApiFromModules<{
   "lib/claudeCode": typeof lib_claudeCode;
   "lib/inviteMessage": typeof lib_inviteMessage;
   "lib/keyCrypto": typeof lib_keyCrypto;
+  "lib/models": typeof lib_models;
   "lib/numstat": typeof lib_numstat;
   "lib/previewCommand": typeof lib_previewCommand;
   "lib/previewShot": typeof lib_previewShot;

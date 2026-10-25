@@ -7,6 +7,7 @@ import { currentUser } from "./identity";
 import { keyRow } from "./keyStore";
 import { MANAGER_INSTRUCTIONS, MANAGER_ROLE, ROLE_INSTRUCTIONS, roleOf, sameRole } from "./lib/roles";
 import { freeName } from "./projectAgents";
+import { checkModel } from "./lib/models";
 
 // Tickets in the web office. Every project has a project manager. Asking it for something makes its
 // plan ticket; it splits the request into tickets for each role (builtinAgents.splitRequest), hands
@@ -66,17 +67,19 @@ export const list = query({
 
 /** Asks the project manager for something. It plans, then hands out tickets. */
 export const request = mutation({
-  args: { projectId: v.id("projects"), text: v.string() },
+  // The program and model for any agent the manager brings in for this request.
+  args: { projectId: v.id("projects"), text: v.string(), engine: v.optional(v.union(v.literal("codex"), v.literal("claude"), v.literal("cursor"))), model: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const user = await currentUser(ctx);
     await requireAccess(ctx, args.projectId, "editor");
     const text = args.text.trim();
     if (text.length < 3) throw new Error("Say what you'd like done");
     if (text.length > MAX_TEXT) throw new Error(`Keep the request under ${MAX_TEXT} characters`);
+    const model = args.engine ? checkModel(args.engine, args.model) : undefined;
     const manager = await ensureManagerFor(ctx, args.projectId, user.id);
     const ticketId = await ctx.db.insert("tickets", {
       projectId: args.projectId, agentId: manager._id, order: 0, title: `Plan: ${clip(text.split("\n")[0], 110)}`, description: text,
-      role: MANAGER_ROLE, status: "planning", handoffs: [], createdBy: user.id, createdByLabel: user.name || user.email || "Someone",
+      role: MANAGER_ROLE, status: "planning", ...(args.engine ? { engine: args.engine } : {}), ...(model ? { model } : {}), handoffs: [], createdBy: user.id, createdByLabel: user.name || user.email || "Someone",
     });
     await ctx.scheduler.runAfter(0, internal.builtinAgents.splitRequest, { ticketId });
     return ticketId;
@@ -114,7 +117,10 @@ export const applyPlan = internalMutation({
       let owner = agents.find((agent) => !agent.manager && sameRole(agent.role, role));
       if (!owner) {
         const name = await freeName(agents.map((agent) => agent.name), `${role}${plan.projectId}`);
-        const id = await ctx.db.insert("projectAgents", { projectId: plan.projectId, name, role, engine: await engineFor(ctx, plan.createdBy), instructions: ROLE_INSTRUCTIONS[role], createdBy: plan.createdBy });
+        const id = await ctx.db.insert("projectAgents", {
+          projectId: plan.projectId, name, role, engine: plan.engine ?? (await engineFor(ctx, plan.createdBy)), ...(plan.engine && plan.model ? { model: plan.model } : {}),
+          instructions: ROLE_INSTRUCTIONS[role], createdBy: plan.createdBy,
+        });
         owner = (await ctx.db.get(id))!;
         agents = [...agents, owner];
         spun.push(`${name} (${role})`);
@@ -176,7 +182,7 @@ async function startTicket(ctx: MutationCtx, ticketId: Id<"tickets">, userId: st
     "Stick to your ticket and your role. Finish with a short summary of what you did.",
   ].filter(Boolean).join("\n\n");
   const started = await ctx.runMutation(internal.fetchAgents.startFor, {
-    projectId: ticket.projectId, userId, userLabel: `${agent.name} (${userLabel})`, prompt, via: "manager", prefer: agent.engine,
+    projectId: ticket.projectId, userId, userLabel: `${agent.name} (${userLabel})`, prompt, via: "manager", prefer: agent.engine, ...(agent.model ? { model: agent.model } : {}),
   });
   await ctx.db.patch(ticket._id, { status: "working", runId: started.runId, note: undefined });
   return null;

@@ -23,7 +23,7 @@ const time = (at: number) => new Date(at).toLocaleTimeString([], { hour: 'numeri
 export const sortTickets = (tickets: Ticket[]) => tickets.slice().sort((a, b) => ticketOrder[a.status] - ticketOrder[b.status] || b.createdAt - a.createdAt);
 
 /** Asking the project manager for something: it plans, hands out tickets and brings in agents. */
-export function AskManager({ projectId, manager }: { projectId: Id<'projects'>; manager?: TeamAgent }) {
+export function AskManager({ projectId, manager, engine, model }: { projectId: Id<'projects'>; manager?: TeamAgent; engine?: 'codex' | 'claude' | 'cursor'; model?: string }) {
   const request = useMutation(api.tickets.request);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -31,7 +31,7 @@ export function AskManager({ projectId, manager }: { projectId: Id<'projects'>; 
   const name = manager?.name ?? 'the project manager';
   return <form className="web-start web-ask" onSubmit={async event => {
     event.preventDefault(); setBusy(true); setError('');
-    try { await request({ projectId, text }); setText(''); } catch (e) { setError(message(e)); } finally { setBusy(false); }
+    try { await request({ projectId, text, ...(engine ? { engine, model: model ?? '' } : {}) }); setText(''); } catch (e) { setError(message(e)); } finally { setBusy(false); }
   }}>
     <label htmlFor="web-ask-text">Ask {name}{manager ? ', the project manager' : ''}</label>
     <textarea id="web-ask-text" value={text} onChange={e => setText(e.target.value)} rows={3} maxLength={8000} placeholder="What should the team do? For example: add a dark mode toggle to the settings page" />

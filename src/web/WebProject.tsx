@@ -17,6 +17,7 @@ import { ShareLinkButtons } from './ShareLinks';
 import { CloneButton, clearArrival, peekArrival, type CloneTarget } from './CloneAgent';
 import { kindOf } from '../sky/agents';
 import { AskManager, TicketArchive, TicketItem, sortTickets, useTickets, type Ticket } from './Tickets';
+import { MODELS, modelName } from '../../convex/lib/models';
 
 type Run = NonNullable<ReturnType<typeof useRuns>>[number];
 type Lasting = NonNullable<ReturnType<typeof useLasting>>[number];
@@ -181,7 +182,13 @@ function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, s
   const connections = useConnections();
   const connected = providers.filter(provider => connections?.providers[provider].connected);
   const [chosen, setChosen] = useState<Provider | null>(() => localStorage.getItem('opencloud-agent') as Provider | null);
-  const agent = chosen && connected.includes(chosen) ? chosen : connected[0];
+  // The program picked up top, kept even before it's connected; the connect box shows until it is.
+  const agent: Provider = chosen && providers.includes(chosen) ? chosen : connected[0] ?? 'claude';
+  const ready = connected.includes(agent);
+  // The model for each program, remembered on this browser. "" is the program's own default.
+  const [models, setModels] = useState<Partial<Record<Provider, string>>>(() => { try { return JSON.parse(localStorage.getItem('opencloud-models') || '{}'); } catch { return {}; } });
+  const model = models[agent] ?? '';
+  const pickModel = (value: string) => { const next = { ...models, [agent]: value }; setModels(next); localStorage.setItem('opencloud-models', JSON.stringify(next)); };
   const start = useMutation(api.agentRuns.start);
   const stop = useMutation(api.agentRuns.stop);
   const [prompt, setPrompt] = useState('');
@@ -196,8 +203,16 @@ function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, s
   const unassigned = shown.filter(ticket => !ticket.agentId || !team.some(item => item.id === ticket.agentId));
   return <aside className="agent-side web-side" aria-label="Agents">
     <header><b>Agents</b><span>{(tickets || []).filter(ticket => ticket.status === 'working').length + otherRuns.filter(working).length} working</span></header>
-    {editor && <AskManager projectId={projectId} manager={manager} />}
-    {editor && connections && !agent && <div className="web-key-needed"><b>Connect Codex, Claude or Cursor so the team can work</b><ConnectionTabs initial="claude" /></div>}
+    {editor && <div className="web-program">
+      <div className="web-tabs web-agent-picker" role="radiogroup" aria-label="Program the agents run on">
+        {providers.map(provider => <button key={provider} type="button" role="radio" aria-checked={agent === provider} aria-selected={agent === provider} title={connected.includes(provider) ? undefined : `${providerNames[provider]} isn't connected yet`} onClick={() => { setChosen(provider); localStorage.setItem('opencloud-agent', provider); }}>{providerNames[provider]}</button>)}
+      </div>
+      <label className="web-model">Model
+        <select value={model} onChange={e => pickModel(e.target.value)}>{MODELS[agent].map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>
+      </label>
+    </div>}
+    {editor && <AskManager projectId={projectId} manager={manager} engine={agent} model={model} />}
+    {editor && connections && !ready && <div className="web-key-needed"><b>Connect {providerNames[agent]} so the team can work on it</b><ConnectionTabs key={agent} initial={agent} /></div>}
     {!editor && <p className="web-note">You can watch this project's agents. Ask the owner for edit access to give them work.</p>}
     {!!team.length && <ul className="web-runs web-lasting web-team" aria-label="This project's agents">
       {team.map(item => {
@@ -207,9 +222,10 @@ function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, s
         return <li key={item.id} className={open ? 'open' : ''}>
           <button className="web-run" onClick={() => onSelect(open ? null : key)}>
             <i style={{ background: kindOf(item.role, item.manager).color }} />
-            <span><b>{item.name} <em className="web-role">{item.role}</em></b><small>{active ? 'Working' : mine.length ? `${mine.length} ticket${mine.length === 1 ? '' : 's'}` : 'No tickets yet'} · {providerNames[item.engine]}{item.clonedFrom ? ` · cloned from ${item.clonedFrom.projectName}` : ''}</small></span>
+            <span><b>{item.name} <em className="web-role">{item.role}</em></b><small>{active ? 'Working' : mine.length ? `${mine.length} ticket${mine.length === 1 ? '' : 's'}` : 'No tickets yet'} · {providerNames[item.engine]}{item.model ? ` · ${modelName(item.engine, item.model)}` : ''}{item.clonedFrom ? ` · cloned from ${item.clonedFrom.projectName}` : ''}</small></span>
           </button>
           {open && <p className="web-last">{item.instructions}</p>}
+          {open && editor && <AgentProgram agentId={item.id} engine={item.engine} model={item.model} />}
           {!!mine.length && <ul className="web-tickets" aria-label={`${item.name}'s tickets`}>{mine.map(ticket => <TicketItem key={ticket.id} ticket={ticket} team={team} editor={editor} Log={RunLog} />)}</ul>}
           {open && <div className="web-lasting-actions">
             <CloneButton source={{ agentId: item.id }} fromProjectId={projectId} targets={targets} go={go} />
@@ -220,15 +236,13 @@ function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, s
     </ul>}
     {!!unassigned.length && <><h3 className="web-subhead">Waiting for an agent</h3><ul className="web-tickets">{unassigned.map(ticket => <TicketItem key={ticket.id} ticket={ticket} team={team} editor={editor} Log={RunLog} />)}</ul></>}
     {error && <p className="web-error" role="alert">{error}</p>}
-    {editor && agent && <details className="web-direct">
+    {editor && ready && <details className="web-direct">
       <summary>Start one agent directly</summary>
       <form className="web-start" onSubmit={async event => {
           event.preventDefault(); setBusy(true); setError('');
-          try { const runId = await start({ projectId, prompt, agent }); setPrompt(''); onSelect(runId); } catch (e) { setError(message(e)); } finally { setBusy(false); }
+          try { const runId = await start({ projectId, prompt, agent, ...(model ? { model } : {}) }); setPrompt(''); onSelect(runId); } catch (e) { setError(message(e)); } finally { setBusy(false); }
         }}>
-          <div className="web-tabs web-agent-picker" role="radiogroup" aria-label="Agent">
-            {providers.map(provider => <button key={provider} type="button" role="radio" aria-checked={agent === provider} aria-selected={agent === provider} disabled={!connected.includes(provider)} title={connected.includes(provider) ? undefined : `Connect ${providerNames[provider]} in Accounts`} onClick={() => { setChosen(provider); localStorage.setItem('opencloud-agent', provider); }}>{providerNames[provider]}</button>)}
-          </div>
+          <small className="web-note">Runs {providerNames[agent]} · {modelName(agent, model)}, without a ticket.</small>
           <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={3} maxLength={8000} placeholder="What should an agent do? For example: add a dark mode toggle to the settings page" />
           <button className="primary" disabled={busy || !prompt.trim()}><Play size={14} /> {busy ? 'Starting…' : 'Start agent'}</button>
         </form>
@@ -238,7 +252,7 @@ function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, s
       {otherRuns.map(run => <li key={run.id} className={selected === run.id ? 'open' : ''}>
         <button className="web-run" onClick={() => onSelect(selected === run.id ? null : run.id)}>
           <i style={{ background: statusColor[run.status] }} />
-          <span><b>{run.followUpOf && <em className="web-reply-mark">Reply · </em>}{run.prompt.split('\n')[0].slice(0, 90)}</b><small>{run.userLabel} · {providerNames[run.agent]} · {statusLabel[run.status]}{run.costUsd !== null ? ` · $${run.costUsd.toFixed(2)}` : ''}</small></span>
+          <span><b>{run.followUpOf && <em className="web-reply-mark">Reply · </em>}{run.prompt.split('\n')[0].slice(0, 90)}</b><small>{run.userLabel} · {providerNames[run.agent]}{run.model ? ` · ${modelName(run.agent, run.model)}` : ''} · {statusLabel[run.status]}{run.costUsd !== null ? ` · $${run.costUsd.toFixed(2)}` : ''}</small></span>
         </button>
         {selected === run.id ? <RunLog runId={run.id} /> : run.lastLine && <p className="web-last">{run.lastLine.text}</p>}
         {editor && run.mine && working(run) && <button className="text-button danger" onClick={() => void stop({ runId: run.id })}><Square size={12} /> Stop</button>}
@@ -248,6 +262,18 @@ function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, s
     </ul>
     <TicketArchive tickets={(tickets || []).filter(ticket => ticket.archivedAt)} team={team} editor={editor} />
   </aside>;
+}
+
+/** The program an agent runs on and its model, changed from its card. Its next ticket uses them. */
+function AgentProgram({ agentId, engine, model }: { agentId: Id<'projectAgents'>; engine: Provider; model: string }) {
+  const configure = useMutation(api.projectAgents.configure);
+  const [error, setError] = useState('');
+  const save = (next: Provider, nextModel: string) => { setError(''); configure({ agentId, engine: next, model: nextModel }).catch(e => setError(message(e))); };
+  return <div className="web-agent-program">
+    <label>Program<select value={engine} onChange={e => save(e.target.value as Provider, '')}>{providers.map(provider => <option key={provider} value={provider}>{providerNames[provider]}</option>)}</select></label>
+    <label>Model<select value={model} onChange={e => save(engine, e.target.value)}>{MODELS[engine].map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}{model && !MODELS[engine].some(choice => choice.id === model) && <option value={model}>{model}</option>}</select></label>
+    {error && <p className="web-error" role="alert">{error}</p>}
+  </div>;
 }
 
 function RunLog({ runId }: { runId: Id<'agentRuns'> }) {

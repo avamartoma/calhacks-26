@@ -5,6 +5,7 @@ import { mutation, query } from "./_generated/server";
 import { requireAccess } from "./access";
 import { currentUser } from "./identity";
 import { agentKinds } from "../src/sky/agents";
+import { checkModel } from "./lib/models";
 
 // Lasting agents in the web office: a named agent with a role, the program it runs on, and its
 // instructions. Cloning one, or any agent run, into another project you can edit makes a copy there,
@@ -32,7 +33,7 @@ export async function freeName(taken: string[], seed: string) {
 
 const shape = (agent: Doc<"projectAgents">) => ({
   id: agent._id, name: agent.name, role: agent.role, engine: agent.engine, instructions: agent.instructions,
-  clonedFrom: agent.clonedFrom ?? null, createdAt: agent._creationTime, manager: !!agent.manager,
+  clonedFrom: agent.clonedFrom ?? null, createdAt: agent._creationTime, manager: !!agent.manager, model: agent.model ?? "",
 });
 
 export const list = query({
@@ -91,8 +92,20 @@ export const start = mutation({
     const extra = args.task?.trim();
     const prompt = `You are ${agent.name}, the ${agent.role} agent on this project.\n\n${agent.instructions}${extra ? `\n\nNow: ${extra}` : ""}`;
     return await ctx.runMutation(internal.fetchAgents.startFor, {
-      projectId: agent.projectId, userId: user.id, userLabel: `${agent.name} (${user.name || user.email || "you"})`, prompt, via: "office", prefer: agent.engine,
+      projectId: agent.projectId, userId: user.id, userLabel: `${agent.name} (${user.name || user.email || "you"})`, prompt, via: "office", prefer: agent.engine, ...(agent.model ? { model: agent.model } : {}),
     });
+  },
+});
+
+/** Changes the program an agent runs on and its model. Its next ticket uses them. */
+export const configure = mutation({
+  args: { agentId: v.id("projectAgents"), engine: v.union(v.literal("codex"), v.literal("claude"), v.literal("cursor")), model: v.string() },
+  handler: async (ctx, args) => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) throw new Error("Agent not found");
+    await requireAccess(ctx, agent.projectId, "editor");
+    await ctx.db.patch(agent._id, { engine: args.engine, model: checkModel(args.engine, args.model) });
+    return { ok: true as const };
   },
 });
 

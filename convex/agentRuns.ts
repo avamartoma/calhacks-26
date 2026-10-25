@@ -8,6 +8,7 @@ import { currentUser } from "./identity";
 import { connectionProblem, keyRow, providerValidator } from "./keyStore";
 import { beginSession } from "./sessions";
 import { ticketRunFinished } from "./tickets";
+import { checkModel } from "./lib/models";
 
 const MAX_PROMPT = 8000;
 const MAX_ACTIVE_PER_PROJECT = 3;
@@ -21,7 +22,7 @@ const NAMES = { codex: "Codex", claude: "Claude", cursor: "Cursor" } as const;
  * caller's own key for that provider. Needs edit access. agentRunner.launch takes it from here.
  */
 export const start = mutation({
-  args: { projectId: v.id("projects"), prompt: v.string(), agent: v.optional(providerValidator) },
+  args: { projectId: v.id("projects"), prompt: v.string(), agent: v.optional(providerValidator), model: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const user = await currentUser(ctx);
     if (user.local) throw new Error("Sign in to start an agent");
@@ -30,6 +31,7 @@ export const start = mutation({
     if (!prompt) throw new Error("Describe what the agent should do");
     if (prompt.length > MAX_PROMPT) throw new Error(`Keep the task under ${MAX_PROMPT} characters`);
     const agent = args.agent ?? "claude";
+    const model = checkModel(agent, args.model);
     const problem = connectionProblem(await keyRow(ctx, user.id, agent), NAMES[agent]);
     if (problem) throw new Error(problem);
     const runs = await ctx.db.query("agentRuns").withIndex("by_project", (q) => q.eq("projectId", args.projectId)).collect();
@@ -48,6 +50,7 @@ export const start = mutation({
       status: "starting",
       offset: 0,
       startedAt: Date.now(),
+      ...(model ? { model } : {}),
     });
     await ctx.scheduler.runAfter(0, internal.agentRunner.launch, { runId });
     await recordEvent(ctx, { projectId: args.projectId, sessionId, kind: "agent.started", detail: `${userLabel} (${NAMES[agent]}): ${prompt.slice(0, 200)}` });
@@ -84,7 +87,7 @@ export const followUp = mutation({
     const runId = await ctx.db.insert("agentRuns", {
       projectId: parent.projectId, agent, userId: user.id, userLabel: parent.userLabel, sessionId,
       prompt: message, status: "starting", offset: 0, startedAt: Date.now(),
-      parentRunId: parent.parentRunId ?? parent._id, resumeSession: parent.agentSession,
+      parentRunId: parent.parentRunId ?? parent._id, resumeSession: parent.agentSession, ...(parent.model ? { model: parent.model } : {}),
     });
     await ctx.scheduler.runAfter(0, internal.agentRunner.launch, { runId });
     await recordEvent(ctx, { projectId: parent.projectId, sessionId, kind: "agent.followup", detail: `${parent.userLabel} (${NAMES[agent]}): ${message.slice(0, 200)}` });
@@ -104,6 +107,7 @@ export const list = query({
       return {
         id: run._id,
         agent: run.agent ?? "claude",
+        model: run.model ?? null,
         prompt: run.prompt,
         status: run.status,
         detail: run.detail ?? null,
