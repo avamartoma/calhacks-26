@@ -20,7 +20,7 @@ function roleFor(task: string) {
 }
 
 /** A name not already taken in the project. */
-async function freeName(taken: string[], seed: string) {
+export async function freeName(taken: string[], seed: string) {
   let hash = 0;
   for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   for (let i = 0; i < NAMES.length; i++) {
@@ -32,7 +32,7 @@ async function freeName(taken: string[], seed: string) {
 
 const shape = (agent: Doc<"projectAgents">) => ({
   id: agent._id, name: agent.name, role: agent.role, engine: agent.engine, instructions: agent.instructions,
-  clonedFrom: agent.clonedFrom ?? null, createdAt: agent._creationTime,
+  clonedFrom: agent.clonedFrom ?? null, createdAt: agent._creationTime, manager: !!agent.manager,
 });
 
 export const list = query({
@@ -102,6 +102,11 @@ export const remove = mutation({
     const agent = await ctx.db.get(args.agentId);
     if (!agent) return { ok: true as const };
     await requireAccess(ctx, agent.projectId, "editor");
+    if (agent.manager) throw new Error("Every project keeps its project manager");
+    // Its tickets stay, waiting to be handed to someone else.
+    for (const ticket of await ctx.db.query("tickets").withIndex("by_project", (q) => q.eq("projectId", agent.projectId)).collect()) {
+      if (ticket.agentId === agent._id) await ctx.db.patch(ticket._id, { agentId: undefined, ...(ticket.status === "working" ? {} : { status: ticket.status === "done" ? "done" : "todo" }) });
+    }
     await ctx.db.delete(agent._id);
     return { ok: true as const };
   },
