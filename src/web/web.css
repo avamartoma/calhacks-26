@@ -172,3 +172,6 @@
 .web-archive li small{display:block;font-size:10.5px;color:#8a93a4}
 .web-archive .icon-button{width:24px;height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;background:none;border:0;color:#66708a}
 .web-archive .icon-button.danger:hover{color:#b55c48}
+.web-archive .web-runs li{display:block;font-size:inherit}
+.web-archive .web-runs{margin-top:6px}
+.web-archive .web-runs li b{text-decoration:none}

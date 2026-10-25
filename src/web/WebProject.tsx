@@ -239,9 +239,18 @@ function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, o
           <button className="primary" disabled={busy || !prompt.trim()}><Play size={14} /> {busy ? 'Starting…' : 'Start agent'}</button>
         </form>
     </details>}
-    {!!otherRuns.length && <h3 className="web-subhead">Other runs</h3>}
-    <ul className="web-runs">
-      {otherRuns.map(run => <li key={run.id} className={selected === run.id ? 'open' : ''}>
+    {runList(otherRuns.filter(working))}
+    {/* Finished runs outside the tickets are kept in the archive folder, not listed here. */}
+    <TicketArchive tickets={(tickets || []).filter(ticket => ticket.archivedAt)} team={team} editor={editor} runs={otherRuns.filter(run => !working(run)).length}>
+      {runList(otherRuns.filter(run => !working(run)))}
+    </TicketArchive>
+    </>}
+  </aside>;
+
+  function runList(list: Run[]) {
+    if (!list.length) return null;
+    return <ul className="web-runs">
+      {list.map(run => <li key={run.id} className={selected === run.id ? 'open' : ''}>
         <button className="web-run" onClick={() => onSelect(selected === run.id ? null : run.id)}>
           <i style={{ background: statusColor[run.status] }} />
           <span><b>{run.followUpOf && <em className="web-reply-mark">Reply · </em>}{run.prompt.split('\n')[0].slice(0, 90)}</b><small>{run.userLabel} · {providerNames[run.agent]} · {statusLabel[run.status]}{run.costUsd !== null ? ` · $${run.costUsd.toFixed(2)}` : ''}</small></span>
@@ -251,10 +260,8 @@ function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, o
         {editor && selected === run.id && run.canFollowUp && <FollowUp runId={run.id} agent={providerNames[run.agent]} onSent={onSelect} />}
         {selected === run.id && <CloneButton source={{ runId: run.id }} fromProjectId={projectId} targets={targets} go={go} />}
       </li>)}
-    </ul>
-    <TicketArchive tickets={(tickets || []).filter(ticket => ticket.archivedAt)} team={team} editor={editor} />
-    </>}
-  </aside>;
+    </ul>;
+  }
 }
 
 function RunLog({ runId }: { runId: Id<'agentRuns'> }) {
