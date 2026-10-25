@@ -9,6 +9,7 @@ import { WorkspaceRail } from '../WorkspaceRail';
 import type { Room, Workspace } from '../types';
 import { SkyView, type SkyProject } from '../sky/SkyView';
 import { seedOf } from '../sky/sky-math';
+import { builtinBlobs, taskRole } from '../sky/builtins';
 import { ConnectionsPanel } from './Connections';
 import { GithubRepos } from './GithubRepos';
 import { NewProject } from './NewProject';
@@ -17,7 +18,6 @@ import { NewWorkspace, WorkspaceMembers } from './WorkspaceMembers';
 export type SkyRow = NonNullable<ReturnType<typeof useSkyRows>>[number];
 export const useSkyRows = () => useQuery(api.projects.sky, {});
 
-const roles = { codex: 'Codex', claude: 'Claude', cursor: 'Cursor' } as const;
 const agentStatus = (status: string) => status === 'starting' || status === 'running' ? 'working' : status === 'error' ? 'error' : 'done';
 
 export function describe(row: SkyRow) {
@@ -65,6 +65,9 @@ export function WebSky({ go }: { go: (path: string) => void }) {
   const [membersOf, setMembersOf] = useState<string | null>(null);
   const membersWorkspace = workspaces?.find(workspace => workspace.id === membersOf);
   const everyone = workspaces?.find(workspace => workspace.kind === 'public');
+  // The built-in agents each sit on the cloud they last worked on, once they've been used.
+  const uses = useQuery(api.fetchAgents.builtinUses, {});
+  const builtins = useMemo(() => builtinBlobs(uses || []), [uses]);
   const projects = useMemo<SkyProject[]>(() => {
     let mine = 0, shared = 0;
     return (rows || []).map(row => {
@@ -75,12 +78,12 @@ export function WebSky({ go }: { go: (path: string) => void }) {
       return {
         // Everything on your web sky is a project you can view, so every cloud opens.
         id: row.id, name: row.name, description: describe(row), mine: row.mine, enterable: true, owner: row.owner?.split('@')[0],
-        agents: row.runs.map(run => ({ role: roles[run.agent], status: agentStatus(run.status) })),
+        agents: [...row.runs.map(run => ({ role: taskRole(run.prompt), status: agentStatus(run.status) })), ...(builtins.get(row.id) ?? [])],
         x: Math.cos(angle) * radius, y: Math.sin(angle) * radius * (row.mine ? .8 : .6), depth: row.mine ? 1 : .45 + .35 * seed, seed,
         ...(row.placed ? { placed: row.placed } : {}),
       };
     });
-  }, [rows]);
+  }, [rows, builtins]);
   const account = user ? { sub: user.sub || '', label: user.name || user.email || 'You', email: user.email, picture: user.picture } : null;
   const githubLogin = !!user?.sub?.startsWith('github|');
   // Signing in with GitHub the first time offers your repos once; New project always has them.

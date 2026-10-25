@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { requireAccess } from "./access";
+import { grantedRole, requireAccess } from "./access";
 import { recordEvent } from "./events";
 import { currentUser } from "./identity";
 import { keyRow } from "./keyStore";
@@ -260,6 +260,33 @@ export const snapshot = query({
       activity: activity.map((row) => ({ id: row._id, at: row._creationTime, name: row.name, kind: row.kind, text: row.text })),
       jobs: jobs.map((job) => ({ id: job._id, at: job._creationTime, agent: job.agent, kind: job.kind, runId: job.runId ?? null, payload: job.payload, status: job.status, result: job.result ?? null, requestedBy: job.requestedBy })),
     };
+  },
+});
+
+/**
+ * Where each built-in agent has worked lately, among projects the caller can see: the sky shows each
+ * one on the cloud it last worked on (src/sky/builtins.ts), and nowhere until it's been used.
+ */
+export const builtinUses = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await currentUser(ctx);
+    const visible = new Map<string, boolean>();
+    const canSee = async (projectId: Id<"projects">) => {
+      if (!visible.has(projectId)) {
+        const project = await ctx.db.get(projectId);
+        visible.set(projectId, !!project && !!(await grantedRole(ctx, project, user)));
+      }
+      return visible.get(projectId)!;
+    };
+    const uses: { name: string; projectId: string; at: number; working: boolean }[] = [];
+    for (const job of await ctx.db.query("fetchJobs").order("desc").take(200)) {
+      if (await canSee(job.projectId)) uses.push({ name: job.agent, projectId: job.projectId, at: job._creationTime, working: job.status === "queued" || job.status === "running" });
+    }
+    for (const row of await ctx.db.query("fetchActivity").order("desc").take(300)) {
+      if (row.projectId && (await canSee(row.projectId))) uses.push({ name: row.name, projectId: row.projectId, at: row._creationTime, working: false });
+    }
+    return uses;
   },
 });
 

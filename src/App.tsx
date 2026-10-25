@@ -16,6 +16,8 @@ import { ConnectAgent } from './ConnectAgent';
 import { IntegrationsPanel, type ConnectionProvider } from './IntegrationsPanel';
 import { SkyView, type SkyProject } from './sky/SkyView';
 import { seedOf } from './sky/sky-math';
+import { agentKinds } from './sky/agents';
+import { builtinBlobs, taskRole } from './sky/builtins';
 import { placeholderNeighbors } from './sky/neighbors';
 import { cloudStatus, cloudStatusLabel, liveAgentCount, sharedProjectRoom } from './office-panel';
 import { WorkspaceRail } from './WorkspaceRail';
@@ -83,6 +85,11 @@ export default function App() {
   const room = sharedOpen?.room || (altitude === 'project' ? owned : undefined);
   const ownRoomId = sharedOpen?.ownRoomId || owned?.id || '';
   const waitingIds = useMemo(() => new Set((data?.approvals || []).map(item => item.roomId)), [data?.approvals]);
+  // The built-in agents each sit on the cloud they last worked on, once they've been used.
+  const builtins = useMemo(() => builtinBlobs([
+    ...(data?.fetchAgents?.jobs || []).map(job => ({ name: job.agent, projectId: job.roomId, at: job.createdAt, working: job.status === 'queued' || job.status === 'running' })),
+    ...(data?.fetchAgents?.activity || []).map(item => ({ name: item.name, projectId: item.roomId || '', at: item.time, working: false })),
+  ]), [data?.fetchAgents]);
   const skyProjects = useMemo<SkyProject[]>(() => [
     ...skyRooms.map((item, index) => {
       const waiting = waitingIds.has(item.id) || item.agents.some(agent => agent.status === 'approval');
@@ -94,7 +101,11 @@ export default function App() {
         name: item.name,
         description: `${count} agent${count === 1 ? '' : 's'} · ${cloudStatusLabel(cloudStatus(item, waiting, !!item.viewOnly))}`,
         detail: cloudStatusLabel(cloudStatus(item, waiting, !!item.viewOnly)),
-        agents: item.agents.filter(agent => agent.status !== 'ejected').map(agent => ({ role: agent.title || agent.role, status: agent.status, manager: !!agent.manager })),
+        agents: [
+          // Colored by type: from the agent's title or role when that says, otherwise from its task.
+          ...item.agents.filter(agent => agent.status !== 'ejected').map(agent => ({ role: agentKinds.some(kind => kind.match.test(agent.title || agent.role)) ? agent.title || agent.role : taskRole(`${agent.role} ${agent.task}`), status: agent.status, manager: !!agent.manager })),
+          ...(builtins.get(item.id) ?? []),
+        ],
         mine: true,
         placed: item.viewOnly ? undefined : item.cloud?.sky,
         x: Math.cos(angle) * radius,
@@ -104,7 +115,7 @@ export default function App() {
       };
     }),
     ...placeholderNeighbors(),
-  ], [skyRooms, waitingIds]);
+  ], [skyRooms, waitingIds, builtins]);
 
   const showSky = useCallback(() => {
     skyReturn.current = sharedId || roomId || null;
