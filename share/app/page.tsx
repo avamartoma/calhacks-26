@@ -1,4 +1,4 @@
-import { OpenLink } from "@/components/OpenLink";
+import Link from "next/link";
 
 export default function HomePage() {
   return (
@@ -9,8 +9,7 @@ export default function HomePage() {
           <h1>Shared projects</h1>
         </div>
       </header>
-      <p className="banner">Open a project someone shared with you. Nothing to install: it runs here in the browser.</p>
-      <OpenLink />
+      <p className="banner">Open a project at <Link href="/p/your-slug">/p/your-slug</Link>.</p>
     </main>
   );
 }
