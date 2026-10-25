@@ -6,6 +6,7 @@ import { grantedRole, requireAccess, visibleProjects } from "./access";
 import { recordEvent } from "./events";
 import { currentUser } from "./identity";
 import { assertHttpsGitUrl, assertNonEmpty, slugify } from "./validators";
+import { workspaceOf } from "./workspaces";
 
 async function uniqueSlug(ctx: MutationCtx, name: string): Promise<string> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -193,6 +194,7 @@ export const sky = query({
   handler: async (ctx) => {
     const user = await currentUser(ctx);
     const projects = await ctx.db.query("projects").order("desc").collect();
+    const workspaces = (await ctx.db.query("workspaces").withIndex("by_owner", (q) => q.eq("ownerId", user.id)).collect()).sort((a, b) => a.createdAt - b.createdAt);
     const rows = [];
     for (const project of projects) {
       const role = await grantedRole(ctx, project, user);
@@ -200,6 +202,7 @@ export const sky = query({
       const mine = project.ownerId === user.id;
       // Signed out, the sky is only the unsigned office's own projects.
       if (!mine && user.local) continue;
+      const placed = await ctx.db.query("skyPositions").withIndex("by_user_project", (q) => q.eq("userId", user.id).eq("projectId", project._id)).unique();
       const owner = await ctx.db.query("members").withIndex("by_project", (q) => q.eq("projectId", project._id)).collect();
       const sessions = await ctx.db.query("sessions").withIndex("by_project", (q) => q.eq("projectId", project._id)).order("desc").take(1);
       const runs = await ctx.db.query("agentRuns").withIndex("by_project", (q) => q.eq("projectId", project._id)).order("desc").take(6);
@@ -217,6 +220,8 @@ export const sky = query({
         session: sessions[0] ? { id: sessions[0]._id, status: sessions[0].status, previewUrl: sessions[0].previewUrl ?? null, previewStatus: sessions[0].previewStatus ?? null } : null,
         snapshotUrl,
         runs: runs.map((run) => ({ id: run._id, agent: run.agent ?? "claude", status: run.status, userLabel: run.userLabel, prompt: run.prompt.slice(0, 120) })),
+        workspaceId: mine ? workspaceOf(project, workspaces) : null,
+        placed: placed ? { x: placed.x, y: placed.y } : null,
       });
     }
     return rows;

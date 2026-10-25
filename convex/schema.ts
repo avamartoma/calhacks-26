@@ -30,6 +30,8 @@ export default defineSchema({
     resumeCount: v.optional(v.number()),
     // Set when the project was added from the owner's GitHub repos, so a repo is only added once.
     githubRepoId: v.optional(v.number()),
+    // The owner's workspace it sits in. None means the owner's first workspace.
+    workspaceId: v.optional(v.id("workspaces")),
     // The owner let the team's hosted Fetch.ai agents read this project and start work on it.
     fetchDemo: v.optional(v.boolean()),
   })
@@ -229,4 +231,21 @@ export default defineSchema({
     truncated: v.optional(v.boolean()),
     error: v.optional(v.string()),
   }).index("by_run", ["runId"]),
+
+  // A person's skies, as in the local office's workspace rail: name, color, optional picture.
+  workspaces: defineTable({
+    ownerId: v.string(),
+    name: v.string(),
+    color: v.string(),
+    image: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
+
+  // Where a person dragged a cloud on their sky, so it is there on any computer they sign in on.
+  skyPositions: defineTable({
+    userId: v.string(),
+    projectId: v.id("projects"),
+    x: v.number(),
+    y: v.number(),
+  }).index("by_user_project", ["userId", "projectId"]),
 });
