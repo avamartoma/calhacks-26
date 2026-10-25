@@ -27,6 +27,8 @@ function visibleAgents(room: Room) {
 }
 export class OfficeScene {
   renderer: THREE.WebGLRenderer;
+  /** A name and role tag over every character, as the web office shows them. Off, tags only show while walking. */
+  nameTags = false;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(42, 1, .1, 3000);
   rig = new THREE.Group();
@@ -512,7 +514,7 @@ export class OfficeScene {
         const receiptLine=task ? `${task.evidence.length} evidence items / ${checks} of ${task.acceptanceCriteria.length} checks. ` : '';
         const replacement = this.textTexture(charge, `${labels[status]} / ${a.role}`, colors[status], true, (task?.title || a.task).split('\n')[0].slice(0,100)+'\n'+(task?.blocker || a.events.filter(e=>e.kind==='update').at(-1)?.text || receiptLine).replace(/\s+/g,' ').slice(0,180),a.progress);
         actor.screen.image = replacement.image; actor.screen.needsUpdate = true; replacement.dispose();
-        const material=actor.label.material as THREE.SpriteMaterial;material.map?.dispose();material.map=this.textTexture(charge, labels[status], colors[status]);material.needsUpdate=true;
+        const material=actor.label.material as THREE.SpriteMaterial;material.map?.dispose();material.map=this.nameTags?this.textTexture(a.name, a.title || a.role, a.blobColor || colors[status]):this.textTexture(charge, labels[status], colors[status]);material.needsUpdate=true;
       }
 
     }
@@ -750,8 +752,8 @@ export class OfficeScene {
       const reaction = (this.whipReactions.get(a.id) || 0) - this.elapsed;
       if (!this.reduced && reaction > 0) { actor.body.rotation.z = Math.sin(reaction * 18) * .3; actor.eyes.forEach(eye => eye.scale.y = 1.28); }
       actor.label.position.set(actor.group.position.x, 3.12, actor.group.position.z - .65);
-      actor.label.visible = this.walk && (this.selected === a.id || this.whipArmed);
-      actor.label.scale.setScalar(1);actor.label.scale.set(this.selected===a.id?2.9:2.5,this.selected===a.id?.816:.703,1);
+      actor.label.visible = this.nameTags || (this.walk && (this.selected === a.id || this.whipArmed));
+      actor.label.scale.setScalar(1);if(this.nameTags)actor.label.scale.set(this.selected===a.id?3.4:3,this.selected===a.id?.956:.844,1);else actor.label.scale.set(this.selected===a.id?2.9:2.5,this.selected===a.id?.816:.703,1);
       actor.beacon.position.x=actor.group.position.x;actor.beacon.position.z=actor.group.position.z;actor.beacon.material.opacity=this.reduced?.8:(actor.workStatus==='working'?.68+Math.sin(t*2)*.16:.8);
     }
     if(this.neighborWorld.visible)for(const actor of this.neighborActors.values()){

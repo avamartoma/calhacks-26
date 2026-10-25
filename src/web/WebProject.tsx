@@ -106,6 +106,7 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
     try {
       const office = new OfficeScene(container.current, id => setSelected(id));
       office.onLeaveProject = () => go('/');
+      office.nameTags = true;
       const palette = paletteAt(localHour());
       office.setBackdrop({ zenith: palette.zenith, horizon: palette.horizon, cloud: palette.cloudLight });
       office.setPanelWidth(0);
