@@ -12,7 +12,8 @@ export interface OfficeMode { name:string; detail:string; workers:number; minute
 export interface TimelineEntry { id:string; time:number; title:string; kind:string }
 export interface Checkpoint { id:string; label:string; time:number; commit:string|null }
 export interface Agent { credentialSub?: string | null; threadPermissionKey?:string; currentWorkItemId?:string; provider?: 'cursor' | 'claude-code' | 'codex-cli' | 'cursor-sdk' | 'claude'; access?: 'read' | 'edit'; effectiveModel?:string; effectiveEffort?:string; deadline?:number; handoffPacket?: {savedAt:number; task:string; files:string[]; discoveries:WorkEvent[]; failedAttempts:WorkEvent[]; nextSteps:{step:string;status:string}[]; diff:string; instruction:string}; fastMode?: boolean; lastRequestedServiceTier?: string; id: string; name: string; title?: string; role: string; task: string; manager?: boolean; model: string; status: AgentStatus; color: string; progress: number; events: WorkEvent[]; plan: { step: string; status: string }[]; tokens: number; threadId?: string; turnId?: string; talkingUntil?: number; ejectedAt?: number; diff?: string; replaces?: string; replacedBy?: string }
-export interface Workspace { id: string; name: string; color: string; image?: string; createdAt: number }
+/** `kind` and `admin` come from the web app: shared and public workspaces, and whether you created it. */
+export interface Workspace { id: string; name: string; color: string; image?: string; createdAt: number; kind?: 'personal' | 'shared' | 'public'; admin?: boolean }
 /** Where a project's cloud sits on the canvas. `depth` offsets it for parallax when panning. */
 /** `sky` is where the cloud was dragged on the workspace sky; x and y are the older 3D view's spot. */
 export interface CloudSpot { x: number; y: number; depth: number; sky?: { x: number; y: number } }

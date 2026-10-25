@@ -87,3 +87,11 @@ test("Codex's retries are left out, and its error keeps only the reason", () => 
   assert.deepEqual(lines, [{ kind: 'error', text: reason }]);
   assert.deepEqual(result, { isError: true, text: reason });
 });
+
+test('each agent reports the conversation a follow-up resumes', () => {
+  assert.equal(parseStream(line({ type: 'system', subtype: 'init', session_id: '6d1f2c9a-claude-session' }), 'claude').session, '6d1f2c9a-claude-session');
+  assert.equal(parseStream(line({ type: 'system', subtype: 'init', session_id: 'cursor-chat-123456' }), 'cursor').session, 'cursor-chat-123456');
+  assert.equal(parseStream(line({ type: 'thread.started', thread_id: '0199a2b3-codex-thread' }), 'codex').session, '0199a2b3-codex-thread');
+  assert.equal(parseStream(line({ type: 'system', subtype: 'init', session_id: 'bad id; rm -rf /' }), 'claude').session, null);
+  assert.equal(parseStream(line({ type: 'assistant', message: { content: [] } }), 'claude').session, null);
+});
