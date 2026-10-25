@@ -30,6 +30,10 @@ export default defineSchema({
     resumeCount: v.optional(v.number()),
     // Set when the project was added from the owner's GitHub repos, so a repo is only added once.
     githubRepoId: v.optional(v.number()),
+    // The owner's workspace it sits in. None means the owner's first workspace.
+    workspaceId: v.optional(v.id("workspaces")),
+    // The owner let the team's hosted Fetch.ai agents read this project and start work on it.
+    fetchDemo: v.optional(v.boolean()),
   })
     .index("by_owner_github", ["ownerId", "githubRepoId"])
     .index("by_slug", ["slug"])
@@ -126,7 +130,26 @@ export default defineSchema({
     last4: v.string(),
     // Claude only: a Claude Pro/Max token from `claude setup-token` instead of an API key.
     subscription: v.optional(v.boolean()),
+    // How it was connected. A signed-in account (ChatGPT for Codex, Claude, Cursor) stores that
+    // tool's own credentials, which a run uses and may refresh. Rows without one hold a key.
+    method: v.optional(v.union(v.literal("apiKey"), v.literal("chatgpt"), v.literal("claudeAccount"), v.literal("cursorAccount"))),
+    email: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
     updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  // A sign-in someone started from Connections and hasn't finished. The verifier and state are
+  // encrypted; the browser only ever sees the link, the code to enter and the outcome.
+  logins: defineTable({
+    userId: v.string(),
+    provider: v.union(v.literal("codex"), v.literal("claude"), v.literal("cursor")),
+    status: v.union(v.literal("preparing"), v.literal("waiting"), v.literal("done"), v.literal("error"), v.literal("cancelled")),
+    url: v.optional(v.string()),
+    code: v.optional(v.string()),
+    detail: v.optional(v.string()),
+    secret: v.optional(v.object({ ciphertext: v.string(), iv: v.string() })),
+    sandboxId: v.optional(v.string()),
+    expiresAt: v.number(),
   }).index("by_user", ["userId"]),
 
   // One agent run inside a project's sandbox, started from the web office. No agent means Claude.
@@ -166,6 +189,37 @@ export default defineSchema({
     .index("by_hash", ["hashedToken"])
     .index("by_project", ["projectId"]),
 
+  // The ASI:One (Fetch.ai) agents hosted on Agentverse: who checked in last, what they did, and the
+  // work the web office queued for them. They reach Convex over HTTPS with FETCH_AGENT_TOKEN.
+  fetchAgents: defineTable({
+    name: v.string(),
+    address: v.string(),
+    details: v.any(),
+    lastSeen: v.number(),
+  }).index("by_name", ["name"]),
+
+  fetchActivity: defineTable({
+    name: v.string(),
+    kind: v.string(),
+    text: v.string(),
+    projectId: v.optional(v.id("projects")),
+  }).index("by_project", ["projectId"]),
+
+  fetchJobs: defineTable({
+    agent: v.string(),
+    kind: v.string(),
+    projectId: v.id("projects"),
+    runId: v.optional(v.id("agentRuns")),
+    payload: v.any(),
+    status: v.union(v.literal("queued"), v.literal("running"), v.literal("done"), v.literal("failed")),
+    result: v.optional(v.any()),
+    requestedBy: v.string(),
+    startedAt: v.optional(v.number()),
+    finishedAt: v.optional(v.number()),
+  })
+    .index("by_agent_status", ["agent", "status"])
+    .index("by_project", ["projectId"]),
+
   // What one agent run changed: a snapshot of the workspace (in a shadow git history kept apart
   // from the project's own) taken just before it started, then the files and patch after it ended.
   runChanges: defineTable({
@@ -177,4 +231,21 @@ export default defineSchema({
     truncated: v.optional(v.boolean()),
     error: v.optional(v.string()),
   }).index("by_run", ["runId"]),
+
+  // A person's skies, as in the local office's workspace rail: name, color, optional picture.
+  workspaces: defineTable({
+    ownerId: v.string(),
+    name: v.string(),
+    color: v.string(),
+    image: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
+
+  // Where a person dragged a cloud on their sky, so it is there on any computer they sign in on.
+  skyPositions: defineTable({
+    userId: v.string(),
+    projectId: v.id("projects"),
+    x: v.number(),
+    y: v.number(),
+  }).index("by_user_project", ["userId", "projectId"]),
 });

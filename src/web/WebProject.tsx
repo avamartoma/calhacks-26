@@ -12,6 +12,7 @@ import { localHour, paletteAt } from '../sky/time-of-day';
 import type { Agent, Room } from '../types';
 import { ConnectionTabs, ConnectionsPanel, providerNames, providers, useConnections, type Provider } from './Connections';
 import { describe, useSkyRows, type SkyRow } from './WebSky';
+import { FetchPanel } from './FetchWeb';
 
 type Run = NonNullable<ReturnType<typeof useRuns>>[number];
 const useRuns = (projectId: Id<'projects'>) => useQuery(api.agentRuns.list, { projectId });
@@ -53,6 +54,7 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
   const [selected, setSelected] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [accountsOpen, setAccountsOpen] = useState(false);
+  const [fetchOpen, setFetchOpen] = useState(false);
   const [error, setError] = useState('');
   const container = useRef<HTMLDivElement>(null);
   const scene = useRef<OfficeScene | null>(null);
@@ -109,8 +111,9 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
   return <div className="app quiet-office opencloud web-office project-shell">
     <main className="workspace">
       <div className="opencloud-actions">
-        <button className="sky-return" aria-pressed={accountsOpen} onClick={() => { setAccountsOpen(open => !open); setShareOpen(false); }}>Accounts</button>
-        <button className="sky-return" aria-pressed={shareOpen} onClick={() => { setShareOpen(open => !open); setAccountsOpen(false); }}><ExternalLink size={16} /> Share</button>
+        <button className="sky-return" aria-pressed={accountsOpen} onClick={() => { setAccountsOpen(open => !open); setShareOpen(false); setFetchOpen(false); }}>Accounts</button>
+        <button className="sky-return" aria-pressed={shareOpen} onClick={() => { setShareOpen(open => !open); setAccountsOpen(false); setFetchOpen(false); }}><ExternalLink size={16} /> Share</button>
+        <button className="sky-return" aria-pressed={fetchOpen} onClick={() => { setFetchOpen(open => !open); setAccountsOpen(false); setShareOpen(false); }}>ASI:One agents</button>
         {editor && <DownloadButton projectId={projectId} />}
         <button className="sky-return" onClick={() => go('/')}><Cloud size={16} /> Sky</button>
         <span className="web-title">{row.name}<small>{describe(row)}</small></span>
@@ -121,6 +124,7 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
         <AgentsPanel projectId={projectId} runs={runs} editor={editor} selected={selected} onSelect={setSelected} />
         {shareOpen && <SharePanel row={row} onClose={() => setShareOpen(false)} />}
         {accountsOpen && <ConnectionsPanel onClose={() => setAccountsOpen(false)} />}
+        {fetchOpen && <FetchPanel projectId={projectId} runs={runs || []} editor={editor} mine={row.mine} onClose={() => setFetchOpen(false)} />}
         <PreviewDock cloud={preview} />
         {editor && sessionId && row.session?.status === 'ready' && !row.session.previewUrl && <StartPreview sessionId={sessionId} />}
         {error && <p className="web-toast" role="alert">{error}<button aria-label="Dismiss" onClick={() => setError('')}><X size={14} /></button></p>}

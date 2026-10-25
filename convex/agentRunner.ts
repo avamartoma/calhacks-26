@@ -9,7 +9,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
-import { decryptKey } from "./lib/keyCrypto";
+import { decryptKey, encryptKey } from "./lib/keyCrypto";
 import { parseStream } from "./lib/runStream";
 import { sandboxProviderName } from "./lib/sandbox";
 
@@ -61,7 +61,7 @@ const AGENTS: Record<Agent, { name: string; bin: string; install: string; start:
     bin: "codex",
     install: 'npm install -g --prefix "$HOME/.local" @openai/codex@0.156.1',
     // A Codex home per run, so one person's sessions never mix with another's in a shared sandbox.
-    start: 'CODEX_HOME="/tmp/codex-$RUN" && mkdir -p "$CODEX_HOME" && export CODEX_HOME && codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox "$TASK"',
+    start: 'CODEX_HOME="/tmp/codex-$RUN" && mkdir -p "$CODEX_HOME" && export CODEX_HOME && codex -c cli_auth_credentials_store="file" exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox "$TASK"',
   },
   cursor: {
     name: "Cursor",
@@ -87,11 +87,41 @@ cd "${WORKSPACE}"
 echo $? > "$EXIT"
 `;
 
-/** The variables that carry a person's key into their agent. */
-function keyEnv(agent: Agent, key: string, subscription: boolean): Record<string, string> {
-  if (agent === "codex") return { CODEX_API_KEY: key, OPENAI_API_KEY: key };
-  if (agent === "cursor") return { CURSOR_API_KEY: key };
-  return subscription ? { CLAUDE_CODE_OAUTH_TOKEN: key } : { ANTHROPIC_API_KEY: key };
+type Stored = { ciphertext: string; iv: string; subscription: boolean; method: "apiKey" | "chatgpt" | "claudeAccount" | "cursorAccount" };
+
+/**
+ * A signed-in ChatGPT or Claude account is that tool's own credentials file, copied into a folder
+ * only this run uses. The tool refreshes it in place, and saveCredentials keeps the new copy.
+ */
+const credentialFile = (method: Stored["method"], runId: string) =>
+  method === "chatgpt" ? `/tmp/codex-${runId}/auth.json` : method === "claudeAccount" ? `/tmp/claude-${runId}/.credentials.json` : null;
+
+/** The variables that carry a person's key or sign-in into their agent. */
+function keyEnv(agent: Agent, stored: Stored, secret: string, runId: string): Record<string, string> {
+  if (stored.method === "chatgpt") return {};
+  if (stored.method === "claudeAccount") return { CLAUDE_CONFIG_DIR: `/tmp/claude-${runId}` };
+  if (agent === "codex") return { CODEX_API_KEY: secret, OPENAI_API_KEY: secret };
+  if (agent === "cursor") return { CURSOR_API_KEY: secret };
+  return stored.subscription ? { CLAUDE_CODE_OAUTH_TOKEN: secret } : { ANTHROPIC_API_KEY: secret };
+}
+
+/** After a run, keeps a refreshed sign-in and removes the run's private copy. */
+async function saveCredentials(ctx: ActionCtx, sandbox: Sandbox, row: { _id: Id<"agentRuns">; userId: string; agent?: Agent }) {
+  const agent: Agent = row.agent ?? "claude";
+  const stored = await ctx.runQuery(internal.keyStore.get, { userId: row.userId, provider: agent });
+  const file = stored ? credentialFile(stored.method, row._id) : null;
+  try {
+    if (stored && file && (stored.method === "chatgpt" || stored.method === "claudeAccount")) {
+      const now = (await run(sandbox, `cat "${file}" 2>/dev/null; true`)).stdout.trim();
+      const before = (await decryptKey(stored)).trim();
+      if (now && now !== before && JSON.parse(now)) {
+        await ctx.runMutation(internal.keyStore.refresh, { userId: row.userId, provider: agent, method: stored.method, before: stored.ciphertext, ...(await encryptKey(now)) });
+      }
+    }
+  } catch {
+    // Keep the stored sign-in; the next run refreshes it again.
+  }
+  await run(sandbox, `rm -rf "/tmp/codex-${row._id}" "/tmp/claude-${row._id}"; true`);
 }
 
 async function fail(ctx: ActionCtx, runId: Id<"agentRuns">, detail: string) {
@@ -123,6 +153,12 @@ export const launch = internalAction({
         if (install.code !== 0) return await fail(ctx, args.runId, `Couldn't install ${AGENTS[agent].name} in the sandbox: ${(install.stdout + install.stderr).trim().slice(-400)}`);
       }
       const paths = files(args.runId);
+      const secret = stored ? await decryptKey(stored) : "";
+      const file = stored ? credentialFile(stored.method, args.runId) : null;
+      if (file) {
+        await sandbox.files.write(file, secret);
+        await run(sandbox, `chmod 700 "$(dirname "${file}")"; chmod 600 "${file}"`);
+      }
       const script = args.testCommand ? `cd "${WORKSPACE}" 2>/dev/null; (${args.testCommand}) > "$OUT" 2> "$ERR"; echo $? > "$EXIT"` : startScript(agent);
       await ctx.runAction(internal.runChanges.baseline, { runId: args.runId, sandboxId: info.session.sandboxId });
       const handle = await sandbox.commands.run(script, {
@@ -132,7 +168,7 @@ export const launch = internalAction({
           RUN: args.runId,
           OUT: paths.out, ERR: paths.err, EXIT: paths.exit,
           IS_SANDBOX: "1",
-          ...(stored ? keyEnv(agent, await decryptKey(stored), stored.subscription) : {}),
+          ...(stored ? keyEnv(agent, stored, secret, args.runId) : {}),
         },
       });
       const marked = await ctx.runMutation(internal.agentRuns.markRunning, { runId: args.runId, pid: handle.pid });
@@ -167,6 +203,7 @@ export const poll = internalAction({
     const exit = (await run(sandbox, `cat "${paths.exit}" 2>/dev/null; true`)).stdout.trim();
     const caughtUp = complete.length === read.stdout.length && read.stdout.length < READ_CHUNK;
     if (exit && caughtUp) {
+      await saveCredentials(ctx, sandbox, row);
       const code = Number(exit);
       const result = parsed.result;
       if (code === 0 && !result?.isError) {
@@ -181,6 +218,7 @@ export const poll = internalAction({
     }
     if (Date.now() - row.startedAt > MAX_RUN_MS) {
       if (row.pid) await run(sandbox, stop(row.pid));
+      await saveCredentials(ctx, sandbox, row);
       return await fail(ctx, args.runId, "Stopped after 30 minutes");
     }
     await ctx.scheduler.runAfter(POLL_MS, internal.agentRunner.poll, { runId: args.runId });
@@ -195,6 +233,7 @@ export const kill = internalAction({
     try {
       const sandbox = await Sandbox.connect(info.session.sandboxId, { apiKey: e2bKey() });
       await run(sandbox, stop(info.run.pid));
+      await saveCredentials(ctx, sandbox, info.run);
     } catch {
       // The sandbox is already gone, so the agent is too.
     }
