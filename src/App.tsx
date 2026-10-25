@@ -8,6 +8,7 @@ import '@fontsource/urbanist/800.css';
 import { OfficeScene } from './scene';
 import type { Altitude, OfficeState, Room } from './types';
 import { AgentSide } from './AgentSide';
+import { AgentDetail } from './AgentDetail';
 import { PreviewDock } from './PreviewDock';
 import { ConflictNotice } from './ConflictNotice';
 import { SharePanel } from './SharePanel';
@@ -48,6 +49,8 @@ export default function App() {
   const [altitude, setAltitude] = useState<Altitude>(() => new URLSearchParams(location.search).get('project') ? 'project' : 'sky');
   const [sharedId, setSharedId] = useState<string | null>(null);
   const [selection, setSelection] = useState<string | null>(null);
+  // Clicking an agent opens its own panel; closing it keeps the agent highlighted in the Agents list.
+  const [detailOpen, setDetailOpen] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const [busy, setBusy] = useState(false);
@@ -130,6 +133,7 @@ export default function App() {
   }, []);
   const select = useCallback((id: string) => {
     setSelection(id);
+    setDetailOpen(true);
     scene.current?.focus(id);
   }, []);
   const chooseWorkspace = useCallback((id: string) => { setWorkspaceId(id); showSky(); }, [showSky]);
@@ -233,6 +237,10 @@ export default function App() {
         {altitude === 'project' && room && !room.demo && !room.viewOnly && <><PreviewDock cloud={room.preview} /><ConflictNotice conflicts={room.preview?.conflicts} /></>}
         {altitude === 'project' && room && <AgentSide room={room} identities={data.identities || []} ownRoomId={ownRoomId} busy={busy} selectedId={selection} models={[...(data.connection.account ? data.connection.models : []), ...(data.claude?.configured ? data.claude.models : [])]} fetch={data.fetchAgents} action={action} onSelect={select} onCloned={(id, agentId) => { setSharedId(null); setRoomId(id); setAltitude('project'); setSelection(agentId); setShareOpen(false); }} share={shareOpen && !room.demo && !room.viewOnly ? <><SharePanel projectId={room.preview?.projectId} projectName={room.name} roomId={room.id} previewUrl={room.preview?.status === 'live' ? room.preview.previewUrl : undefined} /><ConnectAgent projectId={room.preview?.projectId} /></> : undefined} />}
       </div>
+      {altitude === 'project' && room && detailOpen && !accountsOpen && (() => {
+        const agent = room.agents.find(item => item.id === selection);
+        return agent ? <AgentDetail key={agent.id} agent={agent} room={room} data={data} busy={busy} action={action} onSelect={select} onFocus={() => scene.current?.focus(agent.id)} onClose={() => setDetailOpen(false)} /> : null;
+      })()}
       {accountsOpen && <AccountsPanel room={(altitude === 'project' && room && !room.viewOnly ? room : ownedRooms.find(item => !item.demo && !item.archived)) || ownedRooms[0]} connection={data.connection} focus={connectionFocus} onClose={() => setAccountsOpen(false)} />}
     </main>
     {(toast || error) && <div className={`toast ${error ? 'error' : ''}`} role={error ? 'alert' : 'status'}>{error ? <X size={18} /> : <Check size={18} />}<span>{error || toast}</span><button aria-label="Dismiss notification" onClick={() => { setToast(''); setError(''); }}><X size={16} /></button></div>}
