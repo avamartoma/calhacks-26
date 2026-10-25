@@ -210,9 +210,9 @@ export default function App() {
           <div className="new-project-actions"><button type="button" className="secondary" onClick={() => setCreating(false)}>Cancel</button><button className="primary" disabled={busy}>Create project</button></div>
         </form>}
         {altitude === 'project' && sceneError && <div className="scene-fallback" role="status"><p>{sceneError}</p><button className="primary" onClick={() => { scene.current?.dispose(); scene.current = null; setSceneReady(false); setSceneError(''); }}>Retry 3D</button></div>}
-        {accountsOpen && <AccountsPanel room={(altitude === 'project' && room && !room.viewOnly ? room : ownedRooms.find(item => !item.demo && !item.archived)) || ownedRooms[0]} connection={data.connection} focus={connectionFocus} onClose={() => setAccountsOpen(false)} />}
         {altitude === 'project' && room && <AgentSide room={room} identities={data.identities || []} ownRoomId={ownRoomId} busy={busy} selectedId={selection} models={[...(data.connection.account ? data.connection.models : []), ...(data.claude?.configured ? data.claude.models : [])]} fetch={data.fetchAgents} action={action} onSelect={select} onCloned={(id, agentId) => { setSharedId(null); setRoomId(id); setAltitude('project'); setSelection(agentId); setShareOpen(false); }} share={shareOpen && !room.demo && !room.viewOnly ? <><SharePanel projectId={room.preview?.projectId} projectName={room.name} roomId={room.id} previewUrl={room.preview?.status === 'live' ? room.preview.previewUrl : undefined} /><ConnectAgent projectId={room.preview?.projectId} /></> : undefined} />}
       </div>
+      {accountsOpen && <AccountsPanel room={(altitude === 'project' && room && !room.viewOnly ? room : ownedRooms.find(item => !item.demo && !item.archived)) || ownedRooms[0]} connection={data.connection} focus={connectionFocus} onClose={() => setAccountsOpen(false)} />}
       {altitude === 'project' && room && !room.demo && !room.viewOnly && <section className="floor-preview" aria-label="Live preview below the office floor">
         <PreviewDock cloud={room.preview} />
         <ConflictNotice conflicts={room.preview?.conflicts} />
