@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
-import { ClipboardList, ExternalLink, LoaderCircle, MessageSquare, Radar, Send, ShieldCheck, X } from 'lucide-react';
+import { ClipboardList, ExternalLink, LoaderCircle, MessageSquare, Radar, Send, ShieldCheck } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import '../fetch-agents.css';
@@ -37,7 +37,8 @@ function Lines({ text }: { text: string }) {
   return <div className="fetch-lines">{text.split('\n').map((line, i) => line.trim() ? <p key={i}>{line.split(/(\*\*[^*]+\*\*)/).map((part, j) => part.startsWith('**') && part.endsWith('**') ? <b key={j}>{part.slice(2, -2)}</b> : part)}</p> : <br key={i} />)}</div>;
 }
 
-export function FetchPanel({ projectId, runs, editor, mine, onClose }: { projectId: Id<'projects'>; runs: { id: Id<'agentRuns'>; prompt: string; status: string }[]; editor: boolean; mine: boolean; onClose: () => void }) {
+/** The Fetch.ai tab of the Agents panel: the office, planner, watcher and reviewer. */
+export function FetchAgents({ projectId, runs, editor, mine }: { projectId: Id<'projects'>; runs: { id: Id<'agentRuns'>; prompt: string; status: string }[]; editor: boolean; mine: boolean }) {
   const snapshot = useSnapshot(projectId);
   const setDemo = useMutation(api.fetchAgents.setDemo);
   const now = useNow();
@@ -46,9 +47,8 @@ export function FetchPanel({ projectId, runs, editor, mine, onClose }: { project
   const agent = (name: Name) => snapshot.agents.find(item => item.name === name);
   // Built in: they run in the backend whenever they're asked, so they're always available.
   const online = (name: Name) => { const row = agent(name); return snapshot.builtIn || (!!row && row.lastSeen > 0 && now - row.lastSeen < ONLINE_MS); };
-  return <aside className="web-panel fetch-web" aria-label="Fetch.ai agents">
-    <header><h2>Built-In Agents</h2><button className="icon-button" aria-label="Close" onClick={onClose}><X size={16} /></button></header>
-    <p className="web-note">Four agents that come with every project. They answer with Claude when you've connected a Claude API key under Accounts.</p>
+  return <div className="fetch-web fetch-embedded" aria-label="Fetch.ai agents">
+    <p className="web-note">Four Fetch.ai agents that come with every project. They answer with Claude when you've connected a Claude API key under Accounts.</p>
     <div className="web-tabs fetch-web-tabs" role="tablist">
       {order.map(name => { const Icon = roles[name].icon; return <button key={name} role="tab" aria-selected={open === name} onClick={() => setOpen(name)}><Icon size={14} /> {roles[name].title}<i className={`fetch-dot ${online(name) ? 'on' : ''}`} /></button>; })}
     </div>
@@ -59,7 +59,7 @@ export function FetchPanel({ projectId, runs, editor, mine, onClose }: { project
     {open === 'watcher' && <Activity items={snapshot.activity.filter(item => item.name === 'watcher')} empty="Nothing noticed yet. The watcher notes each agent run on this project as it starts, finishes or fails." />}
     {mine && <label className="web-check fetch-demo"><input type="checkbox" checked={snapshot.demo} onChange={e => void setDemo({ projectId, on: e.target.checked })} /> Also let the agents on ASI:One (Fetch.ai) read this project and start work on your Claude connection</label>}
     {open !== 'watcher' && snapshot.activity.length > 0 && <details className="compact-disclosure"><summary>Recent agent activity · {snapshot.activity.length}</summary><Activity items={snapshot.activity} empty="" /></details>}
-  </aside>;
+  </div>;
 }
 
 function useQueue(projectId: Id<'projects'>) {

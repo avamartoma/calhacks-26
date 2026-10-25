@@ -12,7 +12,7 @@ import { localHour, paletteAt } from '../sky/time-of-day';
 import type { Agent, Room } from '../types';
 import { ConnectionTabs, ConnectionsPanel, providerNames, providers, useConnections, type Provider } from './Connections';
 import { describe, useSkyRows, type SkyRow } from './WebSky';
-import { FetchPanel } from './FetchWeb';
+import { FetchAgents } from './FetchWeb';
 import { ShareLinkButtons } from './ShareLinks';
 import { CloneButton, clearArrival, peekArrival, type CloneTarget } from './CloneAgent';
 import { kindOf } from '../sky/agents';
@@ -72,7 +72,6 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
   const [selected, setSelected] = useState<string | null>(() => { const arrived = peekArrival(row.id); return arrived ? `pa:${arrived}` : null; });
   const [shareOpen, setShareOpen] = useState(false);
   const [accountsOpen, setAccountsOpen] = useState(false);
-  const [fetchOpen, setFetchOpen] = useState(false);
   const [error, setError] = useState('');
   const container = useRef<HTMLDivElement>(null);
   const scene = useRef<OfficeScene | null>(null);
@@ -145,9 +144,8 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
   return <div className="app quiet-office opencloud web-office project-shell">
     <main className="workspace">
       <div className="opencloud-actions">
-        <button className="sky-return" aria-pressed={accountsOpen} onClick={() => { setAccountsOpen(open => !open); setShareOpen(false); setFetchOpen(false); }}>Accounts</button>
-        <button className="sky-return" aria-pressed={shareOpen} onClick={() => { setShareOpen(open => !open); setAccountsOpen(false); setFetchOpen(false); }}><ExternalLink size={16} /> Share</button>
-        <button className="sky-return" aria-pressed={fetchOpen} onClick={() => { setFetchOpen(open => !open); setAccountsOpen(false); setShareOpen(false); }}>Built-In Agents</button>
+        <button className="sky-return" aria-pressed={accountsOpen} onClick={() => { setAccountsOpen(open => !open); setShareOpen(false); }}>Accounts</button>
+        <button className="sky-return" aria-pressed={shareOpen} onClick={() => { setShareOpen(open => !open); setAccountsOpen(false); }}><ExternalLink size={16} /> Share</button>
         {editor && <DownloadButton projectId={projectId} />}
         <button className="sky-return" onClick={() => go('/')}><Cloud size={16} /> Sky</button>
         <span className="web-title">{row.name}<small>{describe(row)}</small></span>
@@ -155,10 +153,9 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
       <div className="world">
         <div ref={container} className="world-canvas" />
         <div className="cloud-arrival" style={{ background: `rgb(${paletteAt(localHour()).cloudLight.map(v => Math.round(v * 255)).join(',')})` }} />
-        <AgentsPanel projectId={projectId} runs={runs} lasting={lasting} tickets={tickets} targets={targets} go={go} editor={editor} selected={selected} onSelect={setSelected} />
+        <AgentsPanel projectId={projectId} runs={runs} lasting={lasting} tickets={tickets} targets={targets} go={go} editor={editor} owner={row.mine} selected={selected} onSelect={setSelected} />
         {shareOpen && <SharePanel row={row} onClose={() => setShareOpen(false)} />}
         {accountsOpen && <ConnectionsPanel onClose={() => setAccountsOpen(false)} />}
-        {fetchOpen && <FetchPanel projectId={projectId} runs={runs || []} editor={editor} mine={row.mine} onClose={() => setFetchOpen(false)} />}
         <PreviewDock cloud={preview} />
         {editor && sessionId && row.session?.status === 'ready' && !row.session.previewUrl && <StartPreview sessionId={sessionId} />}
         {error && <p className="web-toast" role="alert">{error}<button aria-label="Dismiss" onClick={() => setError('')}><X size={14} /></button></p>}
@@ -177,18 +174,19 @@ function StartPreview({ sessionId }: { sessionId: Id<'sessions'> }) {
   </div>;
 }
 
-function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, selected, onSelect }: { projectId: Id<'projects'>; runs: Run[] | undefined; lasting: Lasting[] | undefined; tickets: Ticket[] | undefined; targets: CloneTarget[]; go: (path: string) => void; editor: boolean; selected: string | null; onSelect: (id: string | null) => void }) {
+function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, owner, selected, onSelect }: { projectId: Id<'projects'>; runs: Run[] | undefined; lasting: Lasting[] | undefined; tickets: Ticket[] | undefined; targets: CloneTarget[]; go: (path: string) => void; editor: boolean; owner: boolean; selected: string | null; onSelect: (id: string | null) => void }) {
   const removeLasting = useMutation(api.projectAgents.remove);
   const connections = useConnections();
   const connected = providers.filter(provider => connections?.providers[provider].connected);
-  const [chosen, setChosen] = useState<Provider | null>(() => localStorage.getItem('opencloud-agent') as Provider | null);
-  // The program picked up top, kept even before it's connected; the connect box shows until it is.
-  const agent: Provider = chosen && providers.includes(chosen) ? chosen : connected[0] ?? 'claude';
-  const ready = connected.includes(agent);
+  const [chosen, setChosen] = useState<Provider | 'fetch' | null>(() => localStorage.getItem('opencloud-agent') as Provider | null);
+  const fetchOpen = chosen === 'fetch';
+  const agent = chosen && chosen !== 'fetch' && connected.includes(chosen) ? chosen : connected[0];
+  // The tab shown as picked: the agent that will run, or with none connected, the one to connect.
+  const tab: Provider = agent ?? (chosen && chosen !== 'fetch' ? chosen : 'claude');
   // The model for each program, remembered on this browser. "" is the program's own default.
   const [models, setModels] = useState<Partial<Record<Provider, string>>>(() => { try { return JSON.parse(localStorage.getItem('opencloud-models') || '{}'); } catch { return {}; } });
-  const model = models[agent] ?? '';
-  const pickModel = (value: string) => { const next = { ...models, [agent]: value }; setModels(next); localStorage.setItem('opencloud-models', JSON.stringify(next)); };
+  const model = models[tab] ?? '';
+  const pickModel = (value: string) => { const next = { ...models, [tab]: value }; setModels(next); localStorage.setItem('opencloud-models', JSON.stringify(next)); };
   const start = useMutation(api.agentRuns.start);
   const stop = useMutation(api.agentRuns.stop);
   const [prompt, setPrompt] = useState('');
@@ -203,16 +201,20 @@ function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, s
   const unassigned = shown.filter(ticket => !ticket.agentId || !team.some(item => item.id === ticket.agentId));
   return <aside className="agent-side web-side" aria-label="Agents">
     <header><b>Agents</b><span>{(tickets || []).filter(ticket => ticket.status === 'working').length + otherRuns.filter(working).length} working</span></header>
-    {editor && <div className="web-program">
-      <div className="web-tabs web-agent-picker" role="radiogroup" aria-label="Program the agents run on">
-        {providers.map(provider => <button key={provider} type="button" role="radio" aria-checked={agent === provider} aria-selected={agent === provider} title={connected.includes(provider) ? undefined : `${providerNames[provider]} isn't connected yet`} onClick={() => { setChosen(provider); localStorage.setItem('opencloud-agent', provider); }}>{providerNames[provider]}</button>)}
-      </div>
-      <label className="web-model">Model
-        <select value={model} onChange={e => pickModel(e.target.value)}>{MODELS[agent].map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>
-      </label>
-    </div>}
-    {editor && <AskManager projectId={projectId} manager={manager} engine={agent} model={model} />}
-    {editor && connections && !ready && <div className="web-key-needed"><b>Connect {providerNames[agent]} so the team can work on it</b><ConnectionTabs key={agent} initial={agent} /></div>}
+    <div className="web-tabs web-agent-picker" role="radiogroup" aria-label="Agent">
+      {providers.map(provider => {
+        // With one program connected, the others wait for Accounts; with none, each tab offers to connect.
+        const off = editor && !!connected.length && !connected.includes(provider);
+        return <button key={provider} type="button" role="radio" aria-checked={!fetchOpen && tab === provider} aria-selected={!fetchOpen && tab === provider} disabled={off} title={off ? `Connect ${providerNames[provider]} in Accounts` : undefined} onClick={() => { setChosen(provider); localStorage.setItem('opencloud-agent', provider); }}>{providerNames[provider]}</button>;
+      })}
+      <button type="button" role="radio" aria-checked={fetchOpen} aria-selected={fetchOpen} onClick={() => setChosen('fetch')}>Fetch.ai</button>
+    </div>
+    {fetchOpen ? <FetchAgents projectId={projectId} runs={runs || []} editor={editor} mine={owner} /> : <>
+    {editor && agent && <label className="web-model">Model
+      <select value={model} onChange={e => pickModel(e.target.value)}>{MODELS[agent].map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>
+    </label>}
+    {editor && <AskManager projectId={projectId} manager={manager} {...(agent ? { engine: agent, model } : {})} />}
+    {editor && connections && !agent && <div className="web-key-needed"><b>Connect Codex, Claude or Cursor so the team can work</b><ConnectionTabs key={tab} initial={tab} /></div>}
     {!editor && <p className="web-note">You can watch this project's agents. Ask the owner for edit access to give them work.</p>}
     {!!team.length && <ul className="web-runs web-lasting web-team" aria-label="This project's agents">
       {team.map(item => {
@@ -236,7 +238,7 @@ function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, s
     </ul>}
     {!!unassigned.length && <><h3 className="web-subhead">Waiting for an agent</h3><ul className="web-tickets">{unassigned.map(ticket => <TicketItem key={ticket.id} ticket={ticket} team={team} editor={editor} Log={RunLog} />)}</ul></>}
     {error && <p className="web-error" role="alert">{error}</p>}
-    {editor && ready && <details className="web-direct">
+    {editor && agent && <details className="web-direct">
       <summary>Start one agent directly</summary>
       <form className="web-start" onSubmit={async event => {
           event.preventDefault(); setBusy(true); setError('');
@@ -261,6 +263,7 @@ function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, s
       </li>)}
     </ul>
     <TicketArchive tickets={(tickets || []).filter(ticket => ticket.archivedAt)} team={team} editor={editor} />
+    </>}
   </aside>;
 }
 

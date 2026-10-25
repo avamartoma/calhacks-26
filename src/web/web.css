@@ -56,6 +56,13 @@
 .web-office .cloud-arrival{animation-delay:.3s}
 /* The ASI:One (Fetch.ai) agents panel. Its chat, planner and review parts reuse fetch-agents.css. */
 .fetch-web{width:min(440px,calc(100% - 28px))}
+.fetch-embedded{width:auto;display:flex;flex-direction:column;gap:10px}
+.fetch-embedded p{font-size:12.5px;line-height:1.55;margin:0}
+.fetch-embedded .fetch-web-tabs{flex-wrap:wrap}
+.fetch-embedded .fetch-web-tabs button{padding:7px 4px}
+.fetch-embedded .fetch-demo input{width:auto}
+.fetch-embedded details{font-size:12px;color:#53664f}
+.fetch-embedded summary{cursor:pointer;font-weight:600;line-height:1.6}
 .fetch-web-tabs button{gap:5px}
 .fetch-web-tabs .fetch-dot{margin-left:2px}
 .fetch-web .fetch-demo{align-items:flex-start;line-height:1.45}
