@@ -200,6 +200,30 @@ function ProjectFolders({ projects, onOpen }: { projects: SkyProject[]; onOpen: 
  * your projects (or clicking it) flies into it: the screen fills with white and its page
  * appears. Labels are HTML, placed on each object so text stays crisp and always fits.
  */
+type Ranked = { query: string; mode: 'semantic' | 'keyword'; failed?: boolean; results: { id: string; score: number; match: string }[] };
+
+/** Asks the office server to rank the sky by meaning, a moment after typing stops. Stale answers are dropped. */
+function useSemanticSearch(terms: string, list: { current: SkyProject[] }): Ranked | null {
+  const [ranked, setRanked] = useState<Ranked | null>(null);
+  useEffect(() => {
+    if (!terms) { setRanked(null); return; }
+    const abort = new AbortController();
+    const timer = setTimeout(() => {
+      const items = list.current.filter(p => p.kind !== 'you').slice(0, 150).map(p => ({
+        id: p.id,
+        text: [p.name, p.description, p.detail, ...(p.agents || []).map(a => a.role)].filter(Boolean).join('. ').slice(0, 400),
+      }));
+      fetch('/api/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: terms.slice(0, 200), items }), signal: abort.signal })
+        .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+        .then(data => setRanked({ query: terms, mode: data.mode, results: data.results }))
+        // The office couldn't search (an older server, say): keep the word matches shown here.
+        .catch(() => { if (!abort.signal.aborted) setRanked({ query: terms, mode: 'keyword', failed: true, results: [] }); });
+    }, 250);
+    return () => { clearTimeout(timer); abort.abort(); };
+  }, [terms, list]);
+  return ranked;
+}
+
 function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyMine }: { style: SkyStyle; projects: SkyProject[]; onEnter: (id: string) => void; returnFrom?: string | null; command?: SkyCommand; onMove?: (id: string, x: number, y: number) => void; onlyMine?: boolean }) {
   const balloons = style === 'balloons';
   const host = useRef<HTMLDivElement>(null), canvas = useRef<HTMLCanvasElement>(null), whiteout = useRef<HTMLDivElement>(null);
@@ -561,10 +585,14 @@ function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyM
     else if (e.key === '0' || e.key === 'Home') animate(home(), 900);
   }
   const ref = (id: string) => (el: HTMLElement | null) => { if (el) labels.current.set(id, el); else labels.current.delete(id); };
-  // Placeholder search: a plain match on names and descriptions. Semantic search replaces the matching.
+  // Search by meaning: the office server ranks what's in the sky, plus each project's agents and tickets.
+  // Word matching shows straight away and stands in until the ranked results arrive.
   const [query, setQuery] = useState(''), [searchOpen, setSearchOpen] = useState(false);
   const terms = query.trim().toLowerCase();
-  const results = terms ? list.current.filter(p => p.kind !== 'you' && `${p.name} ${p.description}`.toLowerCase().includes(terms)).slice(0, 6) : [];
+  const ranked = useSemanticSearch(terms, list);
+  const byId = new Map(list.current.map(p => [p.id, p]));
+  const semantic = ranked?.query === terms && !ranked.failed ? ranked.results.flatMap(r => { const p = byId.get(r.id); return p && p.kind !== 'you' ? [{ p, match: r.match }] : []; }) : null;
+  const results = semantic || (terms ? list.current.filter(p => p.kind !== 'you' && `${p.name} ${p.description}`.toLowerCase().includes(terms)).slice(0, 6).map(p => ({ p, match: '' })) : []);
   function choose(p: SkyProject) { setQuery(''); setSearchOpen(false); host.current?.focus({ preventScroll: true }); flyTo(p); }
 
   return <div ref={host} className={`sky-view ${balloons ? 'balloon-sky' : style === 'clouds' || style === 'clouds3d' ? 'vector-sky' : 'cloud-sky'} ${style === 'clouds' ? 'drawn-text' : ''}`} tabIndex={0} role="application" aria-label="Workspace sky. Drag or use arrow keys to move, scroll or plus and minus to zoom. Click a project to fly to it; open yours from its label."
@@ -586,12 +614,12 @@ function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyM
     {!searchOpen && <button className="sky-search-toggle" onPointerDown={e => e.stopPropagation()} onClick={() => setSearchOpen(true)} aria-label="Search projects and agents" title="Search"><SearchIcon /></button>}
     {searchOpen && <div className="sky-search" onPointerDown={e => e.stopPropagation()} onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape' && !query) setSearchOpen(false); }}>
       <div className="sky-search-row"><input type="search" autoFocus value={query} placeholder="Search projects and agents" aria-label="Search projects and agents" onChange={e => setQuery(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter' && results[0]) choose(results[0]); if (e.key === 'Escape') setQuery(''); }} />
+        onKeyDown={e => { if (e.key === 'Enter' && results[0]) choose(results[0].p); if (e.key === 'Escape') setQuery(''); }} />
         <button className="sky-search-close" onClick={() => { setQuery(''); setSearchOpen(false); }} aria-label="Close search">×</button></div>
       {terms && <div className="sky-results" role="listbox">
-        {results.length ? results.map(p => <button key={p.id} role="option" aria-selected={false} onClick={() => choose(p)}><b>{p.name}</b><span>{p.mine ? 'Your project' : p.detail || 'In this workspace'}</span></button>)
-          : <p>No matches.</p>}
-        <p className="sky-results-note">Placeholder: matches names and descriptions. Semantic search is coming.</p>
+        {results.length ? results.map(({ p, match }) => <button key={p.id} role="option" aria-selected={false} onClick={() => choose(p)}><b>{p.name}</b><span>{match || (p.mine ? 'Your project' : p.detail || 'In this workspace')}</span></button>)
+          : semantic || ranked?.mode === 'keyword' ? <p>No matches.</p> : <p>Searching…</p>}
+        <p className="sky-results-note">{semantic && ranked?.mode === 'semantic' ? 'Matched by meaning, across projects, agents and tickets.' : ranked?.mode === 'keyword' ? 'Matching words only: semantic search isn’t available.' : 'Matching words while semantic search runs…'}</p>
       </div>}
     </div>}
     <div className="sky-legend" aria-label="Agent colors">{(projects.some(p => p.agents?.some(a => /built-in/i.test(a.role))) ? [...agentKinds, builtinKind] : agentKinds).map(k => <span key={k.id}><i style={{ background: k.color }} />{k.label}</span>)}</div>
