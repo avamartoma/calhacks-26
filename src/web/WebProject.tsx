@@ -174,10 +174,11 @@ function AgentsPanel({ projectId, runs, editor, selected, onSelect }: { projectI
       {runs?.map(run => <li key={run.id} className={selected === run.id ? 'open' : ''}>
         <button className="web-run" onClick={() => onSelect(selected === run.id ? null : run.id)}>
           <i style={{ background: statusColor[run.status] }} />
-          <span><b>{run.prompt.split('\n')[0].slice(0, 90)}</b><small>{run.userLabel} · {providerNames[run.agent]} · {statusLabel[run.status]}{run.costUsd !== null ? ` · $${run.costUsd.toFixed(2)}` : ''}</small></span>
+          <span><b>{run.followUpOf && <em className="web-reply-mark">Reply · </em>}{run.prompt.split('\n')[0].slice(0, 90)}</b><small>{run.userLabel} · {providerNames[run.agent]} · {statusLabel[run.status]}{run.costUsd !== null ? ` · $${run.costUsd.toFixed(2)}` : ''}</small></span>
         </button>
         {selected === run.id ? <RunLog runId={run.id} /> : run.lastLine && <p className="web-last">{run.lastLine.text}</p>}
         {editor && run.mine && working(run) && <button className="text-button danger" onClick={() => void stop({ runId: run.id })}><Square size={12} /> Stop</button>}
+        {editor && selected === run.id && run.canFollowUp && <FollowUp runId={run.id} agent={providerNames[run.agent]} onSent={onSelect} />}
       </li>)}
     </ul>
   </aside>;
@@ -193,6 +194,22 @@ function RunLog({ runId }: { runId: Id<'agentRuns'> }) {
     <div className="web-log">{lines.map(line => <p key={line.id} className={`web-line ${line.kind}`}>{line.text}</p>)}<div ref={end} /></div>
     <RunChanges runId={runId} />
   </>;
+}
+
+/** Messages a finished agent; it picks up its conversation where it left off, as a new run. */
+function FollowUp({ runId, agent, onSent }: { runId: Id<'agentRuns'>; agent: string; onSent: (id: string) => void }) {
+  const followUp = useMutation(api.agentRuns.followUp);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  return <form className="web-followup" onSubmit={async event => {
+    event.preventDefault(); setBusy(true); setError('');
+    try { const next = await followUp({ runId, message: text }); setText(''); onSent(next); } catch (e) { setError(message(e)); } finally { setBusy(false); }
+  }}>
+    <textarea value={text} onChange={e => setText(e.target.value)} rows={2} maxLength={8000} placeholder={`Reply to ${agent}: ask for a change, or say what to do next`} />
+    <button className="secondary" disabled={busy || !text.trim()}>{busy ? 'Sending…' : 'Reply'}</button>
+    {error && <p className="web-error" role="alert">{error}</p>}
+  </form>;
 }
 
 /** The files a run changed, each opening its diff, like a ticket's files in the local office. */
@@ -235,6 +252,7 @@ function DownloadButton({ projectId }: { projectId: Id<'projects'> }) {
 function SharePanel({ row, onClose }: { row: SkyRow; onClose: () => void }) {
   const setVisibility = useMutation(api.sharing.setVisibility);
   const invite = useMutation(api.sharing.invite);
+  const emails = useQuery(api.sharing.emailEnabled, {});
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'viewer' | 'editor'>('viewer');
   const [note, setNote] = useState('');
@@ -247,14 +265,14 @@ function SharePanel({ row, onClose }: { row: SkyRow; onClose: () => void }) {
       <label className="web-check"><input type="checkbox" checked={row.visibility === 'public'} onChange={e => void setVisibility({ projectId: row.id as Id<'projects'>, visibility: e.target.checked ? 'public' : 'private' })} /> Anyone signed in can view</label>
       <form className="web-invite" onSubmit={async event => {
         event.preventDefault(); setNote('');
-        try { await invite({ projectId: row.id as Id<'projects'>, email, role }); setNote(`Shared with ${email.trim()}`); setEmail(''); } catch (e) { setNote(message(e)); }
+        try { await invite({ projectId: row.id as Id<'projects'>, email, role }); setNote(emails ? `Shared with ${email.trim()}. We've emailed them a link.` : `Shared with ${email.trim()}.`); setEmail(''); } catch (e) { setNote(message(e)); }
       }}>
         <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="teammate@email.com" required />
         <select value={role} onChange={e => setRole(e.target.value as 'viewer' | 'editor')}><option value="viewer">Can view</option><option value="editor">Can edit</option></select>
         <button className="primary">Invite</button>
       </form>
       {note && <p className="web-note">{note}</p>}
-      <p className="web-note">People you invite see this project on their sky once they sign in with that email. Editors can start agents on their own key.</p>
+      <p className="web-note">{emails ? 'People you invite get an email with a link, and see this project on their sky once they sign in with that address.' : 'People you invite see this project on their sky once they sign in with that email. Invite emails aren’t set up yet, so let them know.'} Editors can start agents on their own key.</p>
     </> : <p className="web-note">Only the owner can change who has access.</p>}
   </aside>;
 }

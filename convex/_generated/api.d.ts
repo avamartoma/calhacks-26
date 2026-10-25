@@ -21,10 +21,12 @@ import type * as github from "../github.js";
 import type * as handoffs from "../handoffs.js";
 import type * as http from "../http.js";
 import type * as identity from "../identity.js";
+import type * as inviteEmail from "../inviteEmail.js";
 import type * as keyStore from "../keyStore.js";
 import type * as keys from "../keys.js";
 import type * as leases from "../leases.js";
 import type * as lib_claudeCode from "../lib/claudeCode.js";
+import type * as lib_inviteMessage from "../lib/inviteMessage.js";
 import type * as lib_keyCrypto from "../lib/keyCrypto.js";
 import type * as lib_numstat from "../lib/numstat.js";
 import type * as lib_previewCommand from "../lib/previewCommand.js";
@@ -38,10 +40,10 @@ import type * as projects from "../projects.js";
 import type * as runChanges from "../runChanges.js";
 import type * as runChangesStore from "../runChangesStore.js";
 import type * as sessionSandbox from "../sessionSandbox.js";
-import type * as workspaces from "../workspaces.js";
 import type * as sessions from "../sessions.js";
 import type * as sharing from "../sharing.js";
 import type * as validators from "../validators.js";
+import type * as workspaces from "../workspaces.js";
 
 import type {
   ApiFromModules,
@@ -63,10 +65,12 @@ declare const fullApi: ApiFromModules<{
   handoffs: typeof handoffs;
   http: typeof http;
   identity: typeof identity;
+  inviteEmail: typeof inviteEmail;
   keyStore: typeof keyStore;
   keys: typeof keys;
   leases: typeof leases;
   "lib/claudeCode": typeof lib_claudeCode;
+  "lib/inviteMessage": typeof lib_inviteMessage;
   "lib/keyCrypto": typeof lib_keyCrypto;
   "lib/numstat": typeof lib_numstat;
   "lib/previewCommand": typeof lib_previewCommand;
@@ -80,10 +84,10 @@ declare const fullApi: ApiFromModules<{
   runChanges: typeof runChanges;
   runChangesStore: typeof runChangesStore;
   sessionSandbox: typeof sessionSandbox;
-  workspaces: typeof workspaces;
   sessions: typeof sessions;
   sharing: typeof sharing;
   validators: typeof validators;
+  workspaces: typeof workspaces;
 }>;
 
 /**

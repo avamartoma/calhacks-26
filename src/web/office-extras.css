@@ -1,4 +1,8 @@
-/* Parts of the local office brought to the web: a run's changed files and their diffs. */
+/* Parts of the local office brought to the web: a run's changed files and their diffs, and replies to an agent. */
+.web-followup{display:flex;flex-direction:column;gap:6px;margin:8px 0 2px}
+.web-followup textarea{margin:0;min-height:52px;resize:vertical;background:#fff;border-color:#d3d9e3;color:#26324a;font-size:12.5px}
+.web-followup .secondary{align-self:flex-end;padding:7px 14px;background:#f3f5f8;border-color:#d3d9e3;color:#26324a}
+.web-reply-mark{font-style:normal;font-weight:600;color:#5b7fa6}
 .web-changes{margin:6px 0 0;display:flex;flex-direction:column;gap:4px}
 .web-changes>b{font:600 12px Urbanist,sans-serif;color:#24304a}
 .web-changes ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}

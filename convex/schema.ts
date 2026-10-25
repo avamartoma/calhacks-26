@@ -167,6 +167,11 @@ export default defineSchema({
     costUsd: v.optional(v.number()),
     startedAt: v.number(),
     finishedAt: v.optional(v.number()),
+    // A follow-up continues an earlier run's conversation: the first run of the thread, and the
+    // agent's own session to resume. agentSession is the session this run reported.
+    parentRunId: v.optional(v.id("agentRuns")),
+    resumeSession: v.optional(v.string()),
+    agentSession: v.optional(v.string()),
   }).index("by_project", ["projectId"]),
 
   // What a run said and did, in order: its messages, the tools it used, and its result.

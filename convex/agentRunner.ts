@@ -49,27 +49,34 @@ type Agent = "codex" | "claude" | "cursor";
 
 // Each agent's program, installed into the sandbox once and run headless. The task and key arrive
 // as environment variables, never inside the command text. Codex is the version the local office pins.
-const AGENTS: Record<Agent, { name: string; bin: string; install: string; start: string }> = {
+// `resume` continues the agent's own conversation ($SESSION) with a follow-up as $TASK.
+const AGENTS: Record<Agent, { name: string; bin: string; install: string; start: string; resume: string }> = {
   claude: {
     name: "Claude Code",
     bin: "claude",
     install: 'npm install -g --prefix "$HOME/.local" @anthropic-ai/claude-code',
     start: 'claude -p "$TASK" --output-format stream-json --verbose --dangerously-skip-permissions',
+    resume: 'claude -p "$TASK" --resume "$SESSION" --output-format stream-json --verbose --dangerously-skip-permissions',
   },
   codex: {
     name: "Codex",
     bin: "codex",
     install: 'npm install -g --prefix "$HOME/.local" @openai/codex@0.156.1',
-    // A Codex home per run, so one person's sessions never mix with another's in a shared sandbox.
-    start: 'CODEX_HOME="/tmp/codex-$RUN" && mkdir -p "$CODEX_HOME" && export CODEX_HOME && codex -c cli_auth_credentials_store="file" exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox "$TASK"',
+    // A Codex home per conversation, so one person's sessions never mix with another's in a shared sandbox.
+    start: 'CODEX_HOME="/tmp/codex-$THREAD" && mkdir -p "$CODEX_HOME" && export CODEX_HOME && codex -c cli_auth_credentials_store="file" exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox "$TASK"',
+    resume: 'CODEX_HOME="/tmp/codex-$THREAD" && mkdir -p "$CODEX_HOME" && export CODEX_HOME && codex -c cli_auth_credentials_store="file" exec resume --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox "$SESSION" "$TASK"',
   },
   cursor: {
     name: "Cursor",
     bin: "cursor-agent",
     install: "curl -fsSL https://cursor.com/install | bash",
     start: 'cursor-agent -p --output-format stream-json --force --trust "$TASK"',
+    resume: 'cursor-agent -p --resume "$SESSION" --output-format stream-json --force --trust "$TASK"',
   },
 };
+
+/** A conversation's folders are named after its first run, so follow-ups find its history. */
+const threadOf = (row: { _id: Id<"agentRuns">; parentRunId?: Id<"agentRuns"> }) => row.parentRunId ?? row._id;
 
 const installScript = (agent: Agent) => `
 export PATH="$HOME/.local/bin:$PATH"
@@ -80,10 +87,10 @@ fi
 ${AGENTS[agent].bin} --version
 `;
 
-const startScript = (agent: Agent) => `
+const startScript = (agent: Agent, resuming: boolean) => `
 export PATH="$HOME/.local/bin:$PATH"
 cd "${WORKSPACE}"
-(${AGENTS[agent].start}) < /dev/null > "$OUT" 2> "$ERR"
+(${resuming ? AGENTS[agent].resume : AGENTS[agent].start}) < /dev/null > "$OUT" 2> "$ERR"
 echo $? > "$EXIT"
 `;
 
@@ -91,25 +98,30 @@ type Stored = { ciphertext: string; iv: string; subscription: boolean; method: "
 
 /**
  * A signed-in ChatGPT or Claude account is that tool's own credentials file, copied into a folder
- * only this run uses. The tool refreshes it in place, and saveCredentials keeps the new copy.
+ * only this conversation uses. The tool refreshes it in place, and saveCredentials keeps the new copy.
  */
-const credentialFile = (method: Stored["method"], runId: string) =>
-  method === "chatgpt" ? `/tmp/codex-${runId}/auth.json` : method === "claudeAccount" ? `/tmp/claude-${runId}/.credentials.json` : null;
+const credentialFile = (method: Stored["method"], thread: string) =>
+  method === "chatgpt" ? `/tmp/codex-${thread}/auth.json` : method === "claudeAccount" ? `/tmp/claude-${thread}/.credentials.json` : null;
 
 /** The variables that carry a person's key or sign-in into their agent. */
-function keyEnv(agent: Agent, stored: Stored, secret: string, runId: string): Record<string, string> {
+function keyEnv(agent: Agent, stored: Stored, secret: string, thread: string): Record<string, string> {
   if (stored.method === "chatgpt") return {};
-  if (stored.method === "claudeAccount") return { CLAUDE_CONFIG_DIR: `/tmp/claude-${runId}` };
+  if (stored.method === "claudeAccount") return { CLAUDE_CONFIG_DIR: `/tmp/claude-${thread}` };
   if (agent === "codex") return { CODEX_API_KEY: secret, OPENAI_API_KEY: secret };
   if (agent === "cursor") return { CURSOR_API_KEY: secret };
   return stored.subscription ? { CLAUDE_CODE_OAUTH_TOKEN: secret } : { ANTHROPIC_API_KEY: secret };
 }
 
-/** After a run, keeps a refreshed sign-in and removes the run's private copy. */
-async function saveCredentials(ctx: ActionCtx, sandbox: Sandbox, row: { _id: Id<"agentRuns">; userId: string; agent?: Agent }) {
+/**
+ * After a run, keeps a refreshed sign-in and removes the run's private copy of it. The rest of the
+ * conversation's folder (its session history) stays, so a follow-up can resume it; the next run
+ * writes a fresh credentials file before it starts.
+ */
+async function saveCredentials(ctx: ActionCtx, sandbox: Sandbox, row: { _id: Id<"agentRuns">; parentRunId?: Id<"agentRuns">; userId: string; agent?: Agent }) {
   const agent: Agent = row.agent ?? "claude";
+  const thread = threadOf(row);
   const stored = await ctx.runQuery(internal.keyStore.get, { userId: row.userId, provider: agent });
-  const file = stored ? credentialFile(stored.method, row._id) : null;
+  const file = stored ? credentialFile(stored.method, thread) : null;
   try {
     if (stored && file && (stored.method === "chatgpt" || stored.method === "claudeAccount")) {
       const now = (await run(sandbox, `cat "${file}" 2>/dev/null; true`)).stdout.trim();
@@ -121,7 +133,7 @@ async function saveCredentials(ctx: ActionCtx, sandbox: Sandbox, row: { _id: Id<
   } catch {
     // Keep the stored sign-in; the next run refreshes it again.
   }
-  await run(sandbox, `rm -rf "/tmp/codex-${row._id}" "/tmp/claude-${row._id}"; true`);
+  await run(sandbox, `rm -f "/tmp/codex-${thread}/auth.json" "/tmp/claude-${thread}/.credentials.json"; true`);
 }
 
 async function fail(ctx: ActionCtx, runId: Id<"agentRuns">, detail: string) {
@@ -153,22 +165,25 @@ export const launch = internalAction({
         if (install.code !== 0) return await fail(ctx, args.runId, `Couldn't install ${AGENTS[agent].name} in the sandbox: ${(install.stdout + install.stderr).trim().slice(-400)}`);
       }
       const paths = files(args.runId);
+      const thread = threadOf(row);
       const secret = stored ? await decryptKey(stored) : "";
-      const file = stored ? credentialFile(stored.method, args.runId) : null;
+      const file = stored ? credentialFile(stored.method, thread) : null;
       if (file) {
         await sandbox.files.write(file, secret);
         await run(sandbox, `chmod 700 "$(dirname "${file}")"; chmod 600 "${file}"`);
       }
-      const script = args.testCommand ? `cd "${WORKSPACE}" 2>/dev/null; (${args.testCommand}) > "$OUT" 2> "$ERR"; echo $? > "$EXIT"` : startScript(agent);
+      const script = args.testCommand ? `cd "${WORKSPACE}" 2>/dev/null; (${args.testCommand}) > "$OUT" 2> "$ERR"; echo $? > "$EXIT"` : startScript(agent, !!row.resumeSession);
       await ctx.runAction(internal.runChanges.baseline, { runId: args.runId, sandboxId: info.session.sandboxId });
       const handle = await sandbox.commands.run(script, {
         background: true,
         envs: {
           TASK: row.prompt,
           RUN: args.runId,
+          THREAD: thread,
+          ...(row.resumeSession ? { SESSION: row.resumeSession } : {}),
           OUT: paths.out, ERR: paths.err, EXIT: paths.exit,
           IS_SANDBOX: "1",
-          ...(stored ? keyEnv(agent, stored, secret, args.runId) : {}),
+          ...(stored ? keyEnv(agent, stored, secret, thread) : {}),
         },
       });
       const marked = await ctx.runMutation(internal.agentRuns.markRunning, { runId: args.runId, pid: handle.pid });
@@ -199,7 +214,7 @@ export const poll = internalAction({
     const complete = end >= 0 ? read.stdout.slice(0, end + 1) : "";
     const parsed = parseStream(complete, row.agent ?? "claude");
     const offset = row.offset + new TextEncoder().encode(complete).length;
-    if (complete) await ctx.runMutation(internal.agentRuns.append, { runId: args.runId, offset, lines: parsed.lines });
+    if (complete) await ctx.runMutation(internal.agentRuns.append, { runId: args.runId, offset, lines: parsed.lines, ...(parsed.session ? { session: parsed.session } : {}) });
     const exit = (await run(sandbox, `cat "${paths.exit}" 2>/dev/null; true`)).stdout.trim();
     const caughtUp = complete.length === read.stdout.length && read.stdout.length < READ_CHUNK;
     if (exit && caughtUp) {

@@ -1,10 +1,13 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireAccess } from "./access";
 import { currentUser } from "./identity";
 import { publicWorkspace } from "./workspaces";
 import { accessRoleValidator, assertNonEmpty } from "./validators";
+
+declare const process: { env: Record<string, string | undefined> };
 
 type OwnerCtx = QueryCtx | MutationCtx;
 
@@ -20,6 +23,14 @@ async function requireOwner(ctx: OwnerCtx, projectId: Id<"projects">) {
   }
   return { project, user };
 }
+
+const INVITES_PER_DAY = 30;
+
+/** Whether invites send an email, so the Share panel can say so. */
+export const emailEnabled = query({
+  args: {},
+  handler: async () => !!process.env.GMAIL_USER && !!process.env.GMAIL_APP_PASSWORD,
+});
 
 function normalizeEmail(email: string): string {
   return assertNonEmpty(email, "email").toLowerCase();
@@ -95,22 +106,31 @@ export const invite = mutation({
     role: accessRoleValidator,
   },
   handler: async (ctx, args) => {
-    const { user } = await requireOwner(ctx, args.projectId);
+    const { project, user } = await requireOwner(ctx, args.projectId);
     const email = normalizeEmail(args.email);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("That isn't an email address");
     const existing = await ctx.db
       .query("projectAccess")
       .withIndex("by_project_email", (q) => q.eq("projectId", args.projectId).eq("email", email))
       .unique();
+    let id;
     if (existing) {
       await ctx.db.patch(existing._id, { role: args.role, invitedBy: user.id });
-      return existing._id;
+      id = existing._id;
+    } else {
+      // Each invite can send an email from the team's account, so keep it to a reasonable number a day.
+      const since = Date.now() - 24 * 60 * 60 * 1000;
+      const recent = await ctx.db.query("projectAccess").filter((q) => q.and(q.eq(q.field("invitedBy"), user.id), q.gt(q.field("_creationTime"), since))).collect();
+      if (!user.local && recent.length >= INVITES_PER_DAY) throw new Error(`You can invite up to ${INVITES_PER_DAY} people a day.`);
+      id = await ctx.db.insert("projectAccess", { projectId: args.projectId, email, role: args.role, invitedBy: user.id });
     }
-    return await ctx.db.insert("projectAccess", {
-      projectId: args.projectId,
-      email,
-      role: args.role,
-      invitedBy: user.id,
-    });
+    if (email !== user.email) {
+      await ctx.scheduler.runAfter(0, internal.inviteEmail.send, {
+        email, role: args.role, project: project.name, projectId: args.projectId,
+        inviter: user.name || user.email || "Someone", ...(user.email ? { inviterEmail: user.email } : {}),
+      });
+    }
+    return id;
   },
 });
 
