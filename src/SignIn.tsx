@@ -48,7 +48,6 @@ export function SignIn({ ready, redirectUri, onSkip }: { ready: boolean; redirec
       <span className="brand-mark">oc</span>
       <h1 id="sign-in-title">Sign in to opencloud</h1>
       {ready ? <>
-        <p>Your projects and agents are saved to your account, so the people you share with see them too.</p>
         <button className="primary full" disabled={waiting} onClick={() => void signIn()}>
           {waiting ? <><LoaderCircle className="spin" size={16} /> Finish signing in in the new tab</> : 'Sign in'}
         </button>

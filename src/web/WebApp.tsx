@@ -68,7 +68,6 @@ function Gate() {
     <section className="sign-in-card" aria-labelledby="sign-in-title">
       <span className="brand-mark">oc</span>
       <h1 id="sign-in-title">Sign in to opencloud</h1>
-      <p>Your projects and agents live in your account. Agents run in the cloud on your own Anthropic key.</p>
       <button className="primary full" onClick={() => void loginWithRedirect({ appState: { returnTo: window.location.pathname }, authorizationParams: { redirect_uri: callback() } })}>Sign in</button>
       {error && <p className="sign-in-error" role="alert">{error.message}</p>}
       {import.meta.env.DEV && <button className="text-button" onClick={() => { sessionStorage.setItem('opencloud-guest', '1'); setGuest(true); }}>Continue as the test user (development only)</button>}
