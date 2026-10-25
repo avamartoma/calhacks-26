@@ -77,8 +77,8 @@ export default function App() {
   const [roomId, setRoomId] = useState(localStorage.getItem('iteration1-live-room') || localStorage.getItem('iteration1-room') || '');
   const [workspaceId, setWorkspaceId] = useState(localStorage.getItem('iteration1-workspace') || '');
   const [altitude, setAltitude] = useState<Altitude>(() => localStorage.getItem('iteration1-altitude') === 'project' ? 'project' : 'sky');
-  // Zooming into a cloud opens the project as a document; the 3D office stays one click away.
-  const [projectView,setProjectView]=useState<'doc'|'office'>(()=>localStorage.getItem('iteration1-project-view')==='office'?'office':'doc');
+  // Zooming into a cloud opens that project's office.
+  const [projectView,setProjectView]=useState<'doc'|'office'>('office');
   const [allowDemo,setAllowDemo]=useState(false);
   const [connectReturn,setConnectReturn]=useState<Tool | null>(null);
   const [connectionFocus,setConnectionFocus]=useState<{provider:ConnectionProvider;request:number}|null>(null);
@@ -136,12 +136,12 @@ export default function App() {
   if(lastAltitude.current!==altitude){if(altitude==='sky' && lastAltitude.current==='project')skyReturn.current=room?.id || null;lastAltitude.current=altitude;}
   const docOpen = altitude==='project' && !!room && projectView==='doc' && !replayRoom && !cinematic && !recording;
   useEffect(()=>{localStorage.setItem('iteration1-project-view',projectView);},[projectView]);
-  // A project link (?project=<id>) opens that project's document.
+  // A project link (?project=<id>) opens that project's office.
   useEffect(()=>{
     const id=new URLSearchParams(location.search).get('project');
     if(!id || !data)return;
     const target=data.rooms.find(r=>r.id===id && !r.archived);
-    if(target){if(target.workspaceId)setWorkspaceId(target.workspaceId);if(target.demo)setAllowDemo(true);setRoomId(id);setAltitude('project');setProjectView('doc');setTool('office');}
+    if(target){if(target.workspaceId)setWorkspaceId(target.workspaceId);if(target.demo)setAllowDemo(true);setRoomId(id);setAltitude('project');setProjectView('office');setCompact(false);setTool('office');}
     else setError('That project link does not open a project in this office.');
     history.replaceState(null,'',location.pathname);
   },[!!data]);
@@ -160,7 +160,7 @@ export default function App() {
     try {
       scene.current = new OfficeScene(container.current, select);
       scene.current.onTeammate=()=>setTool('team'); scene.current.onMode = setWalk; scene.current.onMarkers=setMarkers; scene.current.onStatus = setToast;
-      scene.current.onEnterProject = id => { setRoomId(id); setAltitude('project'); setTool('office'); setCompact(false); };
+      scene.current.onEnterProject = id => { setRoomId(id); setAltitude('project'); setProjectView('office'); setTool('office'); setCompact(false); };
       scene.current.onLeaveProject = () => { setAltitude('sky'); setTool('office'); setWhip(false); setCompact(false); setWalk(false); };
       scene.current.onPlaceCloud = (id, spot) => { api(`/rooms/${id}/cloud`, spot).catch(e => setError((e as Error).message)); };
       scene.current.onGraphicsLost = () => {
@@ -199,7 +199,7 @@ export default function App() {
   function openConnect(from:Tool='templates'){openConnections('codex',from);}
   function showSky() { setAltitude('sky'); setTool('office'); setWhip(false); setCompact(false); setWalk(false); setSelection(null); setReplayRoom(null); scene.current?.setWalk(false); }
   function chooseWorkspace(id: string) { setWorkspaceId(id); showSky(); }
-  function switchRoom(id: string) { setAllowDemo(true);setReplayRoom(null); setWhip(false); setRoomId(id); setSelection(null); setSelectedWork(null); setAltitude('project'); setTool('office'); scene.current?.setWalk(false); }
+  function switchRoom(id: string) { setAllowDemo(true);setReplayRoom(null); setWhip(false); setCompact(false); setRoomId(id); setSelection(null); setSelectedWork(null); setAltitude('project'); setProjectView('office'); setTool('office'); scene.current?.setWalk(false); }
   function modelOptions() { return <><optgroup label="Codex">{!data?.connection.models.some(m=>m.id==='gpt-6-sol') && <option value="gpt-6-sol">GPT-6 Sol</option>}<option value="Account default">Account default</option>{data?.connection.models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>{data?.claude?.configured && <optgroup label="Claude">{data.claude.models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>}</>; }
   useEffect(() => {
     if (!scene.current) return;
@@ -235,7 +235,7 @@ export default function App() {
     </header>
     <main className="workspace">
       <div ref={container} className="world" />
-      {altitude==='sky' && !cinematic && !recording && <SkyView projects={skyProjects} returnFrom={skyReturn.current} onEnter={id=>{setRoomId(id);setAltitude('project');setProjectView('doc');setTool('office');}}/>}
+      {altitude==='sky' && !cinematic && !recording && <SkyView projects={skyProjects} returnFrom={skyReturn.current} onEnter={id=>{setRoomId(id);setAltitude('project');setProjectView('office');setCompact(false);setTool('office');}}/>}
       {docOpen && room && <ProjectDoc room={room} workspaceName={workspace?.name} selected={selection} onAgent={select} onTask={id=>{setSelectedWork(id);setTool('work');}} onStartWork={()=>setTool('templates')} onSky={showSky} onOffice={()=>{setProjectView('office');setCompact(false);}}/>}
       {altitude==='sky' && tool==='office' && !cinematic && !recording && !skyRooms.length && <div className="sky-hint"><Cloud size={16}/><span>{skyRooms.length ? 'Drag to pan · scroll into a cloud to open that project' : 'This workspace has no projects yet'}</span>{!skyRooms.length && <button className="primary" onClick={()=>setTool('newroom')}>New project</button>}</div>}
       {inProject && !docOpen && tool==='office' && !walk && !cinematic && !recording && !compact && <aside className="project-rail" aria-label="Project actions">
@@ -281,7 +281,7 @@ export default function App() {
           {room && tool === 'skills' && <><h2>Skills</h2>{Object.entries(skillDescriptions).map(([id, s]) => <div className="skill-row" key={id}><s.icon size={22} /><div><h3>{s.title}</h3><p>{s.description}</p></div><button role="switch" aria-checked={room.skills.includes(id)} aria-label={`Enable ${s.title}`} className={`switch ${room.skills.includes(id) ? 'on' : ''}`} disabled={busy} onClick={() => action(() => api(roomEndpoint, { skills: room.skills.includes(id) ? room.skills.filter(x => x !== id) : [...room.skills, id] }, 'PATCH'))}><i /></button></div>)}<p className="small muted">Applies to new agents.</p><button className="primary full" disabled={busy} onClick={() => action(() => api(`${roomEndpoint}/install-skills`, {}), 'Three skills installed in this project’s .agents/skills folder')}><ArrowDownToLine size={16} /> Install into project</button><a className="text-link" href="https://github.com/openai/skills" target="_blank" rel="noreferrer">Explore OpenAI’s skill library <ExternalLink size={13} /></a></>}
           {room && tool === 'tools' && <><ToolsPanel room={room} connected={!!data.connection.account} action={action} onConnect={() => openConnect(tool)} onTool={next=>next==='integrations'?openConnections():setTool(next)} onDemo={()=>{setCompact(false);setTool('office');setCinematic(true);}} onWhip={()=>{setCompact(false);setTool('office');setWhip(true);}} onHelp={()=>setHelp(v=>!v)} /></>}
           {tool === 'approvals' && <ManagerInbox data={data} busy={busy} action={action} onTask={(rid,id)=>{if(rid!==room?.id)switchRoom(rid);setSelectedWork(id);setTool('work');}}/>}
-          {room && tool === 'share' && !room.demo && <><h2>Share</h2><SharePanel projectId={room.preview?.projectId} projectName={room.name} /><ConnectAgent projectId={room.preview?.projectId} /></>}
+          {room && tool === 'share' && !room.demo && <><h2>Share</h2><SharePanel projectId={room.preview?.projectId} projectName={room.name} roomId={room.id} /><ConnectAgent projectId={room.preview?.projectId} /></>}
           {room && tool === 'settings' && <><h2>Settings</h2><PermissionsPanel room={room} busy={busy} action={action} onConnect={()=>openConnect('settings')}/><label>Concurrent workers <span className="value-pill">{room.budget}</span><input type="range" min="1" max="6" value={room.budget} onChange={e => action(() => api(roomEndpoint, { budget: Number(e.target.value) }, 'PATCH'))} /></label><p className="muted small">{room.permissionMode==='read-only'?'Agents research and review in parallel. File edits are disabled.':'Workers research and review in parallel. The manager owns implementation, keeping file edits coordinated.'}</p><div className="setting-line"><div><b>Office activity</b><p>{cursorOwner ? `Managed in ${reporterName(cursorOwner)}` : room.paused ? 'Currently paused' : 'Accepting assignments'}</p></div>{cursorOwner ? <button className="secondary" onClick={()=>select(cursorOwner.id)}>Open desk</button> : <button className="secondary" disabled={busy} onClick={() => action(() => api(`${roomEndpoint}/${room.paused ? 'resume' : 'pause'}`, {}))}>{room.paused ? <Play size={15} /> : <Pause size={15} />}{room.paused ? 'Resume' : 'Pause all'}</button>}</div><details className="compact-disclosure"><summary>Virtual reality</summary><p className="quiet-copy">WebXR headset required. Task editing uses desktop controls.</p><button className="secondary" onClick={()=>action(async()=>{if(!scene.current){setTool('office');setToast('Open Settings again after the office loads to enter VR.');return;}await scene.current.enterVR();})}><Glasses size={16}/> Enter VR</button></details><label>Project folder<input readOnly value={room.path} /></label>{!room.demo && <button className="secondary" disabled={busy || !data.connection.account} onClick={()=>action(()=>officeApi(`/rooms/${room.id}/check`,{}),'Project folder is accessible in the Codex sandbox')}>Check project access</button>}</>}
           {tool === 'rooms' && <ProjectRooms rooms={data.rooms.filter(r => r.workspaceId === workspace?.id || r.archived)} current={room?.id || ''} busy={busy} action={action} onRoom={switchRoom} onNew={()=>setTool('newroom')}/>}
           {tool === 'newroom' && <NewRoom defaultPath="" connected={!!data.connection.account} busy={busy} onSubmit={(name, path, demo) => action(async () => { const result = await api('/rooms', { name, path, demo, workspaceId: workspace?.id }); switchRoom(result.room.id); }, 'Your new project is in this workspace')} />}
@@ -292,7 +292,7 @@ export default function App() {
       {whip && tool === 'office' && <><WhipOverlay crack={crack} /><div className="whip-hint"><WhipIcon /><span>Click an agent to activate Crunch.<small>Next turns · 6 workers · 5-minute budget</small></span><button aria-label="Put away whip" onClick={() => setWhip(false)}><X size={16} /></button></div></>}
       <nav inert={recording || cinematic} className="workspace-nav" aria-label="Workspace">
         <button aria-current={tool==='office' && altitude==='sky'?'page':undefined} onClick={showSky}><Cloud size={17}/>Sky</button>
-        <button aria-current={tool==='office' && altitude==='project'?'page':undefined} onClick={()=>{if(room){setAltitude('project');setWhip(false);setTool('office');}else setTool('rooms');}}><Building2 size={17}/>Project</button>
+        <button aria-current={tool==='office' && altitude==='project'?'page':undefined} onClick={()=>{if(room){setAltitude('project');setProjectView('office');setCompact(false);setWhip(false);setTool('office');}else setTool('rooms');}}><Building2 size={17}/>Project</button>
         <button aria-current={['dashboard','work','templates','mission'].includes(tool)?'page':undefined} onClick={()=>{setWhip(false);setTool(room?'dashboard':'newroom');}}><LayoutGrid size={17}/>Tickets</button>
         <button aria-current={['agents','agent'].includes(tool)?'page':undefined} onClick={()=>setTool(room?'agents':'newroom')}><Users size={17}/>Agents</button>
         <button aria-current={tool==='messages'?'page':undefined} onClick={()=>setTool(room?'messages':'newroom')}><MessageSquare size={17}/>Handoffs</button>
