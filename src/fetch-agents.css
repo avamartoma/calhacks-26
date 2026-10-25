@@ -3,8 +3,13 @@
 .project-rail .fetch-rail-title{font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:#758279;padding:4px 8px}
 .fetch-rail-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px}
 .project-rail .fetch-rail-agent{gap:6px;padding:5px 8px;font-size:11px}
-.fetch-rail-agent i,.fetch-card header i{flex:none;width:7px;height:7px;border-radius:50%;background:#c9d0cb}
-.fetch-rail-agent i.on,.fetch-card.on header i{background:#3d9a68;box-shadow:0 0 0 3px #3d9a6822}
+.fetch-rail-agent i,.fetch-card header i,.fetch-dot{flex:none;width:7px;height:7px;border-radius:50%;background:#c9d0cb}
+.fetch-rail-agent i.on,.fetch-card.on header i,.fetch-dot.on{background:#3d9a68;box-shadow:0 0 0 3px #3d9a6822}
+.fetch-roster{display:flex;flex-direction:column;margin:0 0 22px}
+.fetch-roster h3{margin:0 0 4px;font:600 13px/1.4 Manrope,sans-serif}
+.fetch-roster .quiet-copy{margin:0 0 10px}
+.fetch-roster .agent-row{gap:10px}
+.roster-heading{margin:18px 0 8px;font:600 13px/1.4 Manrope,sans-serif}
 .fetch-rail-agent span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 .fetch-panel h3{font:600 14px/1.4 Manrope,sans-serif;margin:24px 0 10px}

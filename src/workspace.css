@@ -71,6 +71,7 @@
 .project-rail button:hover,.project-rail button[aria-current]{background:#e7eee9;color:#254b35}
 .app.sky-shell{background:#6fa0c6}
 .sky-shell .workspace{background:#6fa0c6}
+.sky-shell .world{visibility:hidden;pointer-events:none}
 .quiet-office .desk-badge b { max-width: 116px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media(max-width:750px) {
   .quiet-office .desk-badge:not(.selected) b { display: none; }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ClipboardList, Copy, ExternalLink, Eye, LoaderCircle, MessageSquare, Radar, ShieldCheck } from 'lucide-react';
+import { ChevronRight, ClipboardList, Copy, ExternalLink, Eye, LoaderCircle, MessageSquare, Radar, ShieldCheck } from 'lucide-react';
 import { officeApi } from './Operations';
 import type { FetchActivity, FetchAgent, FetchAgentName, FetchJob, FetchState, Room, WorkItem } from './types';
 import './fetch-agents.css';
@@ -35,6 +35,30 @@ function status(a: FetchAgent | undefined, now: number) {
 /** Review text uses **bold** and one item per line, as in ASI:One; render it the same way here. */
 function Lines({ text }: { text: string }) {
   return <div className="fetch-lines">{text.split('\n').map((line, i) => line.trim() ? <p key={i}>{line.split(/(\*\*[^*]+\*\*)/).map((part, j) => part.startsWith('**') && part.endsWith('**') ? <b key={j}>{part.slice(2, -2)}</b> : part)}</p> : <br key={i} />)}</div>;
+}
+
+/** The four Fetch.ai agents as a roster: used on the Agents panel and the project document. */
+export function FetchRoster({ fetch, onOpen, layout = 'list' }: { fetch?: FetchState; onOpen: () => void; layout?: 'list' | 'cards' }) {
+  const now = useNow();
+  const items = order.map(name => {
+    const a = agentOf(fetch, name), Icon = roles[name].icon, live = online(a, now);
+    const title = roles[name].title, role = roles[name].role, line = status(a, now);
+    if (layout === 'cards') return <button key={name} className={`doc-agent ${live ? 'status-working' : ''}`} onClick={onOpen} aria-label={`${title}: ${line}`}>
+      <span className="doc-agent-top"><i className="doc-dot" /><b>{title}</b><span className="doc-role">{role}</span></span>
+      <span className="doc-agent-summary">{line}</span>
+      <span className="doc-agent-foot"><span className="doc-engine">Fetch.ai · ASI:One</span><span>{live ? 'Online' : 'Offline'}</span></span>
+    </button>;
+    return <button key={name} className="agent-row" onClick={onOpen} aria-label={`${title}: ${line}`}>
+      <Icon size={18} /><span><b>{title}</b><p>{role}</p><small>{line}</small></span><i className={`fetch-dot ${live ? 'on' : ''}`} /><ChevronRight size={16} />
+    </button>;
+  });
+  return layout === 'cards'
+    ? <div className="doc-agents">{items}</div>
+    : <section className="fetch-roster" aria-label="Fetch.ai agents">
+      <h3>Fetch.ai · ASI:One</h3>
+      <p className="quiet-copy">Agents you run on this computer. Open one to copy its address, plan in Jira, or see what it did in this project.</p>
+      {items}
+    </section>;
 }
 
 /** The four agents, inside the project rail. */
