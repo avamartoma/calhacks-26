@@ -102,7 +102,7 @@ export function IntegrationsPanel({ room, connection, focus, onContinue, onStart
     </>}
     </section>
     {error && selected !== 'cursor' && <p className="notice error" role="alert">{error}</p>}
-    <details className="compact-disclosure office-identity"><summary>Office identity (optional)</summary>
+    <details className="compact-disclosure office-identity"><summary>Your account</summary>
       <p className="muted small">Attribute reported work to an office identity. Provider sign-ins above work independently.</p>
       {auth?.signedIn && auth.identity
         ? <><p className="notice">Signed in as <b>{auth.identity.label}</b>{auth.identity.email ? ` · ${auth.identity.email}` : ''}. Cursor, Claude Code and Codex CLI sessions publish under this account automatically.</p>

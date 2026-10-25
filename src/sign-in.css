@@ -1,0 +1,16 @@
+/* The sign-in screen: one card on the same time-of-day sky as the workspace. */
+.sign-in{height:100dvh;display:grid;place-items:center;padding:24px;box-sizing:border-box}
+.sign-in-card{width:min(380px,100%);display:flex;flex-direction:column;align-items:center;gap:14px;padding:32px 28px 26px;border-radius:14px;background:#fbfcfdf2;box-shadow:0 18px 50px rgba(20,32,60,.22);text-align:center;color:#26324a}
+.sign-in-card .brand-mark{width:52px;height:52px;border-radius:12px;font-size:24px;background:#26324a;color:#fff}
+.sign-in-card h1{font:700 24px/1.25 Urbanist,sans-serif;letter-spacing:-.4px}
+.sign-in-card p{font-size:13.5px;line-height:1.6;color:#55607a}
+.sign-in-card form{display:flex;flex-direction:column;gap:12px;width:100%}
+.sign-in-card label{text-align:left;margin:0;color:#46506a}
+.sign-in-card input{background:#fff;border-color:#d3d9e3;color:#26324a}
+.sign-in-card input::placeholder{color:#9aa3b5}
+.sign-in-card input:focus{outline-color:#5b7fa6}
+.sign-in-card .primary{background:#26324a;border-color:#26324a;color:#fff;font-size:14px;padding:12px}
+.sign-in-card .primary:hover{background:#34425f}
+.sign-in-card .text-button{align-self:center;color:#46506a;font-size:12.5px}
+.sign-in-note{font-size:11.5px!important;overflow-wrap:anywhere}
+.sign-in-error{color:#a3402e!important;font-size:12.5px!important}

@@ -18,6 +18,7 @@ import { seedOf } from './sky/sky-math';
 import { placeholderNeighbors } from './sky/neighbors';
 import { cloudStatus, cloudStatusLabel, liveAgentCount, sharedProjectRoom } from './office-panel';
 import { WorkspaceRail } from './WorkspaceRail';
+import { SignIn } from './SignIn';
 import { localHour, paletteAt } from './sky/time-of-day';
 import './style.css';
 import './quiet-office.css';
@@ -55,6 +56,7 @@ export default function App() {
   const [shareOpen, setShareOpen] = useState(false);
   const [accountsOpen, setAccountsOpen] = useState(false);
   const [arrival, setArrival] = useState(0);
+  const [signedOut, setSignedOut] = useState(() => sessionStorage.getItem('opencloud-signed-out') === '1');
   const [connectionFocus, setConnectionFocus] = useState<{ provider: ConnectionProvider; request: number } | null>(null);
   const container = useRef<HTMLDivElement>(null);
   const scene = useRef<OfficeScene | null>(null);
@@ -202,6 +204,8 @@ export default function App() {
 
   if (!data) return <main className="loading"><div className="brand-mark">oc</div><h1>{error ? 'opencloud is offline' : 'Loading opencloud'}</h1><p>{error || ''}</p>{error ? <button className="primary" onClick={() => window.location.reload()}>Retry connection</button> : <LoaderCircle className="spin" size={20} />}</main>;
 
+  if (!data.account && !(signedOut && !data.signIn?.ready)) return <SignIn ready={!!data.signIn?.ready} redirectUri={data.signIn?.redirectUri || ''} onSkip={() => { sessionStorage.setItem('opencloud-signed-out', '1'); setSignedOut(true); }} />;
+
   return <div className={`app quiet-office opencloud has-rail ${altitude === 'sky' ? 'sky-shell' : 'project-shell'}`}>
     <WorkspaceRail workspaces={workspaces} current={workspace} rooms={data.rooms} busy={busy} onChoose={chooseWorkspace} onCreate={name => action(async () => { const result = await api('/workspaces', { name }); chooseWorkspace(result.workspace.id); }, 'Workspace created')} onPicture={(id, image) => action(() => api(`/workspaces/${id}`, { image }, 'PATCH'), image ? 'Workspace picture updated' : 'Workspace picture removed')} onRename={(id, name) => action(() => api(`/workspaces/${id}`, { name }, 'PATCH'), 'Workspace renamed')} onRemove={id => action(async () => { await api(`/workspaces/${id}`, undefined, 'DELETE'); if (id === workspace?.id) setWorkspaceId(''); }, 'Projects moved to the remaining workspace')} />
     <main className="workspace">
@@ -224,13 +228,10 @@ export default function App() {
           <div className="new-project-actions"><button type="button" className="secondary" onClick={() => setCreating(false)}>Cancel</button><button className="primary" disabled={busy}>Create project</button></div>
         </form>}
         {altitude === 'project' && sceneError && <div className="scene-fallback" role="status"><p>{sceneError}</p><button className="primary" onClick={() => { scene.current?.dispose(); scene.current = null; setSceneReady(false); setSceneError(''); }}>Retry 3D</button></div>}
+        {altitude === 'project' && room && !room.demo && !room.viewOnly && <><PreviewDock cloud={room.preview} /><ConflictNotice conflicts={room.preview?.conflicts} /></>}
         {altitude === 'project' && room && <AgentSide room={room} identities={data.identities || []} ownRoomId={ownRoomId} busy={busy} selectedId={selection} models={[...(data.connection.account ? data.connection.models : []), ...(data.claude?.configured ? data.claude.models : [])]} fetch={data.fetchAgents} action={action} onSelect={select} onCloned={(id, agentId) => { setSharedId(null); setRoomId(id); setAltitude('project'); setSelection(agentId); setShareOpen(false); }} share={shareOpen && !room.demo && !room.viewOnly ? <><SharePanel projectId={room.preview?.projectId} projectName={room.name} roomId={room.id} previewUrl={room.preview?.status === 'live' ? room.preview.previewUrl : undefined} /><ConnectAgent projectId={room.preview?.projectId} /></> : undefined} />}
       </div>
       {accountsOpen && <AccountsPanel room={(altitude === 'project' && room && !room.viewOnly ? room : ownedRooms.find(item => !item.demo && !item.archived)) || ownedRooms[0]} connection={data.connection} focus={connectionFocus} onClose={() => setAccountsOpen(false)} />}
-      {altitude === 'project' && room && !room.demo && !room.viewOnly && <section className="floor-preview" aria-label="Live preview below the office floor">
-        <PreviewDock cloud={room.preview} />
-        <ConflictNotice conflicts={room.preview?.conflicts} />
-      </section>}
     </main>
     {(toast || error) && <div className={`toast ${error ? 'error' : ''}`} role={error ? 'alert' : 'status'}>{error ? <X size={18} /> : <Check size={18} />}<span>{error || toast}</span><button aria-label="Dismiss notification" onClick={() => { setToast(''); setError(''); }}><X size={16} /></button></div>}
   </div>;
