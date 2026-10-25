@@ -99,9 +99,41 @@ async def announce(ctx: Context):
     say("=" * 64)
 
 
+def queue_review(room_id: str, task_id: str) -> str:
+    """A review asked for in the office app goes to the reviewer as a job; its verdict lands on the ticket."""
+    try:
+        office.office.request("/fetch/jobs", {"agent": "reviewer", "kind": "review", "roomId": room_id, "taskId": task_id})
+        return ""
+    except OfficeError as e:
+        return f"\n\nThe reviewer couldn't take it: {e}"
+
+
+async def send_outbox(ctx: Context) -> str:
+    """Pass requests for sibling agents along. Returns a note to add to the reply when one couldn't be sent."""
+    note = ""
+    while office.outbox:
+        kind, requester, room_id, task_id = office.outbox.pop(0)
+        reviewer = address("reviewer")
+        if kind == "review" and requester.startswith("local:"):
+            note += await asyncio.to_thread(queue_review, room_id, task_id)
+        elif kind == "review" and reviewer:
+            await ctx.send(reviewer, ReviewRequest(room_id=room_id, task_id=task_id, requester=requester))
+        elif kind == "review":
+            note += "\n\nThe reviewer agent isn't set up. Start it with agents/run_all.py, then ask again."
+    return note
+
+
 @agent.on_interval(period=HEARTBEAT_SECONDS)
 async def check_in(ctx: Context):
-    await asyncio.to_thread(link.beat)
+    # Messages typed to this agent in the office app arrive as chat jobs.
+    for job in await asyncio.to_thread(link.beat):
+        text = str((job.get("payload") or {}).get("text", "")).strip()
+        if job["kind"] != "chat" or not text:
+            await asyncio.to_thread(link.finish, job["id"], False, {"error": "Send me a message."})
+            continue
+        answer = await asyncio.to_thread(office.local, job["roomId"], text[:4000])
+        answer += await send_outbox(ctx)
+        await asyncio.to_thread(link.finish, job["id"], True, {"text": answer})
 
 
 @chat.on_message(ChatMessage)
@@ -119,13 +151,7 @@ async def on_chat(ctx: Context, sender: str, msg: ChatMessage):
     answer = await asyncio.to_thread(office.handle, sender, text[:12000])
     if office.gate.allowed(sender):
         await asyncio.to_thread(link.report, "chat", f"ASI:One: {text[:160]}")
-    while office.outbox:
-        kind, requester, room_id, task_id = office.outbox.pop(0)
-        reviewer = address("reviewer")
-        if kind == "review" and reviewer:
-            await ctx.send(reviewer, ReviewRequest(room_id=room_id, task_id=task_id, requester=requester))
-        elif kind == "review":
-            answer = "The reviewer agent isn't set up. Start it with agents/run_all.py, then ask again."
+    answer += await send_outbox(ctx)
     await ctx.send(sender, reply(answer))
 
 

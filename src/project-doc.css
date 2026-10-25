@@ -31,6 +31,9 @@
 .doc-role{font-size:12px;color:#7a877f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .doc-dot{width:8px;height:8px;border-radius:50%;background:#a8b2ac;flex-shrink:0}
 .status-working .doc-dot,.status-talking .doc-dot{background:#477ead;box-shadow:0 0 0 3px #477ead22}
+.doc-agent.built-in{background:#f3f4f5;border-color:#d5d8dc}
+.doc-agent.built-in .doc-dot{background:#8b9298}
+.doc-agent.built-in .doc-engine{color:#6b737c}
 .status-approval .doc-dot{background:#b88732}.status-error .doc-dot{background:#b55c48}.status-done .doc-dot{background:#38826c}
 .doc-agent-summary{font-size:13px;line-height:1.5;color:#3e4d45}
 .doc-agent-foot{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11px;color:#7a877f}

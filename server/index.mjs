@@ -31,7 +31,7 @@ import { createCodexCallback, createClaudeLogin, createCursorLogin } from './pro
 import { officeHostMiddleware } from './host.mjs';
 import { createCloud } from './cloud.mjs';
 import { editPaths } from './cloud-sync.mjs';
-import { createFetchHub } from './fetch-agents.mjs';
+import { createFetchHub, createFetchLauncher } from './fetch-agents.mjs';
 
 function loadLocalEnv(file) {
   let text;
@@ -95,6 +95,7 @@ await syncIdentity();
 const cursor = createCursorDesk({ state, changed, isStarting: id => startingAgents.has(id), currentIdentity: () => liveIdentity });
 const toolName = a => reporters[a.provider]?.name || 'Cursor';
 const fetchHub = createFetchHub({ changed });
+const fetchLauncher = createFetchLauncher({ root, url: `http://127.0.0.1:${Number(process.env.PORT || 4314)}`, changed, online: () => fetchHub.snapshot().agents.some(a => a.online) });
 const codexCallback = createCodexCallback();
 let codexLoginId = null;
 const claudeLogin = createClaudeLogin({ configDir: process.env.OFFICE_CLAUDE_HOME || path.join(homedir(), '.iteration1', 'claude') });
@@ -106,7 +107,7 @@ const claudeKey = createClaudeKeyStore(); await claudeKey.load();
 const claude = createClaudeRunner({ apiKey: () => claudeKey.current(), oauth: async () => { if (claudeLogin.isCompleting()) throw new Error('Wait for Claude sign-in to finish.'); await claudeLogin.load(); return !process.env.ANTHROPIC_API_KEY && claudeLogin.status().configured; }, configDir: () => claudeLogin.configDir });
 /** Claude can run office agents on the signed-in Claude profile or on an API key. */
 const claudeReady = () => claudeKey.status().configured || claudeLogin.status().configured;
-function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, workspaces: initWorkspaces(state), claude: { ...claudeKey.status(), configured: claudeReady(), models: claudeModels }, identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates, fetchAgents: fetchHub.snapshot() }; }
+function snapshot() { state.rooms.forEach(identifyEvidence); return { ...state, workspaces: initWorkspaces(state), claude: { ...claudeKey.status(), configured: claudeReady(), models: claudeModels }, identities: initIdentities(state).map(publicIdentity), rooms: state.rooms.map(r=>({...r,team:team.view(r),timeline:r.timeline.map(({frame,...entry})=>entry),checkpoints:r.checkpoints.map(({frame,...point})=>point)})), connection: {...connection, testAgents: process.env.OFFICE_TEST_AGENTS === '1'}, modes, templates, fetchAgents: { ...fetchHub.snapshot(), launcher: fetchLauncher.status() } }; }
 function changed() {
   if (!broadcastTimer) broadcastTimer = setTimeout(() => {
     broadcastTimer = undefined;
@@ -573,6 +574,7 @@ app.get('/api/feed', wrap(async () => ({ runs: runFeed(state) })));
 app.post('/api/fetch/heartbeat', wrap(async req => fetchHub.heartbeat(req.body)));
 app.post('/api/fetch/activity', wrap(async req => fetchHub.activity(req.body)));
 app.post('/api/fetch/jobs', wrap(async req => fetchHub.request(req.body, id => state.rooms.some(r => r.id === id && !r.demo))));
+app.post('/api/fetch/start', wrap(async () => fetchLauncher.start()));
 app.post('/api/fetch/jobs/:id', wrap(async req => fetchHub.finish(req.params.id, req.body)));
 // A Cursor agent the office launches and owns: unlike an MCP session it can be stopped,
 // its model is the one chosen here, and its stream is recorded as observed work.

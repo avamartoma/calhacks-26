@@ -6,7 +6,7 @@ import { createSkyRendererBalloons } from './renderer-balloons';
 import { LABEL_SHARE, YOUR_SCALE, createSkyRendererVector, createSkyRendererVector2D, zoomedOutBoost } from './renderer-vector';
 import { localHour, paletteAt } from './time-of-day';
 import { CLOUD_WIDTH, CLOUD_ASPECT, MAX_ZOOM, layerScale, baseDistance, easeInOut, fly, flyRelative, look, panBy, rayThrough, zoomAt, type Camera, type Viewport } from './sky-math';
-import { agentKinds, isWorking, kindOf, type SkyAgent } from './agents';
+import { agentKinds, builtinKind, isWorking, kindOf, type SkyAgent } from './agents';
 import './sky.css';
 
 /**
@@ -594,7 +594,7 @@ function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyM
         <p className="sky-results-note">Placeholder: matches names and descriptions. Semantic search is coming.</p>
       </div>}
     </div>}
-    <div className="sky-legend" aria-label="Agent colors">{agentKinds.map(k => <span key={k.id}><i style={{ background: k.color }} />{k.label}</span>)}</div>
+    <div className="sky-legend" aria-label="Agent colors">{(projects.some(p => p.agents?.some(a => /built-in/i.test(a.role))) ? [...agentKinds, builtinKind] : agentKinds).map(k => <span key={k.id}><i style={{ background: k.color }} />{k.label}</span>)}</div>
     <div ref={whiteout} className="sky-whiteout" />
   </div>;
 }

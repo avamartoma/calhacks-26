@@ -17,15 +17,13 @@ import { agentCharge } from './identity';
 import { accessoriesFor, costumeColors } from './costume';
 
 interface Actor { beacon: THREE.Mesh<THREE.RingGeometry,THREE.MeshBasicMaterial>; workStatus: string; group: THREE.Group; home: THREE.Vector3; agent: Agent; screen: THREE.CanvasTexture; label: THREE.Sprite; signature: string; eyes: THREE.Group[]; pupils: THREE.Mesh[]; body: THREE.Group; phase: number; visiting: boolean; meetingUntil:number; route: THREE.Vector3[]; outbound: THREE.Vector3[] }
-const modelLook = (model: string) => model.toLowerCase().includes('grok') ? { label: 'GROK', color: '#3d8eb8' } : model.toLowerCase().includes('cursor') ? { label: 'CURSOR', color: '#3d8eb8' } : model.includes('astra') ? { label: 'ASTRA', color: '#e06a3c' } : model.includes('sol') ? { label: 'SOL', color: '#e2b043' } : model.includes('terra') ? { label: 'TERRA', color: '#3d9a68' } : model.includes('luna') ? { label: 'LUNA', color: '#9a62b8' } : model.includes('5.5') ? { label: '5.5', color: '#3d6eae' } : { label: 'AUTO', color: '#3a9a8c' };
+const modelLook = (model: string) => model === 'Built-in' ? { label: 'I1', color: '#8b9298' } : model.toLowerCase().includes('grok') ? { label: 'GROK', color: '#3d8eb8' } : model.toLowerCase().includes('cursor') ? { label: 'CURSOR', color: '#3d8eb8' } : model.includes('astra') ? { label: 'ASTRA', color: '#e06a3c' } : model.includes('sol') ? { label: 'SOL', color: '#e2b043' } : model.includes('terra') ? { label: 'TERRA', color: '#3d9a68' } : model.includes('luna') ? { label: 'LUNA', color: '#9a62b8' } : model.includes('5.5') ? { label: '5.5', color: '#3d6eae' } : { label: 'AUTO', color: '#3a9a8c' };
 function visibleAgents(room: Room) {
   const available = room.agents.filter(a => a.status !== 'ejected');
   const manager = available.filter(a => a.manager).at(-1);
-  const workers = available.filter(a => !a.manager);
-  const running = workers.filter(a => ['working','talking','approval'].includes(a.status));
-  const others = workers.filter(a => !running.includes(a)).slice().reverse();
-  const chosen=[...running,...others].slice(0,6).sort((a,b)=>workers.indexOf(a)-workers.indexOf(b));
-  return [...(manager ? [manager] : []), ...chosen];
+  const builtin = available.filter(a => a.id.startsWith('fetch:'));
+  const workers = available.filter(a => !a.manager && !a.id.startsWith('fetch:'));
+  return [...(manager ? [manager] : []), ...workers.slice(0, 6), ...builtin.slice(0, Math.max(0, 6 - Math.min(6, workers.length)))];
 }
 export class OfficeScene {
   renderer: THREE.WebGLRenderer;
