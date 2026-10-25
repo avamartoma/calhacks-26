@@ -5,7 +5,7 @@ import tempfile
 import unittest
 
 from office_core import Gate, OfficeAgent, OfficeClient
-from watch_core import Repeats, changes, parse_sse
+from watch_core import Repeats, changes, events, parse_sse
 
 
 def snapshot(project):
@@ -42,9 +42,11 @@ class WatchTest(unittest.TestCase):
         self.task("w1")["status"] = "review"
         self.task("w2")["status"] = "done"
         seen = []
-        lines = changes(self.before, self.after, self.project, lambda room, task: seen.append((room, task)) or "not verified: 1 gap(s)")
+        lines = changes(self.before, self.after, self.project, lambda room, task: seen.append((room, task)) or (False, "not verified: 1 gap(s)"))
         self.assertEqual(lines, ["Ready for review: Search", "Done: Docs (not verified: 1 gap(s))"])
         self.assertEqual(seen, [("r1", "w2")])
+        done = events(self.before, self.after, self.project, lambda room, task: (True, "verified"))[1]
+        self.assertEqual((done.kind, done.room_id, done.task_id, done.title, done.verified), ("done", "r1", "w2", "Docs", True))
 
     def test_other_projects_demo_rooms_and_archived_tasks_are_ignored(self):
         self.after["rooms"][1]["workItems"] = [{"id": "d", "title": "Demo", "status": "blocked"}]
