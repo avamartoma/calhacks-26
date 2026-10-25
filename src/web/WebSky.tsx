@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import { useQuery } from 'convex/react';
-import { Cloud, Plus } from 'lucide-react';
+import { Cloud, Plus, X } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import { AccountBadge } from '../AccountBadge';
 import { SkyView, type SkyProject } from '../sky/SkyView';
 import { seedOf } from '../sky/sky-math';
 import { ConnectionsPanel } from './Connections';
+import { GithubRepos } from './GithubRepos';
 import { NewProject } from './NewProject';
 
 export type SkyRow = NonNullable<ReturnType<typeof useSkyRows>>[number];
@@ -43,6 +44,11 @@ export function WebSky({ go }: { go: (path: string) => void }) {
     });
   }, [rows]);
   const account = user ? { sub: user.sub || '', label: user.name || user.email || 'You', email: user.email, picture: user.picture } : null;
+  const githubLogin = !!user?.sub?.startsWith('github|');
+  // Signing in with GitHub the first time offers your repos once; New project always has them.
+  const offerKey = `opencloud-github-offered:${user?.sub}`;
+  const [offer, setOffer] = useState(() => githubLogin && !localStorage.getItem(offerKey));
+  const closeOffer = () => { localStorage.setItem(offerKey, '1'); setOffer(false); };
   return <div className={`app quiet-office opencloud web-office sky-shell ${account ? 'has-account' : ''}`}>
     <main className="workspace">
       <div className="opencloud-actions">
@@ -52,8 +58,13 @@ export function WebSky({ go }: { go: (path: string) => void }) {
       <div className="world">
         {account && <AccountBadge account={account} onSignOut={() => void logout({ logoutParams: { returnTo: window.location.origin } })} />}
         {rows && <SkyView projects={projects} onEnter={id => go(`/project/${encodeURIComponent(id)}`)} />}
-        {rows && !rows.length && !creating && <div className="sky-hint"><Cloud size={16} /><span>No projects yet. Upload a folder or link a GitHub repo to start.</span><button className="primary" onClick={() => setCreating(true)}>New project</button></div>}
-        {creating && <NewProject onClose={() => setCreating(false)} onCreated={id => go(`/project/${encodeURIComponent(id)}`)} />}
+        {rows && !rows.length && !creating && !offer && <div className="sky-hint"><Cloud size={16} /><span>No projects yet. Upload a folder or link a GitHub repo to start.</span><button className="primary" onClick={() => setCreating(true)}>New project</button></div>}
+        {creating && <NewProject githubLogin={githubLogin} onClose={() => setCreating(false)} onCreated={id => go(`/project/${encodeURIComponent(id)}`)} />}
+        {offer && !creating && <aside className="web-panel github-offer" aria-label="Add your GitHub repos">
+          <header><h2>Add your GitHub repos</h2><button className="icon-button" aria-label="Not now" onClick={closeOffer}><X size={16} /></button></header>
+          <GithubRepos githubLogin onAdded={closeOffer} />
+          <button className="text-button" onClick={closeOffer}>Not now</button>
+        </aside>}
         {accountsOpen && <ConnectionsPanel onClose={() => setAccountsOpen(false)} />}
       </div>
     </main>

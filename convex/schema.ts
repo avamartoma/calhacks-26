@@ -28,7 +28,10 @@ export default defineSchema({
     backup: v.optional(v.id("_storage")),
     resumeWindowStart: v.optional(v.number()),
     resumeCount: v.optional(v.number()),
+    // Set when the project was added from the owner's GitHub repos, so a repo is only added once.
+    githubRepoId: v.optional(v.number()),
   })
+    .index("by_owner_github", ["ownerId", "githubRepoId"])
     .index("by_slug", ["slug"])
     .index("by_share_slug", ["shareSlug"]),
 
@@ -181,4 +184,16 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_hash", ["hashedToken"])
     .index("by_project", ["projectId"]),
+
+  // What one agent run changed: a snapshot of the workspace (in a shadow git history kept apart
+  // from the project's own) taken just before it started, then the files and patch after it ended.
+  runChanges: defineTable({
+    runId: v.id("agentRuns"),
+    projectId: v.id("projects"),
+    baseline: v.optional(v.string()),
+    files: v.optional(v.array(v.object({ path: v.string(), added: v.number(), removed: v.number() }))),
+    patch: v.optional(v.id("_storage")),
+    truncated: v.optional(v.boolean()),
+    error: v.optional(v.string()),
+  }).index("by_run", ["runId"]),
 });

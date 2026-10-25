@@ -160,6 +160,7 @@ export const launch = internalAction({
         await run(sandbox, `chmod 700 "$(dirname "${file}")"; chmod 600 "${file}"`);
       }
       const script = args.testCommand ? `cd "${WORKSPACE}" 2>/dev/null; (${args.testCommand}) > "$OUT" 2> "$ERR"; echo $? > "$EXIT"` : startScript(agent);
+      await ctx.runAction(internal.runChanges.baseline, { runId: args.runId, sandboxId: info.session.sandboxId });
       const handle = await sandbox.commands.run(script, {
         background: true,
         envs: {

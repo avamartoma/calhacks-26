@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { grantedRole, requireAccess, visibleProjects } from "./access";
 import { recordEvent } from "./events";
 import { currentUser } from "./identity";
@@ -220,5 +220,43 @@ export const sky = query({
       });
     }
     return rows;
+  },
+});
+
+/** GitHub repo ids the caller has already added, so the picker can mark them. */
+export const githubIds = internalQuery({
+  args: { ownerId: v.string() },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query("projects").withIndex("by_owner_github", (q) => q.eq("ownerId", args.ownerId)).collect();
+    return rows.flatMap((row) => (row.githubRepoId === undefined ? [] : [row.githubRepoId]));
+  },
+});
+
+const githubRepo = v.object({ id: v.number(), name: v.string(), description: v.string(), cloneUrl: v.string() });
+
+/**
+ * Adds the chosen GitHub repos to the caller's sky as projects. Each clones into its sandbox the
+ * first time it's opened, so adding many costs nothing until then. A repo already added is skipped.
+ */
+export const importGithub = mutation({
+  args: { repos: v.array(githubRepo) },
+  handler: async (ctx, args) => {
+    const user = await currentUser(ctx);
+    if (user.local) throw new Error("Sign in to add your GitHub repos");
+    if (args.repos.length > 50) throw new Error("Add up to 50 repos at a time");
+    const added: string[] = [];
+    for (const repo of args.repos) {
+      if (!/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(\.git)?$/.test(repo.cloneUrl)) throw new Error(`${repo.name} isn't a GitHub repository link`);
+      const existing = await ctx.db
+        .query("projects")
+        .withIndex("by_owner_github", (q) => q.eq("ownerId", user.id).eq("githubRepoId", repo.id))
+        .first();
+      if (existing) continue;
+      const projectId = await insertProject(ctx, { name: repo.name.slice(0, 60), description: repo.description.slice(0, 280), repoUrl: repo.cloneUrl, ownerId: user.id, email: user.email });
+      await ctx.db.patch(projectId, { githubRepoId: repo.id });
+      await recordEvent(ctx, { projectId, kind: "project.created", detail: `${repo.name} (from GitHub)` });
+      added.push(projectId);
+    }
+    return added;
   },
 });
