@@ -10,6 +10,7 @@ import { localHour, paletteAt } from '../sky/time-of-day';
 import type { Agent, Room } from '../types';
 import { KeyForm } from './KeyPanel';
 import { describe, useSkyRows, type SkyRow } from './WebSky';
+import { FetchPanel } from './FetchWeb';
 
 type Run = NonNullable<ReturnType<typeof useRuns>>[number];
 const useRuns = (projectId: Id<'projects'>) => useQuery(api.agentRuns.list, { projectId });
@@ -47,6 +48,7 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
   const [sessionId, setSessionId] = useState<Id<'sessions'> | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [fetchOpen, setFetchOpen] = useState(false);
   const [error, setError] = useState('');
   const container = useRef<HTMLDivElement>(null);
   const scene = useRef<OfficeScene | null>(null);
@@ -105,6 +107,7 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
       <div className="opencloud-actions">
         <button className="sky-return" onClick={() => go('/')}><Cloud size={16} /> Sky</button>
         <button className="sky-return" aria-pressed={shareOpen} onClick={() => setShareOpen(open => !open)}><ExternalLink size={16} /> Share</button>
+        <button className="sky-return" aria-pressed={fetchOpen} onClick={() => setFetchOpen(open => !open)}>ASI:One agents</button>
         <span className="web-title">{row.name}<small>{describe(row)}</small></span>
       </div>
       <div className="world">
@@ -112,6 +115,7 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
         <div className="cloud-arrival" style={{ background: `rgb(${paletteAt(localHour()).cloudLight.map(v => Math.round(v * 255)).join(',')})` }} />
         <AgentsPanel projectId={projectId} runs={runs} editor={editor} selected={selected} onSelect={setSelected} />
         {shareOpen && <SharePanel row={row} onClose={() => setShareOpen(false)} />}
+        {fetchOpen && <FetchPanel projectId={projectId} runs={runs || []} editor={editor} mine={row.mine} onClose={() => setFetchOpen(false)} />}
         <PreviewDock cloud={preview} />
         {editor && sessionId && row.session?.status === 'ready' && !row.session.previewUrl && <StartPreview sessionId={sessionId} />}
         {error && <p className="web-toast" role="alert">{error}<button aria-label="Dismiss" onClick={() => setError('')}><X size={14} /></button></p>}

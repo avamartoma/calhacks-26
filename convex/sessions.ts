@@ -72,6 +72,12 @@ async function hasFreshPresence(ctx: MutationCtx, projectId: Id<"projects">, cut
 export async function beginSession(ctx: MutationCtx, projectId: Id<"projects">, agent: AgentName) {
   await requireAccess(ctx, projectId, "viewer");
   const user = await currentUser(ctx);
+  return await openSession(ctx, projectId, agent, user.id);
+}
+
+/** beginSession without the access check, for callers that already decided, like the hosted Fetch.ai agents. */
+export async function openSession(ctx: MutationCtx, projectId: Id<"projects">, agent: AgentName, userId: string) {
+  const user = { id: userId };
   const project = await ctx.db.get(projectId);
   if (!project) {
     throw new Error("Project not found");

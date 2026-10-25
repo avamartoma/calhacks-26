@@ -28,6 +28,8 @@ export default defineSchema({
     backup: v.optional(v.id("_storage")),
     resumeWindowStart: v.optional(v.number()),
     resumeCount: v.optional(v.number()),
+    // The owner let the team's hosted Fetch.ai agents read this project and start work on it.
+    fetchDemo: v.optional(v.boolean()),
   })
     .index("by_slug", ["slug"])
     .index("by_share_slug", ["shareSlug"]),
@@ -156,5 +158,36 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_hash", ["hashedToken"])
+    .index("by_project", ["projectId"]),
+
+  // The ASI:One (Fetch.ai) agents hosted on Agentverse: who checked in last, what they did, and the
+  // work the web office queued for them. They reach Convex over HTTPS with FETCH_AGENT_TOKEN.
+  fetchAgents: defineTable({
+    name: v.string(),
+    address: v.string(),
+    details: v.any(),
+    lastSeen: v.number(),
+  }).index("by_name", ["name"]),
+
+  fetchActivity: defineTable({
+    name: v.string(),
+    kind: v.string(),
+    text: v.string(),
+    projectId: v.optional(v.id("projects")),
+  }).index("by_project", ["projectId"]),
+
+  fetchJobs: defineTable({
+    agent: v.string(),
+    kind: v.string(),
+    projectId: v.id("projects"),
+    runId: v.optional(v.id("agentRuns")),
+    payload: v.any(),
+    status: v.union(v.literal("queued"), v.literal("running"), v.literal("done"), v.literal("failed")),
+    result: v.optional(v.any()),
+    requestedBy: v.string(),
+    startedAt: v.optional(v.number()),
+    finishedAt: v.optional(v.number()),
+  })
+    .index("by_agent_status", ["agent", "status"])
     .index("by_project", ["projectId"]),
 });
