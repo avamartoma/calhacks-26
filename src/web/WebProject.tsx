@@ -239,10 +239,9 @@ function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, o
           <button className="primary" disabled={busy || !prompt.trim()}><Play size={14} /> {busy ? 'Starting…' : 'Start agent'}</button>
         </form>
     </details>}
-    {runList(otherRuns.filter(working))}
-    {/* Finished runs outside the tickets are kept in the archive folder, not listed here. */}
-    <TicketArchive tickets={(tickets || []).filter(ticket => ticket.archivedAt)} team={team} editor={editor} runs={otherRuns.filter(run => !working(run)).length}>
-      {runList(otherRuns.filter(run => !working(run)))}
+    {/* Runs outside the tickets are kept in the archive folder, not listed here; a working one can still be stopped there. */}
+    <TicketArchive tickets={(tickets || []).filter(ticket => ticket.archivedAt)} team={team} editor={editor} runs={otherRuns.length}>
+      {runList(otherRuns)}
     </TicketArchive>
     </>}
   </aside>;
