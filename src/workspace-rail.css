@@ -24,3 +24,6 @@
 .rail-menu button.danger{color:#b55c48}
 .workspace-rail li button img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
 .workspace-rail li button:has(img){overflow:visible;background:#2c3756}
+/* Shared and public workspaces (web app): a people mark on shared ones; the public one shows a globe. */
+.workspace-rail li button .rail-shared{position:absolute;left:-3px;bottom:-3px;display:grid;place-items:center;width:16px;height:16px;border-radius:50%;background:#fff;color:#1f2840;box-shadow:0 0 0 2px #1f2840}
+.workspace-rail li.rail-public button{color:#fff}

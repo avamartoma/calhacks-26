@@ -2,11 +2,11 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { internalQuery, mutation, query } from "./_generated/server";
-import { grantedRole, requireAccess, visibleProjects } from "./access";
+import { grantedRole, requireAccess, visibleProjects, workspaceRole } from "./access";
 import { recordEvent } from "./events";
 import { currentUser } from "./identity";
 import { assertHttpsGitUrl, assertNonEmpty, slugify } from "./validators";
-import { workspaceOf } from "./workspaces";
+import { publicWorkspace, workspaceFor } from "./workspaces";
 
 async function uniqueSlug(ctx: MutationCtx, name: string): Promise<string> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -194,7 +194,9 @@ export const sky = query({
   handler: async (ctx) => {
     const user = await currentUser(ctx);
     const projects = await ctx.db.query("projects").order("desc").collect();
-    const workspaces = (await ctx.db.query("workspaces").withIndex("by_owner", (q) => q.eq("ownerId", user.id)).collect()).sort((a, b) => a.createdAt - b.createdAt);
+    const workspaces = (await ctx.db.query("workspaces").withIndex("by_owner", (q) => q.eq("ownerId", user.id)).collect())
+      .filter((workspace) => (workspace.kind ?? "personal") === "personal")
+      .sort((a, b) => a.createdAt - b.createdAt);
     const rows = [];
     for (const project of projects) {
       const role = await grantedRole(ctx, project, user);
@@ -220,7 +222,7 @@ export const sky = query({
         session: sessions[0] ? { id: sessions[0]._id, status: sessions[0].status, previewUrl: sessions[0].previewUrl ?? null, previewStatus: sessions[0].previewStatus ?? null } : null,
         snapshotUrl,
         runs: runs.map((run) => ({ id: run._id, agent: run.agent ?? "claude", status: run.status, userLabel: run.userLabel, prompt: run.prompt.slice(0, 120) })),
-        workspaceId: mine ? workspaceOf(project, workspaces) : null,
+        workspaceId: await workspaceFor(ctx, project, user, workspaces),
         placed: placed ? { x: placed.x, y: placed.y } : null,
       });
     }
@@ -242,15 +244,24 @@ const githubRepo = v.object({ id: v.number(), name: v.string(), description: v.s
 /**
  * Adds the chosen GitHub repos to the caller's sky as projects. Each clones into its sandbox the
  * first time it's opened, so adding many costs nothing until then. A repo already added is skipped.
- * The code is already public on GitHub, so these are public by default: everyone signed in sees
- * them, view only. The owner can choose private, here or later from Share.
+ * They go into the given workspace, which decides who sees them; without one, `visibility`
+ * public (the default) puts them in the public workspace and private in your first personal one.
  */
 export const importGithub = mutation({
-  args: { repos: v.array(githubRepo), visibility: v.optional(v.union(v.literal("public"), v.literal("private"))) },
+  args: { repos: v.array(githubRepo), workspaceId: v.optional(v.id("workspaces")), visibility: v.optional(v.union(v.literal("public"), v.literal("private"))) },
   handler: async (ctx, args) => {
     const user = await currentUser(ctx);
     if (user.local) throw new Error("Sign in to add your GitHub repos");
     if (args.repos.length > 50) throw new Error("Add up to 50 repos at a time");
+    const everyone = await publicWorkspace(ctx);
+    const target = args.workspaceId ? await ctx.db.get(args.workspaceId) : (args.visibility ?? "public") === "public" ? everyone : null;
+    if (args.workspaceId) {
+      const role = target ? await workspaceRole(ctx, target, user) : null;
+      const kind = target?.kind ?? "personal";
+      const allowed = role && (kind === "public" || role === "admin" || (kind === "shared" && target?.allowMemberProjects));
+      if (!target || !allowed) throw new Error("You can't add projects to that workspace");
+    }
+    const visibility = target?.kind === "public" ? "public" : "private";
     const added: string[] = [];
     for (const repo of args.repos) {
       if (!/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(\.git)?$/.test(repo.cloneUrl)) throw new Error(`${repo.name} isn't a GitHub repository link`);
@@ -260,7 +271,7 @@ export const importGithub = mutation({
         .first();
       if (existing) continue;
       const projectId = await insertProject(ctx, { name: repo.name.slice(0, 60), description: repo.description.slice(0, 280), repoUrl: repo.cloneUrl, ownerId: user.id, email: user.email });
-      await ctx.db.patch(projectId, { githubRepoId: repo.id, visibility: args.visibility ?? "public" });
+      await ctx.db.patch(projectId, { githubRepoId: repo.id, visibility, ...(target ? { workspaceId: target._id } : {}) });
       await recordEvent(ctx, { projectId, kind: "project.created", detail: `${repo.name} (from GitHub)` });
       added.push(projectId);
     }

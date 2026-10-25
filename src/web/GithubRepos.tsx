@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAction, useMutation } from 'convex/react';
 import { LoaderCircle } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
+import type { Id } from '../../convex/_generated/dataModel';
 import type { GithubRepo } from '../../convex/github';
 import { preselect } from './github-pick';
 
@@ -16,18 +17,27 @@ function ago(iso: string | null) {
   return `updated ${Math.floor(days / 365)} year${days < 730 ? '' : 's'} ago`;
 }
 
+export type TargetWorkspace = { id: string; name: string; kind: string };
+
+/** Who will see projects added to a workspace. */
+export function audience(workspace: TargetWorkspace) {
+  if (workspace.kind === 'public') return 'everyone signed in, view only';
+  if (workspace.kind === 'shared') return `the people in ${workspace.name}`;
+  return 'only you, unless you share them';
+}
+
 /**
  * Picks GitHub repos to add to the sky. Signed in with GitHub, it lists your repos straight away;
- * otherwise it asks for a GitHub username first. Only public repos are listed.
+ * otherwise it asks for a GitHub username first. Only public repos are listed. They go into
+ * `workspace`, which decides who sees them.
  */
-export function GithubRepos({ githubLogin, onAdded }: { githubLogin: boolean; onAdded: (ids: string[]) => void }) {
+export function GithubRepos({ githubLogin, workspace, onAdded }: { githubLogin: boolean; workspace?: TargetWorkspace; onAdded: (ids: string[]) => void }) {
   const list = useAction(api.github.repos);
   const importRepos = useMutation(api.projects.importGithub);
   const [username, setUsername] = useState(() => localStorage.getItem('opencloud-github-username') || '');
   const [loaded, setLoaded] = useState<{ username: string; repos: GithubRepo[] } | null>(null);
   const [chosen, setChosen] = useState<Set<number>>(new Set());
   const [showAll, setShowAll] = useState(false);
-  const [everyone, setEveryone] = useState(true);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
 
@@ -49,7 +59,7 @@ export function GithubRepos({ githubLogin, onAdded }: { githubLogin: boolean; on
   async function add() {
     const repos = (loaded?.repos || []).filter(repo => chosen.has(repo.id)).map(repo => ({ id: repo.id, name: repo.name, description: repo.description, cloneUrl: repo.cloneUrl }));
     setBusy(`Adding ${repos.length}…`); setError('');
-    try { onAdded(await importRepos({ repos, visibility: everyone ? 'public' : 'private' })); }
+    try { onAdded(await importRepos({ repos, ...(workspace ? { workspaceId: workspace.id as Id<'workspaces'> } : {}) })); }
     catch (e) { setError(message(e)); }
     finally { setBusy(''); }
   }
@@ -70,9 +80,7 @@ export function GithubRepos({ githubLogin, onAdded }: { githubLogin: boolean; on
       </label>
     </li>)}</ul>
     {hidden > 0 && <button type="button" className="text-button" onClick={() => setShowAll(true)}>Show {hidden} fork{hidden === 1 ? '' : 's'} and archived repo{hidden === 1 ? '' : 's'}</button>}
-    <label className="web-check github-public"><input type="checkbox" checked={everyone} onChange={e => setEveryone(e.target.checked)} />
-      <span>Everyone signed in can see these<small>View only. They'll also see what agents do in them, including the tasks you give.</small></span>
-    </label>
+    {workspace && <p className="web-note github-public">These go into <b>{workspace.name}</b>, seen by {audience(workspace)}.{workspace.kind !== 'personal' && " They'll also see what agents do in them, including the tasks you give."}</p>}
     {error && <p className="web-error" role="alert">{error}</p>}
     <button type="button" className="primary" disabled={!!busy || !chosen.size} onClick={() => void add()}>{busy || (chosen.size ? `Add ${chosen.size} to my sky` : 'Choose repos to add')}</button>
   </div>;

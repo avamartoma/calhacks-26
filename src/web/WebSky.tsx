@@ -12,6 +12,7 @@ import { seedOf } from '../sky/sky-math';
 import { ConnectionsPanel } from './Connections';
 import { GithubRepos } from './GithubRepos';
 import { NewProject } from './NewProject';
+import { NewWorkspace, WorkspaceMembers } from './WorkspaceMembers';
 
 export type SkyRow = NonNullable<ReturnType<typeof useSkyRows>>[number];
 export const useSkyRows = () => useQuery(api.projects.sky, {});
@@ -46,14 +47,24 @@ export function WebSky({ go }: { go: (path: string) => void }) {
   const [accountsOpen, setAccountsOpen] = useState(false);
   const [error, setError] = useState('');
   const [chosen, setChosen] = useState(() => localStorage.getItem('opencloud-workspace') || '');
-  useEffect(() => { if (workspaces && !workspaces.length) void ensure({}).catch(() => {}); }, [workspaces?.length]);
+  // Makes your first personal workspace, and the public one if it doesn't exist yet.
+  const missing = !!workspaces && (!workspaces.some(workspace => workspace.kind === 'personal') || !workspaces.some(workspace => workspace.kind === 'public'));
+  useEffect(() => { if (missing) void ensure({}).catch(() => {}); }, [missing]);
   const current = workspaces?.find(workspace => workspace.id === chosen) || workspaces?.[0];
   const choose = (id: string) => { setChosen(id); localStorage.setItem('opencloud-workspace', id); };
   const act = (fn: () => Promise<unknown>) => { setError(''); fn().catch(e => setError(message(e))); };
-  const rows = allRows && current ? allRows.filter(row => !row.mine || row.workspaceId === current.id) : allRows;
+  // A shared or public workspace's sky is everything in it. A personal one is your projects there,
+  // with projects shared with you one by one behind them.
+  const rows = allRows && current
+    ? allRows.filter(row => current.kind === 'personal' ? (row.mine ? row.workspaceId === current.id : row.workspaceId === null) : row.workspaceId === current.id)
+    : allRows;
   // The rail's "working" badge counts agents per workspace, from the same rows.
-  const railRooms = useMemo(() => (allRows || []).filter(row => row.mine).map(row => ({ workspaceId: row.workspaceId, archived: false, demo: false, agents: row.runs.map(run => ({ status: agentStatus(run.status) })) })) as unknown as Room[], [allRows]);
+  const railRooms = useMemo(() => (allRows || []).map(row => ({ workspaceId: row.workspaceId, archived: false, demo: false, agents: row.runs.map(run => ({ status: agentStatus(run.status) })) })) as unknown as Room[], [allRows]);
   const railWorkspaces: Workspace[] = (workspaces || []).map(workspace => ({ ...workspace, image: workspace.image ?? undefined }));
+  const [newWorkspace, setNewWorkspace] = useState(false);
+  const [membersOf, setMembersOf] = useState<string | null>(null);
+  const membersWorkspace = workspaces?.find(workspace => workspace.id === membersOf);
+  const everyone = workspaces?.find(workspace => workspace.kind === 'public');
   const projects = useMemo<SkyProject[]>(() => {
     let mine = 0, shared = 0;
     return (rows || []).map(row => {
@@ -82,21 +93,26 @@ export function WebSky({ go }: { go: (path: string) => void }) {
       onCreate={name => act(async () => choose(await createWorkspace({ name })))}
       onRename={(id, name) => act(() => updateWorkspace({ id: id as Id<'workspaces'>, name }))}
       onPicture={(id, image) => act(() => updateWorkspace({ id: id as Id<'workspaces'>, image }))}
-      onRemove={id => act(async () => { const result = await removeWorkspace({ id: id as Id<'workspaces'> }); if (id === current?.id) choose(result.movedTo); })} />
+      onRemove={id => act(async () => { const result = await removeWorkspace({ id: id as Id<'workspaces'> }); if (id === current?.id) choose(result.movedTo); })}
+      onAdd={() => setNewWorkspace(true)} onMembers={setMembersOf} />
     <main className="workspace">
       <div className="opencloud-actions">
         <button className="sky-return" aria-pressed={accountsOpen} onClick={() => setAccountsOpen(open => !open)}>Accounts</button>
-        <button className="sky-return" onClick={() => setCreating(true)}><Plus size={16} /> New project</button>
+        {current?.canAddProjects !== false && <button className="sky-return" onClick={() => setCreating(true)}><Plus size={16} /> New project</button>}
+        {current && <span className="web-title web-workspace">{current.name}<small>{current.kind === 'public' ? 'Everyone signed in sees these projects' : current.kind === 'shared' ? (current.canAddProjects ? 'Shared · everyone here sees these projects' : 'Shared · only the creator adds projects here') : 'Only you see this workspace'}</small></span>}
+        {current?.kind === 'shared' && <button className="sky-return" onClick={() => setMembersOf(current.id)}>Members</button>}
       </div>
       <div className="world">
         {account && <AccountBadge account={account} onSignOut={() => void logout({ logoutParams: { returnTo: window.location.origin } })} />}
         {rows && <SkyView key={current?.id} projects={projects} onEnter={id => go(`/project/${encodeURIComponent(id)}`)} onMove={(id, x, y) => void place({ projectId: id as Id<'projects'>, x, y }).catch(() => {})} />}
         {error && <p className="web-toast" role="alert">{error}<button aria-label="Dismiss" onClick={() => setError('')}><X size={14} /></button></p>}
         {rows && !rows.length && !creating && !offer && <div className="sky-hint"><Cloud size={16} /><span>No projects yet. Upload a folder or link a GitHub repo to start.</span><button className="primary" onClick={() => setCreating(true)}>New project</button></div>}
-        {creating && <NewProject githubLogin={githubLogin} onClose={() => setCreating(false)} onCreated={id => { if (current) void moveProject({ projectId: id as Id<'projects'>, workspaceId: current.id }).catch(() => {}); go(`/project/${encodeURIComponent(id)}`); }} />}
+        {newWorkspace && <NewWorkspace onClose={() => setNewWorkspace(false)} onCreated={id => { setNewWorkspace(false); choose(id); }} />}
+        {membersWorkspace && <WorkspaceMembers workspace={membersWorkspace} onClose={() => setMembersOf(null)} onLeft={() => { setMembersOf(null); choose(''); }} />}
+        {creating && <NewProject githubLogin={githubLogin} workspace={current} onClose={() => setCreating(false)} onCreated={id => { if (current) void moveProject({ projectId: id as Id<'projects'>, workspaceId: current.id }).catch(() => {}); go(`/project/${encodeURIComponent(id)}`); }} />}
         {offer && !creating && <aside className="web-panel github-offer" aria-label="Add your GitHub repos">
           <header><h2>Add your GitHub repos</h2><button className="icon-button" aria-label="Not now" onClick={closeOffer}><X size={16} /></button></header>
-          <GithubRepos githubLogin onAdded={closeOffer} />
+          <GithubRepos githubLogin workspace={everyone || current} onAdded={() => { closeOffer(); if (everyone) choose(everyone.id); }} />
           <button className="text-button" onClick={closeOffer}>Not now</button>
         </aside>}
         {accountsOpen && <ConnectionsPanel onClose={() => setAccountsOpen(false)} />}

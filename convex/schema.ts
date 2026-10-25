@@ -232,14 +232,34 @@ export default defineSchema({
     error: v.optional(v.string()),
   }).index("by_run", ["runId"]),
 
-  // A person's skies, as in the local office's workspace rail: name, color, optional picture.
+  // Skies on the workspace rail. Personal ones are their owner's alone (no kind means personal).
+  // A shared one has members, invited by email. The one public workspace (owner "public") is
+  // everyone's, and a project in it is visible to everyone signed in.
   workspaces: defineTable({
     ownerId: v.string(),
+    ownerEmail: v.optional(v.string()),
     name: v.string(),
     color: v.string(),
     image: v.optional(v.string()),
     createdAt: v.number(),
-  }).index("by_owner", ["ownerId"]),
+    kind: v.optional(v.union(v.literal("personal"), v.literal("shared"), v.literal("public"))),
+    // Set by the shared workspace's creator.
+    allowMemberProjects: v.optional(v.boolean()),
+    allowMemberInvites: v.optional(v.boolean()),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_kind", ["kind"]),
+
+  // People invited to a shared workspace. The email is how they're recognized when they sign in.
+  workspaceMembers: defineTable({
+    workspaceId: v.id("workspaces"),
+    email: v.string(),
+    role: v.union(v.literal("viewer"), v.literal("editor")),
+    invitedBy: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_workspace", ["workspaceId"])
+    .index("by_email", ["email"]),
 
   // Where a person dragged a cloud on their sky, so it is there on any computer they sign in on.
   skyPositions: defineTable({

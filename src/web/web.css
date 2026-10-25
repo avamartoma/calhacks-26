@@ -97,3 +97,20 @@
 .github-public{align-items:flex-start}
 .github-public input{margin-top:3px}
 .github-public small{display:block;font-size:11.5px;line-height:1.4;color:#66708a;font-weight:400}
+/* Workspaces: the current one's audience, the new workspace dialog, and a shared workspace's members. */
+.web-workspace{margin-left:2px}
+.opencloud .new-workspace{gap:10px}
+.new-workspace label{margin:0}
+.workspace-invite{display:flex;gap:6px;align-items:center}
+.workspace-invite input{flex:1;min-width:0;margin:0;background:#fff;border-color:#d3d9e3;color:#26324a;font-size:13px}
+.workspace-invite select,.workspace-people select{width:auto;height:auto;margin:0;padding:7px 8px;font-size:12.5px;background:#fff;border-color:#d3d9e3}
+.workspace-people{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;border:1px solid #e2e7ee;border-radius:8px;background:#fff}
+.workspace-people li{display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:12.5px;color:#26324a}
+.workspace-people li+li{border-top:1px solid #eef1f5}
+.workspace-people li span{flex:1;min-width:0;overflow-wrap:anywhere}
+.workspace-people li small{color:#66708a;font-size:11.5px}
+.workspace-permissions{display:flex;flex-direction:column;gap:6px;margin:0;padding:10px;border:1px solid #e2e7ee;border-radius:8px}
+.workspace-permissions legend{padding:0 4px;font-size:12px;font-weight:700;color:#46506a}
+.workspace-permissions label{align-items:flex-start;font-weight:400}
+.workspace-permissions small{display:block;font-size:11.5px;color:#66708a}
+.workspace-members .primary,.new-workspace .primary{background:#26324a;border-color:#26324a;color:#fff}

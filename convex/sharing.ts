@@ -3,6 +3,7 @@ import type { Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireAccess } from "./access";
 import { currentUser } from "./identity";
+import { publicWorkspace } from "./workspaces";
 import { accessRoleValidator, assertNonEmpty } from "./validators";
 
 type OwnerCtx = QueryCtx | MutationCtx;
@@ -65,14 +66,24 @@ export const get = query({
   },
 });
 
+/**
+ * Public means in the public workspace, so making a project public moves it there, and making
+ * it private moves it back to the owner's first personal workspace.
+ */
 export const setVisibility = mutation({
   args: {
     projectId: v.id("projects"),
     visibility: v.union(v.literal("private"), v.literal("public")),
   },
   handler: async (ctx, args) => {
-    await requireOwner(ctx, args.projectId);
-    await ctx.db.patch(args.projectId, { visibility: args.visibility });
+    const { project } = await requireOwner(ctx, args.projectId);
+    const everyone = await publicWorkspace(ctx);
+    const leavingPublic = args.visibility === "private" && everyone && project.workspaceId === everyone._id;
+    await ctx.db.patch(args.projectId, {
+      visibility: args.visibility,
+      ...(args.visibility === "public" && everyone ? { workspaceId: everyone._id } : {}),
+      ...(leavingPublic ? { workspaceId: undefined } : {}),
+    });
     return args.projectId;
   },
 });
