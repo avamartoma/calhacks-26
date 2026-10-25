@@ -45,7 +45,7 @@ function asShareInfo(value: unknown): ShareInfo | null {
   };
 }
 
-export function SharePanel({ projectId, shareSlug, projectName }: { projectId?: string; shareSlug?: string; projectName?: string }) {
+export function SharePanel({ projectId, shareSlug, projectName, roomId }: { projectId?: string; shareSlug?: string; projectName?: string; roomId?: string }) {
   const [info, setInfo] = useState<ShareInfo | null>(null);
   const [members, setMembers] = useState<ShareMember[]>([]);
   const [email, setEmail] = useState('');
@@ -113,11 +113,13 @@ export function SharePanel({ projectId, shareSlug, projectName }: { projectId?: 
     }
   }
 
+  const officeLink = roomId ? `${window.location.origin}/?project=${encodeURIComponent(roomId)}` : '';
+
   async function copyLink() {
-    if (!slug) return;
+    const link = officeLink || (slug ? `${window.location.origin}/p/${slug}` : '');
+    if (!link) return;
     try {
-      const origin = window.location.port === '4314' ? 'http://localhost:4316' : window.location.origin;
-      await navigator.clipboard.writeText(`${origin}/p/${slug}`);
+      await navigator.clipboard.writeText(link);
       setCopied(true);
       setError('');
     } catch {
@@ -133,8 +135,8 @@ export function SharePanel({ projectId, shareSlug, projectName }: { projectId?: 
       <button type="button" className={visibility === 'private' ? 'on' : 'secondary'} disabled={busy || !projectId} aria-pressed={visibility === 'private'} onClick={() => { setVisibility('private'); void mutate((client) => (client.mutation as Call)(anyApi.sharing.setVisibility, { projectId, visibility: 'private' }), 'Visibility is private.'); }}>Private</button>
       <button type="button" className={visibility === 'public' ? 'on' : 'secondary'} disabled={busy || !projectId} aria-pressed={visibility === 'public'} onClick={() => { setVisibility('public'); void mutate((client) => (client.mutation as Call)(anyApi.sharing.setVisibility, { projectId, visibility: 'public' }), 'Visibility is public.'); }}>Public</button>
     </div>
-    {slug ? <p>Slug <code className="share-slug">{slug}</code></p> : <p>The hosted link appears after the share app is deployed.</p>}
-    {slug && <div className="share-row"><button type="button" className="secondary" onClick={() => void copyLink()}>{copied ? 'Copied' : 'Copy link'}</button></div>}
+    {officeLink ? <p>Office link <code className="share-slug">{officeLink}</code></p> : slug ? <p>Slug <code className="share-slug">{slug}</code></p> : <p>Open a project to copy its office link.</p>}
+    {(officeLink || slug) && <div className="share-row"><button type="button" className="secondary" onClick={() => void copyLink()}>{copied ? 'Copied' : 'Copy office link'}</button></div>}
     <form className="share-row" onSubmit={(event) => {
       event.preventDefault();
       const next = email.trim();

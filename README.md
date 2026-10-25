@@ -22,7 +22,7 @@ The sky is a 2D canvas with parallax layers, painted for the local time of day (
 
 - **Your projects** sit in front in a tight cluster, with a light yellow band along the base. **Projects shared with you** sit on layers further back and come into focus as you zoom toward them. For now these are placeholder projects from `src/cloud/seed.json`.
 - Every cloud shows its title; a cloud is sized to its title, so the title always fits. Zooming in shows the description and the agents, drawn as small blob people colored by type (the legend is bottom right). Your clouds show these at the home view.
-- Drag, swipe or use the arrow keys to move; pinch or scroll to zoom. Zoomed out, clouds pack closer together. Click a cloud to go to it. Zooming into one of yours fills the screen with white and opens its project page; pinch out, or scroll up past the top of the page, to return.
+- Drag, swipe or use the arrow keys to move; pinch or scroll to zoom. Zoomed out, clouds pack closer together. Click a cloud to go to it. Zooming into one of yours fills the screen with white and opens its office; press Esc to return. The office's **Document** view shows the project as a page.
 - Bottom left: **Home** returns to your projects, and **Sky | Folders** switches to a folder view of every project as a card.
 - The search bar is a placeholder that matches names and descriptions; semantic search replaces the matching. **Only show my projects** hides everyone else's clouds.
 
@@ -92,7 +92,7 @@ On Windows, `npm run runtime:install` installs the pinned project-local Codex ru
 
 ## Use it
 
-1. **Pick a workspace, then a project.** Choose a workspace in the left rail; its sky shows your projects up front and projects shared with you behind. Click or zoom into one of your clouds to open its project page; press Esc, or pinch out, to return.
+1. **Pick a workspace, then a project.** Choose a workspace in the left rail; its sky shows your projects up front and projects shared with you behind. Click or zoom into one of your clouds to open its office; press Esc to return.
 2. **Describe the work.** Start work applies a reusable workflow. Choose the **Manager model**, from Codex or Claude. The manager delegates bounded research and review for substantial tasks and remains the implementation owner. A new ticket can also stay in the backlog without running a model.
 3. **Follow the project.** The expanded view is still the office desks: published progress, commands, changes, and task state. The sidebar keeps tickets, agents, start work, connections, and settings next to that view. Private reasoning is not displayed.
 4. **Coordinate.** Handoffs connect findings to assignments. Declared file scopes and dependencies help sequence work. Pair a teammate's office to exchange status and context across separate checkouts.
