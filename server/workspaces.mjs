@@ -94,8 +94,13 @@ export function assignRoom(state, room, workspaceId) {
   return room;
 }
 
+/**
+ * Where a project's cloud sits. `sky: true` saves where you dragged it on the workspace sky, in
+ * that sky's own units, kept apart from the position the older 3D view uses.
+ */
 export function placeCloud(state, room, spot) {
-  const input = z.object({ x: z.number().finite(), y: z.number().finite() }).strict().parse(spot);
-  room.cloud = { ...room.cloud, x: input.x, y: input.y };
+  const input = z.object({ x: z.number().finite().min(-1e6).max(1e6), y: z.number().finite().min(-1e6).max(1e6), sky: z.boolean().optional() }).strict().parse(spot);
+  if (input.sky) room.cloud = { ...room.cloud, sky: { x: input.x, y: input.y } };
+  else room.cloud = { ...room.cloud, x: input.x, y: input.y };
   return room.cloud;
 }

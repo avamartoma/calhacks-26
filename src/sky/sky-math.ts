@@ -68,7 +68,7 @@ export interface Viewport { width: number; height: number }
 /** Width of a cloud in world units at depth 1. Height is 0.62 of the width. */
 export const CLOUD_WIDTH = 320;
 export const CLOUD_ASPECT = 0.62;
-export const MIN_ZOOM = 0.22;
+export const MIN_ZOOM = 0.12;
 export const MAX_ZOOM = 14;
 
 /** How much a layer at this depth scales: depth 1 moves with the camera; far layers move and grow less. */

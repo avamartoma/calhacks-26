@@ -21,7 +21,7 @@ void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(
 `;
 const fragment = /* glsl */`
 uniform vec3 uFill, uShade, uEdge, uHaze;
-uniform float uSeed, uFar, uHover, uFade, uMine;
+uniform float uSeed, uFar, uHover, uFade, uMine, uGray;
 varying vec2 vUv;
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
@@ -49,6 +49,8 @@ void main() {
   float band = smoothstep(-0.3, -0.32, p.y) * (1.0 - smoothstep(0.0, 0.01, d + 0.035));
   col = mix(col, vec3(0.99, 0.88, 0.58), band * uMine);
   col += 0.04 * uHover;
+  // Projects further back are gray until you zoom in to them.
+  col = mix(col, vec3(dot(col, vec3(0.3, 0.55, 0.15))) * 0.86 + vec3(0.04, 0.05, 0.07), uGray);
   col = mix(col, uHaze, uFar);
   gl_FragColor = vec4(col, alpha * uFade * (1.0 - uFar * 0.2));
 }
@@ -81,7 +83,7 @@ export function createSkyRendererVector(canvas: HTMLCanvasElement): SkyRenderer 
 
   function make(id: string, x: number, y: number, z: number, width: number, seed: number, cloud?: SkyCloud): Shape {
     const material = new THREE.ShaderMaterial({ vertexShader: vertex, fragmentShader: fragment, transparent: true, depthWrite: false,
-      uniforms: { ...shared, uSeed: { value: seed * 100 }, uFar: { value: 0 }, uHover: { value: 0 }, uFade: { value: 1 }, uMine: { value: cloud?.mine && cloud.id !== 'you' ? 1 : 0 } } });
+      uniforms: { ...shared, uSeed: { value: seed * 100 }, uFar: { value: 0 }, uHover: { value: 0 }, uFade: { value: 1 }, uMine: { value: cloud?.mine && cloud.id !== 'you' ? 1 : 0 }, uGray: { value: 0 } } });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.scale.set(width, width * CLOUD_SHAPE, 1);
     mesh.position.set(x, y, z);
@@ -147,12 +149,21 @@ export function createSkyRendererVector(canvas: HTMLCanvasElement): SkyRenderer 
 
 /** Your project clouds in the flat sky, in world units: bigger than in 3D so text has room. */
 export const FLAT_WIDTH = 660;
-const flatSize = (c: SkyCloud) => (c.mine ? FLAT_WIDTH : FLAT_WIDTH * .82) * (c.size ?? 1) / CLOUD_WIDTH;
+const flatSize = (c: SkyCloud) => FLAT_WIDTH * (c.size ?? 1) / CLOUD_WIDTH;
+/**
+ * How far you have zoomed in to the projects further back, 0 to 1: at the home view they are
+ * small and gray, as if far away; zoomed in, they are white and full size.
+ */
+export const backgroundNear = (zoom: number) => { const t = Math.min(1, Math.max(0, (zoom - .5) / .6)); return t * t * (3 - 2 * t); };
+/** Size of a cloud on the flat canvas: projects further back shrink until you zoom in to them. */
+const sizeAt = (c: SkyCloud, zoom: number) => flatSize(c) * zoomedOutBoost(zoom) * (c.mine ? 1 : .68 + .32 * backgroundNear(zoom));
 /**
  * Zoomed out, clouds shrink a little less than the space between them, so more of them fit on
  * screen. Their centers keep moving with the camera, so zooming stays anchored to the cursor.
  */
 const zoomedOutBoost = (zoom: number) => zoom < 1 ? Math.pow(zoom, -.18) : 1;
+/** The share of a cloud's width its text may use; the rest is margin on either side. */
+export const LABEL_SHARE = .58;
 /** Screen gap kept between any two clouds, in CSS pixels. */
 const GAP = 16;
 /** The drawn cloud fills almost all of its quad's width and about 85% of its height. */
@@ -177,14 +188,17 @@ export function createSkyRendererVector2D(canvas: HTMLCanvasElement): SkyRendere
    * layers at different speeds, so clouds would otherwise slide over each other. Shared clouds
    * give way to yours; two of the same kind each move half. Solved once per camera position.
    */
-  let solvedFor = '';
+  let solvedFor = '', dragging: string | null = null;
   const solved = new Map<string, { x: number; y: number; width: number }>();
   function solve(cam: Camera) {
-    const key = `${cam.x},${cam.y},${cam.zoom},${view.width},${view.height},${clouds.map(c => `${c.id}:${c.x}:${c.y}:${c.size ?? 1}`).join('|')}`;
+    const key = `${cam.x},${cam.y},${cam.zoom},${view.width},${view.height},${dragging},${clouds.map(c => `${c.id}:${c.x}:${c.y}:${c.size ?? 1}`).join('|')}`;
     if (key === solvedFor) return;
     solvedFor = key; solved.clear();
-    const items = clouds.filter(c => c.id !== 'you').map(c => {
-      const box = place(c, cam, view, flatSize(c) * zoomedOutBoost(cam.zoom));
+    // The cloud being dragged is left out: it floats over the others, which stay where they are.
+    const held = clouds.find(c => c.id === dragging);
+    if (held) { const box = place(held, cam, view, sizeAt(held, cam.zoom)); solved.set(held.id, { x: box.x, y: box.y, width: box.width }); }
+    const items = clouds.filter(c => c.id !== 'you' && c.id !== dragging).map(c => {
+      const box = place(c, cam, view, sizeAt(c, cam.zoom));
       return { c, x: box.x, y: box.y, width: box.width, w: box.width * VISIBLE_WIDTH, h: box.width * CLOUD_SHAPE * VISIBLE_HEIGHT };
     });
     // The middle of your projects on screen: stuck shared clouds move outward, away from it.
@@ -194,6 +208,8 @@ export function createSkyRendererVector2D(canvas: HTMLCanvasElement): SkyRendere
       let moved = false;
       for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
         const a = items[i], b = items[j];
+        // Your clouds placed by hand stay exactly where you put them, even over another of yours, as in Finder.
+        if (a.c.mine && b.c.mine && (a.c.placed || b.c.placed)) continue;
         const dx = b.x - a.x, dy = b.y - a.y;
         const overlapX = (a.w + b.w) / 2 + GAP - Math.abs(dx), overlapY = (a.h + b.h) / 2 + GAP - Math.abs(dy);
         if (overlapX <= 0 || overlapY <= 0) continue;
@@ -225,7 +241,7 @@ export function createSkyRendererVector2D(canvas: HTMLCanvasElement): SkyRendere
     let mesh = meshes.get(id);
     if (!mesh) {
       mesh = new THREE.Mesh(geometry, new THREE.ShaderMaterial({ vertexShader: vertex, fragmentShader: fragment, transparent: true, depthTest: false, depthWrite: false,
-        uniforms: { ...shared, uSeed: { value: seed * 100 }, uFar: { value: 0 }, uHover: { value: 0 }, uFade: { value: 1 }, uMine: { value: 0 } } }));
+        uniforms: { ...shared, uSeed: { value: seed * 100 }, uFar: { value: 0 }, uHover: { value: 0 }, uFade: { value: 1 }, uMine: { value: 0 }, uGray: { value: 0 } } }));
       meshes.set(id, mesh); scene.add(mesh);
     }
     return mesh;
@@ -240,12 +256,15 @@ export function createSkyRendererVector2D(canvas: HTMLCanvasElement): SkyRendere
       camera.updateProjectionMatrix();
     },
     setClouds(next) { clouds = next; },
+    setDragging(id) { dragging = id; solvedFor = ''; },
     project(cloud, cam): ScreenCloud {
       solve(cam);
-      const box = solved.get(cloud.id) || place(cloud, cam, view, flatSize(cloud) * zoomedOutBoost(cam.zoom));
+      const box = solved.get(cloud.id) || place(cloud, cam, view, sizeAt(cloud, cam.zoom));
       const height = box.width * CLOUD_SHAPE;
       // The text sits in the body of the cloud, just below its middle.
-      return { x: box.x, y: box.y, width: box.width, height, label: { x: box.x, y: box.y + height * .02, width: box.width * .5 } };
+      // The title and description are centered on the cloud's body, its flat base, not its bumps;
+      // its agents stand on the bottom edge.
+      return { x: box.x, y: box.y, width: box.width, height, label: { x: box.x, y: box.y + height * .1, width: box.width * LABEL_SHARE }, agents: { x: box.x, y: box.y + height * .39 } };
     },
     render(frame) {
       const { camera: cam, palette, hover } = frame;
@@ -253,7 +272,7 @@ export function createSkyRendererVector2D(canvas: HTMLCanvasElement): SkyRendere
       fill(shared, palette);
       const seen = new Set<string>();
       // One cloud per project, far layers first so nearer clouds are drawn over them. You are a marker, not a cloud.
-      clouds.filter(c => c.id !== 'you').sort((a, b) => a.depth - b.depth || Number(a.mine) - Number(b.mine)).forEach((c, order) => {
+      clouds.filter(c => c.id !== 'you').sort((a, b) => a.depth - b.depth || Number(a.mine) - Number(b.mine) || Number(a.id === dragging) - Number(b.id === dragging) || (a.raise || 0) - (b.raise || 0)).forEach((c, order) => {
         const box = this.project(c, cam);
         if (box.x + box.width / 2 < -40 || box.x - box.width / 2 > view.width + 40 || box.y + box.height / 2 < -40 || box.y - box.height / 2 > view.height + 40) return;
         const mesh = meshFor(c.id, c.seed); seen.add(c.id);
@@ -262,8 +281,9 @@ export function createSkyRendererVector2D(canvas: HTMLCanvasElement): SkyRendere
         mesh.scale.set(box.width, box.height, 1);
         const u = mesh.material.uniforms;
         // Layers further back are hazy, and come fully into focus as you zoom toward them.
-        const t = Math.min(1, Math.max(0, (box.width - 90) / 170)), clear = t * t * (3 - 2 * t);
-        u.uFar.value = c.mine ? 0 : Math.min(.75, (1 - c.depth) * 1.05) * (1 - clear);
+        const near = backgroundNear(cam.zoom);
+        u.uFar.value = c.mine ? 0 : .22 * (1 - near);
+        u.uGray.value = c.mine ? 0 : .9 * (1 - near);
         u.uMine.value = c.mine ? 1 : 0;
         u.uHover.value = hover.id === c.id ? hover.amount : 0;
       });

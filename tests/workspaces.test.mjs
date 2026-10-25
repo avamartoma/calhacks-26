@@ -106,3 +106,14 @@ test('a workspace can have a picture, which must be a small PNG, JPEG or WebP im
   assert.equal(renameWorkspace(state, workspace.id, { image: null }).image, undefined);
   assert.equal(renameWorkspace(state, workspace.id, { name: 'Design team' }).name, 'Design team');
 });
+
+test('a cloud dragged on the sky keeps its own position, apart from the older 3D spot', () => {
+  const state = { rooms: [{ id: 'r1', name: 'One', agents: [] }] };
+  initWorkspaces(state);
+  const before = { ...state.rooms[0].cloud };
+  const placed = placeCloud(state, state.rooms[0], { x: 900, y: -250, sky: true });
+  assert.deepEqual(placed.sky, { x: 900, y: -250 });
+  assert.equal(placed.x, before.x); assert.equal(placed.y, before.y);
+  assert.throws(() => placeCloud(state, state.rooms[0], { x: 1, y: 1, sky: true, extra: 1 }));
+  assert.throws(() => placeCloud(state, state.rooms[0], { x: 1e9, y: 0, sky: true }));
+});

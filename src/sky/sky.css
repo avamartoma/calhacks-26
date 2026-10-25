@@ -18,7 +18,7 @@
 .sky-fallback .sky-label{position:static;visibility:visible;opacity:1;transform:none!important}
 .sky-fallback .sky-labels{display:flex;flex-wrap:wrap;align-content:center;justify-content:center;gap:24px;pointer-events:auto}
 .sky-label{width:150px}
-.sky-label.compact span,.sky-label.compact small{display:none}
+.sky-label.compact span,.sky-label.compact small,.sky-label.compact .agent-dots{display:none}
 /* On balloons the text sits on the cream panel on the fabric. */
 .balloon-sky .sky-label{color:#2a2f3f;text-shadow:none;gap:2px;padding:2px 4px}
 .balloon-sky .sky-label b{font-size:16px}
@@ -48,9 +48,10 @@
 /* Agent dots: one per agent, colored by type; working agents pulse gently. */
 .agent-dots{display:inline-flex;flex-wrap:wrap;justify-content:center;gap:5px}
 .agent-dots{gap:3px}
-.agent-blob{width:19px;height:20px;overflow:visible}
-.agent-blob.working{animation:agent-bob 1.6s ease-in-out infinite}
-@keyframes agent-bob{50%{transform:translateY(-2.5px)}}
+.agent-blob{width:24px;height:25px;overflow:visible;transform-origin:50% 100%}
+/* An agent running something jumps: up, down, and a little squash as it lands. */
+.agent-blob.working{animation:agent-jump .9s cubic-bezier(.3,0,.5,1) infinite}
+@keyframes agent-jump{0%,100%{transform:translateY(0) scale(1.08,.9)}12%{transform:translateY(0) scale(1)}45%{transform:translateY(-9px) scale(.96,1.05)}80%{transform:translateY(0) scale(1)}}
 @media(prefers-reduced-motion:reduce){.agent-blob.working{animation:none}}
 .sky-agent-row{position:absolute;left:0;top:0;width:200px;display:flex;justify-content:center;transform-origin:center;visibility:hidden;opacity:0;will-change:transform,opacity}
 /* Smaller text inside vector clouds, leaving room for the agent dots below. */
@@ -87,7 +88,7 @@
 .folder-card p{margin:0;font:500 12px/1.45 Manrope,sans-serif;color:#5b6578;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .folder-card footer{display:flex;align-items:center;gap:8px}
 .folder-card footer .agent-dots{justify-content:flex-start}
-.folder-card footer .agent-blob{width:17px;height:18px}
+.folder-card footer .agent-blob{width:20px;height:21px}
 .folder-card small{font:500 11px Manrope,sans-serif;color:#7a8396}
 .folder-actions{display:flex;gap:6px;margin-top:2px}
 .folder-actions button{padding:6px 11px;font-size:12px}
@@ -95,3 +96,27 @@
 @media(max-width:750px){.sky-legend{display:none}.sky-controls{display:none}.project-folders{padding:20px 14px 84px}}
 .sky-only-mine{display:inline-flex;align-items:center;gap:6px;margin:7px 0 0 12px;padding:4px 10px 4px 8px;border-radius:99px;background:#ffffffc8;font:600 11.5px Manrope,sans-serif;color:#3c4660;cursor:pointer;box-shadow:0 3px 10px rgba(20,32,60,.08)}
 .sky-only-mine input{width:14px;height:14px;margin:0;accent-color:#26324a}
+/* Your clouds are dragged from anywhere on them, text included; clicking still opens them. */
+.vector-sky .sky-label.mine{pointer-events:none}
+/* Cloud labels: titles are never cut off (the cloud is sized to hold them), with a margin all round. */
+.vector-sky .sky-label{padding:6px 8px;gap:3px}
+.vector-sky .sky-label b{-webkit-line-clamp:unset;display:block;overflow:visible}
+.vector-sky .sky-label span{-webkit-line-clamp:3}
+.vector-sky .sky-label .agent-dots{margin-top:5px;gap:3px;flex-wrap:nowrap}
+/* Zoomed-in cloud labels: a bold title and the description; the agents stand on the cloud's edge. */
+.vector-sky .sky-label{gap:5px;padding:8px 10px}
+.vector-sky .sky-label b{font-size:18px}
+.vector-sky .sky-label span{font-size:12.5px;line-height:1.4}
+.sky-agent-row{width:auto}
+.sky-agent-row .agent-dots{flex-wrap:nowrap;gap:4px}
+.sky-agent-row .agent-blob{width:30px;height:31px;filter:drop-shadow(0 2px 2px #1f284033)}
+/* Search lives on the side as a magnifier; clicking it opens the search. */
+.sky-search{left:auto;right:16px;transform:none;width:min(340px,calc(100% - 32px))}
+.sky-search-row{display:flex;align-items:center;gap:6px}
+.sky-search-row input{flex:1}
+.sky-search-close{display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:50%;background:#ffffffe0;color:#46506a;font:500 20px/1 Manrope,sans-serif;box-shadow:0 6px 18px rgba(20,32,60,.12)}
+.sky-search-toggle{position:absolute;top:16px;right:16px;z-index:4;display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:#ffffffe8;color:#26324a;box-shadow:0 6px 18px rgba(20,32,60,.16)}
+.sky-search-toggle:hover{background:#fff}
+.vector-sky .sky-label.mine b{font-size:21px}
+.vector-sky .sky-label b{overflow-wrap:break-word;word-break:normal}
+.vector-sky .sky-label.other b{font-size:16px}

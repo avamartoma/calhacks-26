@@ -12,7 +12,8 @@ import './sky.css';
  * A project in the sky. Yours (and you) sit in the front layer (depth 1) with a label; other
  * projects you can see in the workspace sit further back, without text until you go to them.
  */
-export interface SkyProject { id: string; name: string; description: string; detail?: string; mine: boolean; x: number; y: number; depth: number; seed: number; kind?: 'you'; agents?: SkyAgent[]; owner?: string; size?: number }
+/** `placed` is where you dragged one of your clouds; it stays there instead of joining the cluster. */
+export interface SkyProject { id: string; name: string; description: string; detail?: string; mine: boolean; x: number; y: number; depth: number; seed: number; kind?: 'you'; agents?: SkyAgent[]; owner?: string; size?: number; placed?: { x: number; y: number }; raise?: number }
 /**
  * `clouds` is the default: vector clouds on a flat canvas with parallax layers. `balloons` is
  * the 3D option. `clouds3d` (vector clouds in 3D), `soft` (3D puff clouds) and `2d` (flat puff
@@ -27,16 +28,43 @@ const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math
 const cssColor = (rgb: number[]) => `rgb(${rgb.map(c => Math.round(c * 255)).join(',')})`;
 /** Width of a label before scaling, in CSS pixels. */
 const LABEL_WIDTH = 150;
-const TITLE_FONT = '600 15px Sora, sans-serif';
+// Fonts of a cloud's label (see .vector-sky .sky-label in sky.css), for measuring text.
+// Your clouds' titles are a little larger than those of projects further back.
+const TITLE_FONT = '600 18px Sora, sans-serif', YOUR_TITLE_FONT = '600 21px Sora, sans-serif', OTHER_TITLE_FONT = '600 16px Sora, sans-serif', BODY_FONT = '500 12.5px Manrope, sans-serif';
 let measurer: CanvasRenderingContext2D | null | undefined;
-function textWidth(text: string) {
+function textWidth(text: string, font = TITLE_FONT) {
   if (measurer === undefined) measurer = document.createElement('canvas').getContext('2d');
-  if (!measurer) return text.length * 8.5;
-  measurer.font = TITLE_FONT;
+  if (!measurer) return text.length * (font === BODY_FONT ? 6 : 9.5);
+  measurer.font = font;
   return measurer.measureText(text).width;
 }
-/** How wide a project's label must be, at full size, for its title to fit in two lines. */
-const labelWidthOf = (p: SkyProject) => Math.min(300, Math.max(LABEL_WIDTH, Math.ceil(textWidth(p.name) / 1.8) + 18));
+/**
+ * The size at which a title fits a space on screen (CSS pixels), wrapping only between words:
+ * the label's scale and its width before scaling, or null if it cannot fit legibly.
+ */
+function fitTitle(title: string, mine: boolean, width: number, height: number) {
+  // Label padding is 10px across and 8px down (.vector-sky .sky-label in sky.css).
+  const font = mine ? YOUR_TITLE_FONT : OTHER_TITLE_FONT, fontSize = mine ? 21 : 16, padding = 20;
+  const words = title.split(/\s+/).filter(Boolean).map(word => textWidth(word, font)), space = textWidth(' ', font);
+  for (let scale = mine ? .74 : .62; scale >= .4; scale -= .03) {
+    const room = width / scale - padding;
+    if (Math.max(...words) > room) continue;
+    let lines = 1, line = 0;
+    for (const word of words) { if (!line) line = word; else if (line + space + word <= room) line += space + word; else { lines++; line = word; } }
+    if ((lines * fontSize * 1.2 + 16) * scale <= height) return { scale, width: width / scale };
+  }
+  return null;
+}
+
+/** Width of one agent blob and its gap, in label pixels (.agent-blob in sky.css). */
+const BLOB = 27;
+/**
+ * How wide a project's label must be, at full size, to hold it comfortably: the title in at most
+ * two lines (never cut off) and the description in at most three. Its cloud is sized to match,
+ * and is wide enough for its agents to stand in a row on its bottom edge.
+ */
+const labelWidthOf = (p: SkyProject) => Math.min(400, Math.max(200, Math.ceil(Math.max(
+  textWidth(p.name, p.mine ? YOUR_TITLE_FONT : TITLE_FONT) / 1.8, textWidth(p.description || '', BODY_FONT) / 2.7, (p.agents?.length || 0) * BLOB * .8)) + 16));
 /** On the flat canvas, your project clouds are 660 units wide at size 1, about half as tall. */
 const FLAT_CLOUD = 660;
 
@@ -71,8 +99,11 @@ function homeCamera(projects: SkyProject[], view: Viewport, style: SkyStyle): Ca
   // An overview, not a close-up: your projects in the middle, with room around them for the
   // shared projects. The flat sky's bigger clouds need a wider view.
   // On the flat canvas, close enough that every one of your clouds shows its description and agents.
-  const closest = vector ? .4 : 1.3, widest = vector ? .32 : .45;
-  const zoom = Math.min(closest, Math.max(widest, Math.min(view.width * .6 / (maxX - minX), view.height * .5 / (maxY - minY))));
+  const fit = Math.min(view.width * .6 / (maxX - minX), view.height * .5 / (maxY - minY));
+  // On the flat canvas, a typical one of your clouds is about a fifth of the sky's width, with
+  // room to see the shared projects around them. (Size grows as zoom^0.82 when zoomed out.)
+  const typical = FLAT_CLOUD * 1.33, comfortable = Math.pow(view.width * .19 / typical, 1 / .82);
+  const zoom = vector ? Math.min(.45, Math.max(.12, Math.min(fit, comfortable))) : Math.min(1.3, Math.max(.45, fit));
   // In 3D, a slight angle, so the depth of the sky shows from the start.
   return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, zoom, z: 0, ...(isFlat(style) ? {} : { yaw: -.16, pitch: .1 }) };
 }
@@ -81,7 +112,7 @@ function homeCamera(projects: SkyProject[], view: Viewport, style: SkyStyle): Ca
  * The workspace sky, with a switch between two looks: projects as hot air balloons, or as
  * clouds. The choice is remembered; `?sky=` in the address overrides it.
  */
-export function SkyView(props: { projects: SkyProject[]; onEnter: (id: string) => void; returnFrom?: string | null }) {
+export function SkyView(props: { projects: SkyProject[]; onEnter: (id: string) => void; returnFrom?: string | null; onMove?: (id: string, x: number, y: number) => void }) {
   // Clouds only for now. The other looks (balloons in 3D among them) are kept but hidden; open
   // one with `?sky=balloons` and so on. See "Hidden sky looks" in the README before deleting them.
   const style = (new URLSearchParams(location.search).get('sky') || 'clouds') as SkyStyle;
@@ -103,6 +134,9 @@ export function SkyView(props: { projects: SkyProject[]; onEnter: (id: string) =
 }
 export interface SkyCommand { kind: 'none' | 'home'; n: number }
 
+function SearchIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>;
+}
 function HomeIcon() {
   return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /><path d="M10 21v-6h4v6" /></svg>;
 }
@@ -143,10 +177,10 @@ function ProjectFolders({ projects, onOpen }: { projects: SkyProject[]; onOpen: 
  * your projects (or clicking it) flies into it: the screen fills with white and its page
  * appears. Labels are HTML, placed on each object so text stays crisp and always fits.
  */
-function SkySpace({ style, projects, onEnter, returnFrom, command }: { style: SkyStyle; projects: SkyProject[]; onEnter: (id: string) => void; returnFrom?: string | null; command?: SkyCommand }) {
+function SkySpace({ style, projects, onEnter, returnFrom, command, onMove }: { style: SkyStyle; projects: SkyProject[]; onEnter: (id: string) => void; returnFrom?: string | null; command?: SkyCommand; onMove?: (id: string, x: number, y: number) => void }) {
   const balloons = style === 'balloons';
   const host = useRef<HTMLDivElement>(null), canvas = useRef<HTMLCanvasElement>(null), whiteout = useRef<HTMLDivElement>(null);
-  const labels = useRef(new Map<string, HTMLElement>()), dots = useRef(new Map<string, HTMLElement>());
+  const labels = useRef(new Map<string, HTMLElement>()), agentRows = useRef(new Map<string, HTMLElement>());
   // On the flat canvas each cloud is sized to its title, yours sit in a tight honeycomb, and
   // shared ones sit close around them on layers further back.
   const spread = style === 'clouds' ? 1.45 : style === 'clouds3d' ? 1.35 : 1;
@@ -155,9 +189,14 @@ function SkySpace({ style, projects, onEnter, returnFrom, command }: { style: Sk
   useEffect(() => { localStorage.setItem('iteration1-only-mine', onlyMine ? '1' : '0'); }, [onlyMine]);
   const shown = onlyMine ? projects.filter(p => p.mine) : projects;
   const list = useRef(shown);
+  /** Clouds moved this visit, so a cloud stays put while its new position is being saved. */
+  const moved = useRef(new Map<string, { x: number; y: number }>());
   if (style === 'clouds') {
     const sized = shown.map(p => ({ ...p, size: labelWidthOf(p) / LABEL_WIDTH }));
-    list.current = [...honeycomb(sized.filter(p => p.mine)), ...sized.filter(p => !p.mine).map(p => ({ ...p, x: p.x * spread, y: p.y * spread }))];
+    // Clouds you dragged stay where you put them; the rest of yours form the cluster.
+    const placed = sized.filter(p => p.mine && p.placed).map(p => ({ ...p, ...p.placed }));
+    list.current = [...honeycomb(sized.filter(p => p.mine && !p.placed)), ...placed, ...sized.filter(p => !p.mine).map(p => ({ ...p, x: p.x * spread, y: p.y * spread }))]
+      .map(p => moved.current.has(p.id) ? { ...p, ...moved.current.get(p.id), placed: moved.current.get(p.id), raise: [...moved.current.keys()].indexOf(p.id) + 1 } : p);
   } else list.current = spread === 1 ? shown : shown.map(p => ({ ...p, x: p.x * spread, y: p.y * spread }));
   const enter = useRef(onEnter); enter.current = onEnter;
   const renderer = useRef<SkyRenderer | null>(null);
@@ -165,7 +204,7 @@ function SkySpace({ style, projects, onEnter, returnFrom, command }: { style: Sk
   const s = useRef({
     view: { width: 1, height: 1 } as Viewport, camera: { x: 0, y: 0, zoom: 1, z: 0 } as Camera,
     anim: null as null | { from: Camera; to: Camera; start: number; duration: number; done?: () => void },
-    drag: null as null | { x: number; y: number; camera: Camera; moved: boolean; mode: 'look' | 'move' },
+    drag: null as null | { x: number; y: number; camera: Camera; moved: boolean; mode: 'look' | 'move' | 'cloud'; cloud?: SkyProject },
     hover: null as string | null, hoverAmount: 0, entering: false, palette, paletteAt: 0,
     keys: new Set<string>(), lastFrame: 0
   });
@@ -291,16 +330,7 @@ function SkySpace({ style, projects, onEnter, returnFrom, command }: { style: Sk
         }
         // Every cloud shows its title; the description, status and agent dots appear once it is this wide on screen.
         // Your clouds show details already at the home view; others' need a closer look.
-        const detailAt = balloons ? 190 : p.mine ? 200 : 280;
-        // Agent dots sit low in the body of every cloud, yours and others', once it is big enough to show them.
-        const dotRow = dots.current.get(p.id);
-        if (dotRow) {
-          const dotScale = c.width / 340;
-          dotRow.style.transform = `translate(${c.x}px, ${c.y + c.height * .27}px) translate(-50%, -50%) scale(${dotScale})`;
-          // Agent dots, like the description, only once you zoom toward a cloud.
-          const shown = onScreen ? smooth(detailAt - 30, detailAt + 20, c.width) * (1 - smooth(view.width * .9, view.width * 1.3, c.width)) : 0;
-          dotRow.style.opacity = shown.toFixed(3); dotRow.style.visibility = shown < .02 ? 'hidden' : 'visible';
-        }
+        const detailAt = balloons ? 190 : p.mine ? 150 : 280;
         const label = labels.current.get(p.id);
         if (!label) continue;
         // Titles show on every cloud big enough to hold one, and fade as you fly into it.
@@ -312,12 +342,33 @@ function SkySpace({ style, projects, onEnter, returnFrom, command }: { style: Sk
         // Each label is as wide as its title needs (its cloud is sized to match). A title alone
         // keeps a readable size on small clouds, narrowing to the cloud; if it would not fit, it hides.
         const base = style === 'clouds' ? labelWidthOf(p) : LABEL_WIDTH;
-        const compact = c.width < detailAt, scale = compact ? Math.max(spot.width / base, .74) : spot.width / base;
-        const boxWidth = compact ? Math.min(base, spot.width / scale) : base;
+        const compact = c.width < detailAt;
+        let scale = spot.width / base, boxWidth = base;
+        if (compact && p.kind !== 'you') {
+          // A title alone: the largest size at which it fits inside the cloud's body, both across
+          // and down, breaking only between words. If it cannot fit at all, it hides until you zoom in.
+          const fit = fitTitle(p.name, p.mine, spot.width, c.height * .42);
+          if (fit) { scale = fit.scale; boxWidth = fit.width; } else { opacity = 0; scale = .6; boxWidth = spot.width / scale; }
+        }
         label.style.width = `${boxWidth}px`;
-        if (compact && p.kind !== 'you' && textWidth(p.name) > (boxWidth - 8) * 2.4) opacity = 0;
-        label.style.transform = `translate(${spot.x}px, ${spot.y}px) translate(-50%, -50%) scale(${scale})`;
+        // Centered on the cloud's body, but always clear of the agents standing on its edge (or of
+        // the band along its base): a taller label moves up into the cloud instead of over them.
+        const floor = p.agents?.length && !compact ? (c.agents?.y ?? c.y + c.height * .39) - 31 * (spot.width / base) * .78 - 4 : c.y + c.height * .34;
+        const tall = label.offsetHeight * scale;
+        const centerY = Math.min(spot.y, floor - tall / 2);
+        label.style.transform = `translate(${spot.x}px, ${centerY}px) translate(-50%, -50%) scale(${scale})`;
         label.classList.toggle('compact', compact);
+        // Labels stack like their clouds: the one you moved last on top.
+        label.style.zIndex = String((p.raise || 0) + (p.mine ? 1 : 0));
+        // Agents stand on the cloud's bottom edge, shown with the description.
+        const row = agentRows.current.get(p.id);
+        if (row) {
+          const at = c.agents || { x: c.x, y: c.y + c.height * .39 };
+          row.style.transform = `translate(${at.x}px, ${at.y}px) translate(-50%, -78%) scale(${spot.width / base})`;
+          const shown = compact ? 0 : opacity;
+          row.style.opacity = shown.toFixed(3); row.style.visibility = shown < .02 ? 'hidden' : 'visible';
+          row.style.zIndex = label.style.zIndex;
+        }
         label.style.opacity = opacity.toFixed(3);
         label.style.visibility = opacity < .02 ? 'hidden' : 'visible';
       }
@@ -363,9 +414,13 @@ function SkySpace({ style, projects, onEnter, returnFrom, command }: { style: Sk
     touches.current.set(e.pointerId, p);
     // A second finger turns the gesture into a pinch.
     if (touches.current.size > 1) { s.current.drag = null; return; }
-    // Drag to move across the sky; Option-drag or right-drag to turn and look around.
+    // Drag one of your clouds to move it; drag the sky to move around; in 3D, Option-drag or
+    // right-drag to turn and look around.
     const turn = (e.altKey || e.button === 2) && !flat;
-    s.current.drag = { x: p.x, y: p.y, camera: { ...s.current.camera }, moved: false, mode: turn ? 'look' : 'move' };
+    const grabbed = style === 'clouds' && e.button === 0 ? hit(p.x, p.y) : null;
+    const cloud = grabbed?.mine && grabbed.kind !== 'you' ? grabbed : undefined;
+    s.current.drag = { x: p.x, y: p.y, camera: { ...s.current.camera }, moved: false, mode: cloud ? 'cloud' : turn ? 'look' : 'move', cloud };
+    if (cloud) renderer.current?.setDragging?.(cloud.id);
   }
   function onPointerMove(e: PointerEvent) {
     const p = point(e), drag = s.current.drag;
@@ -381,7 +436,15 @@ function SkySpace({ style, projects, onEnter, returnFrom, command }: { style: Sk
     if (drag) {
       const dx = p.x - drag.x, dy = p.y - drag.y;
       if (!drag.moved && Math.hypot(dx, dy) > 4) { drag.moved = true; s.current.anim = null; host.current!.classList.add('dragging'); }
-      if (drag.moved) s.current.camera = drag.mode === 'move' ? panBy(drag.camera, dx, dy) : look(drag.camera, dx, dy, s.current.view);
+      if (!drag.moved) return;
+      if (drag.mode === 'cloud' && drag.cloud) {
+        // Your projects sit on the front layer, where one world unit is `zoom` pixels.
+        const at = { x: drag.cloud.x + dx / drag.camera.zoom, y: drag.cloud.y + dy / drag.camera.zoom };
+        // Re-adding moves it to the end of the map, so the cloud you moved last is drawn on top.
+        moved.current.delete(drag.cloud.id); moved.current.set(drag.cloud.id, at);
+        const raise = moved.current.size;
+        list.current = list.current.map(p => p.id === drag.cloud!.id ? { ...p, ...at, placed: at, raise } : p);
+      } else s.current.camera = drag.mode === 'move' ? panBy(drag.camera, dx, dy) : look(drag.camera, dx, dy, s.current.view);
       return;
     }
     const over = hit(p.x, p.y);
@@ -392,6 +455,13 @@ function SkySpace({ style, projects, onEnter, returnFrom, command }: { style: Sk
     touches.current.delete(e.pointerId);
     const drag = s.current.drag; s.current.drag = null;
     host.current!.classList.remove('dragging');
+    renderer.current?.setDragging?.(null);
+    if (drag?.moved && drag.mode === 'cloud' && drag.cloud) {
+      // As in Finder, a cloud stays exactly where you drop it, even on top of another.
+      const at = moved.current.get(drag.cloud.id);
+      if (at) onMove?.(drag.cloud.id, Math.round(at.x), Math.round(at.y));
+      return;
+    }
     if (!drag || drag.moved || e.button !== 0) return;
     const p = point(e), target = hit(p.x, p.y);
     if (target) flyTo(target);
@@ -409,38 +479,40 @@ function SkySpace({ style, projects, onEnter, returnFrom, command }: { style: Sk
   }
   const ref = (id: string) => (el: HTMLElement | null) => { if (el) labels.current.set(id, el); else labels.current.delete(id); };
   // Placeholder search: a plain match on names and descriptions. Semantic search replaces the matching.
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(''), [searchOpen, setSearchOpen] = useState(false);
   const terms = query.trim().toLowerCase();
   const results = terms ? list.current.filter(p => p.kind !== 'you' && `${p.name} ${p.description}`.toLowerCase().includes(terms)).slice(0, 6) : [];
-  function choose(p: SkyProject) { setQuery(''); host.current?.focus({ preventScroll: true }); flyTo(p); }
+  function choose(p: SkyProject) { setQuery(''); setSearchOpen(false); host.current?.focus({ preventScroll: true }); flyTo(p); }
 
   return <div ref={host} className={`sky-view ${balloons ? 'balloon-sky' : style === 'clouds' || style === 'clouds3d' ? 'vector-sky' : 'cloud-sky'}`} tabIndex={0} role="application" aria-label="Workspace sky. Drag or use arrow keys to move, scroll or plus and minus to zoom. Click a project to fly to it; open yours from its label."
     onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={e => { s.current.drag = null; touches.current.delete(e.pointerId); }} onPointerLeave={() => { s.current.hover = null; }} onKeyDown={onKeyDown} onKeyUp={e => s.current.keys.delete(e.key.toLowerCase())} onBlur={() => s.current.keys.clear()} onContextMenu={e => e.preventDefault()}
     style={{ '--sky-ink': palette.ink, '--sky-glow': palette.glow, '--sky-cloud': cssColor(palette.cloudLight) } as CSSProperties}>
     <canvas ref={canvas} />
-    <div className="sky-labels sky-dots" aria-hidden="true">
-      {list.current.filter(p => p.kind !== 'you' && p.agents?.length).map(p => <span key={p.id} ref={el => { if (el) dots.current.set(p.id, el); else dots.current.delete(p.id); }} className="sky-agent-row"><AgentDots agents={p.agents} /></span>)}
+    <div className="sky-labels" aria-hidden="true">
+      {list.current.filter(p => p.agents?.length).map(p => <span key={p.id} ref={el => { if (el) agentRows.current.set(p.id, el); else agentRows.current.delete(p.id); }} className="sky-agent-row"><AgentDots agents={p.agents} /></span>)}
     </div>
     <div className="sky-labels">
       {list.current.map(p => p.mine
         ? <button key={p.id} ref={ref(p.id)} className={`sky-label mine ${p.kind === 'you' ? 'you' : ''}`} onPointerDown={e => e.stopPropagation()} onClick={() => flyTo(p)} aria-label={p.kind === 'you' ? 'You. Return to your projects' : `Open ${p.name}`}>
-            <b>{p.name}</b>{p.description && <span>{p.description}</span>}{p.detail && <small>{p.detail}</small>}
+            <b>{p.name}</b>{p.description && <span>{p.description}</span>}
           </button>
         : <div key={p.id} ref={ref(p.id)} className="sky-label other" aria-hidden="true">
-            <b>{p.name}</b><span>{p.description}</span>{p.detail && <small>{p.detail}</small>}
+            <b>{p.name}</b><span>{p.description}</span>
           </div>)}
     </div>
-    <div className="sky-search" onPointerDown={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
-      <input type="search" value={query} placeholder="Search projects and agents" aria-label="Search projects and agents" onChange={e => setQuery(e.target.value)}
+    {!searchOpen && <button className="sky-search-toggle" onPointerDown={e => e.stopPropagation()} onClick={() => setSearchOpen(true)} aria-label="Search projects and agents" title="Search"><SearchIcon /></button>}
+    {searchOpen && <div className="sky-search" onPointerDown={e => e.stopPropagation()} onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape' && !query) setSearchOpen(false); }}>
+      <div className="sky-search-row"><input type="search" autoFocus value={query} placeholder="Search projects and agents" aria-label="Search projects and agents" onChange={e => setQuery(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter' && results[0]) choose(results[0]); if (e.key === 'Escape') setQuery(''); }} />
+        <button className="sky-search-close" onClick={() => { setQuery(''); setSearchOpen(false); }} aria-label="Close search">×</button></div>
       {terms && <div className="sky-results" role="listbox">
         {results.length ? results.map(p => <button key={p.id} role="option" aria-selected={false} onClick={() => choose(p)}><b>{p.name}</b><span>{p.mine ? 'Your project' : p.detail || 'In this workspace'}</span></button>)
           : <p>No matches.</p>}
         <p className="sky-results-note">Placeholder: matches names and descriptions. Semantic search is coming.</p>
       </div>}
       <label className="sky-only-mine"><input type="checkbox" checked={onlyMine} onChange={e => setOnlyMine(e.target.checked)} /> Only show my projects</label>
-    </div>
-    <p className="sky-controls" aria-hidden="true">{flat ? 'Drag or swipe to move · Pinch or scroll to zoom · Arrow keys to move · Click a cloud to go to it' : 'Swipe or drag to move · Pinch to fly in and out · Option-drag to look around · Click a project to fly to it'}</p>
+    </div>}
+    <p className="sky-controls" aria-hidden="true">{flat ? 'Drag your clouds to arrange them · Drag or swipe the sky to move · Pinch or scroll to zoom · Click a cloud to go to it' : 'Swipe or drag to move · Pinch to fly in and out · Option-drag to look around · Click a project to fly to it'}</p>
     <div className="sky-legend" aria-label="Agent colors">{agentKinds.map(k => <span key={k.id}><i style={{ background: k.color }} />{k.label}</span>)}</div>
     <div ref={whiteout} className="sky-whiteout" />
   </div>;

@@ -4,10 +4,13 @@ import { cloudFragment, cloudVertex, skyDomeFragment, skyFragment, skyVertex } f
 import { CLOUD_ASPECT, place, type Camera, type Viewport } from './sky-math';
 
 /** A project's cloud in the world. `depth` is 1 for your projects in front, lower further back. */
-/** `size` scales a cloud, so one with a longer title is wider. */
-export interface SkyCloud { id: string; x: number; y: number; depth: number; seed: number; mine: boolean; size?: number }
+/**
+ * `size` scales a cloud, so one with a longer title is wider. `placed` marks one you dragged into
+ * place: it stays exactly there, even on top of another. `raise` orders such clouds, latest on top.
+ */
+export interface SkyCloud { id: string; x: number; y: number; depth: number; seed: number; mine: boolean; size?: number; placed?: unknown; raise?: number }
 /** Where a cloud appears on screen: center and size in CSS pixels, y down. `labelY`, when set, is where its label hangs from. */
-export interface ScreenCloud { x: number; y: number; width: number; height: number; labelY?: number; label?: { x: number; y: number; width: number } }
+export interface ScreenCloud { x: number; y: number; width: number; height: number; labelY?: number; label?: { x: number; y: number; width: number }; agents?: { x: number; y: number } }
 /** `emphasis` is how visible each object's label is, 0 to 1, so a renderer can draw a panel behind it. */
 export interface SkyFrame { camera: Camera; time: number; palette: SkyPalette; hover: { id: string | null; amount: number }; emphasis?: Map<string, number> }
 
@@ -24,6 +27,8 @@ export interface SkyRenderer {
   worldDepth?(cloud: SkyCloud): number;
   resize(view: Viewport, dpr: number): void;
   setClouds(clouds: SkyCloud[]): void;
+  /** The cloud being dragged, if any: drawn on top, and nothing else moves out of its way. */
+  setDragging?(id: string | null): void;
   project(cloud: SkyCloud, camera: Camera): ScreenCloud;
   render(frame: SkyFrame): void;
   dispose(): void;

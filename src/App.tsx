@@ -128,7 +128,7 @@ export default function App() {
   const skyProjects = useMemo<SkyProject[]>(()=>[
     // Your projects sit close together on a golden-angle spiral, in a stable order, the first in the middle.
     ...skyRooms.map((r,i)=>{const working=r.agents.filter(a=>['working','talking','approval'].includes(a.status)).length;const tickets=r.workItems.filter(t=>!t.archived).length;
-      return {id:r.id,name:r.name,description:r.goal || (r.demo?'A sample office with simulated agents.':'No description yet.'),detail:working?`${working} agent${working===1?'':'s'} working`:tickets?`${tickets} ticket${tickets===1?'':'s'}`:'No agents yet',agents:r.agents.filter(a=>a.status!=='ejected').map(a=>({role:a.title || a.role,status:a.status,manager:!!a.manager})),mine:true,x:Math.cos(i*2.4)*380*Math.sqrt(i),y:Math.sin(i*2.4)*380*Math.sqrt(i)*.8,depth:1,seed:seedOf(r.id)};}),
+      return {id:r.id,name:r.name,description:r.goal || (r.demo?'A sample office with simulated agents.':'No description yet.'),detail:working?`${working} agent${working===1?'':'s'} working`:tickets?`${tickets} ticket${tickets===1?'':'s'}`:'No agents yet',agents:r.agents.filter(a=>a.status!=='ejected').map(a=>({role:a.title || a.role,status:a.status,manager:!!a.manager})),mine:true,placed:r.cloud?.sky,x:Math.cos(i*2.4)*380*Math.sqrt(i),y:Math.sin(i*2.4)*380*Math.sqrt(i)*.8,depth:1,seed:seedOf(r.id)};}),
     ...placeholderNeighbors()
   ],[skyRooms]);
   // Leaving a project, the sky starts inside its cloud and pulls back out.
@@ -235,7 +235,7 @@ export default function App() {
     </header>
     <main className="workspace">
       <div ref={container} className="world" />
-      {altitude==='sky' && !cinematic && !recording && <SkyView projects={skyProjects} returnFrom={skyReturn.current} onEnter={id=>{setRoomId(id);setAltitude('project');setProjectView('doc');setTool('office');}}/>}
+      {altitude==='sky' && !cinematic && !recording && <SkyView projects={skyProjects} returnFrom={skyReturn.current} onMove={(id,x,y)=>{api(`/rooms/${id}/cloud`,{x,y,sky:true}).catch(e=>setError((e as Error).message));}} onEnter={id=>{setRoomId(id);setAltitude('project');setProjectView('doc');setTool('office');}}/>}
       {docOpen && room && <ProjectDoc room={room} workspaceName={workspace?.name} selected={selection} onAgent={select} onTask={id=>{setSelectedWork(id);setTool('work');}} onStartWork={()=>setTool('templates')} onSky={showSky} onOffice={()=>{setProjectView('office');setCompact(false);}}/>}
       {altitude==='sky' && tool==='office' && !cinematic && !recording && !skyRooms.length && <div className="sky-hint"><Cloud size={16}/><span>{skyRooms.length ? 'Drag to pan · scroll into a cloud to open that project' : 'This workspace has no projects yet'}</span>{!skyRooms.length && <button className="primary" onClick={()=>setTool('newroom')}>New project</button>}</div>}
       {inProject && !docOpen && tool==='office' && !walk && !cinematic && !recording && !compact && <aside className="project-rail" aria-label="Project actions">
