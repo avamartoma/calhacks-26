@@ -144,31 +144,40 @@ Iteration1 can also **launch** a Cursor agent itself through the Cursor SDK, as 
 
 A **Codex CLI** session you run yourself can report into the office over MCP too, on its own ChatGPT sign-in, which stays separate from the office's Codex profile. Open **Connections → Codex → Use an existing Codex CLI session**, copy the connect command (it runs `codex mcp add` and points the server at that project), then copy the start command. Its desk tools are `office_codex_start`, `office_codex_update` and `office_codex_finish`; reports are labeled `codex-reported`, and it shares the per-project writer lock with Cursor and Claude Code.
 
-## ASI:One (Fetch.ai) agent
+## ASI:One (Fetch.ai) agents
 
 ![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
 ![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
 
-**iteration1-office** (`agent1q0r5evneykvtpltu348zc0nq6a32lwuaq4ywjt0twxw7kz9945y0qgxn6mk`) lets the office's owner run it from an ASI:One chat. It is a uAgent that implements the Agent Chat Protocol and is registered on Agentverse. Say `status` for tasks, blockers and who is working, `report on <task>` for a run doc that separates verified receipts from self-reported ones, `approvals` for commands waiting in the office, `alerts` for what the watcher noticed, or `mission: <what to build>` to hand a new mission to the implementation manager, followed by `confirm`.
+Four uAgents let the office's owner run it from ASI:One. Two talk to people over the Agent Chat Protocol; the other two work behind them. All four run on your computer, are registered on Agentverse through their own mailboxes (an outbound connection, so the office stays on loopback and each agent's server listens only on `127.0.0.1`), and hold no office credential: missions publish under the account signed in to the office.
 
-It is another client of the local office, like the MCP servers. It runs on your computer and reaches Agentverse through its mailbox, an outbound connection, so the office stays on loopback and the agent's own server listens only on `127.0.0.1`. It holds no office credential, and missions publish under the account signed in to the office.
+| Agent | Address | Role |
+|---|---|---|
+| **iteration1-office** | `agent1q0r5evneykvtpltu348zc0nq6a32lwuaq4ywjt0twxw7kz9945y0qgxn6mk` | Chat. Office status, run docs, approvals, alerts, reviews on request, and missions after `confirm` |
+| **iteration1-planner** | `agent1qwvw8fqk2tqj3pls2veyz47edn8vgz40xut74rcwe7fcfwk0gu68sfql7tz` | Chat. Turns ideas into Jira stories and hands a story to the office as a mission |
+| **iteration1-watcher** | `agent1qvjcfmt858hr6g47nu6jymzd7sz556us5a4ydjraa9vjevk94x5zw2d2npx` | Follows the office's live state and tells the other three what changed |
+| **iteration1-reviewer** | `agent1qwvswxgwh720v9d44jnpgwjjr47cr205twsv3xmdt9huwz54jag22lp9jme` | Judges finished work against its acceptance criteria |
 
-- **Pairing.** Only paired sender addresses can use it. At startup the agent prints a single-use code in its terminal; send `pair <code>` from ASI:One. Pairing locks after five wrong codes until restart. Paired addresses and the agent's generated seed are kept in `.office/fetch-agent.json` (git-ignored). To check whether ASI:One gives each user their own sender address, chat from a second ASI:One account: the terminal logs each sender, and that account should be refused. The code is accepted anywhere in a message as its own word, since ASI:One may reword what you type, and the terminal logs the first 200 characters of every message it receives. To check pairing without ASI:One, run `agents/pair_test.py <code>` with the agent running: a second, local uAgent sends `pair <code>` and `status` and prints the replies. It stays paired until you remove its address from `.office/fetch-agent.json`.
-- **Limits.** Missions need an explicit `confirm` within ten minutes. Command approvals, stopping agents and pausing stay in the Iteration1 app; the agent cannot approve anything. Chat text and office content are treated as data.
+**Talking to the office agent.** `status` lists tasks, blockers and who is working; `report on <task>` shows a run doc that separates verified receipts from self-reported ones; `review <task>` asks the reviewer for a verdict; `approvals` lists commands waiting in the office; `alerts` shows what the watcher and reviewer reported recently; `mission: <what to build>` hands a new mission to the implementation manager after `confirm`.
+
+**Talking to the planner.** `plan: <idea>` drafts an epic and stories with acceptance criteria, `confirm` creates them in Jira, `backlog` lists open issues, and `start ONB-12` asks the office agent to run that story. The mission's task is titled with the issue key, so as the watcher reports progress the planner comments on the issue and moves it to Done once the office has verified the work; unverified work stays open.
+
+**In the app.** Zoom into a project and the rail lists the four agents with a live status dot; **ASI:One agents** opens a panel showing each one's status, a **Plan in Jira** form (draft stories, create them, then start one as a mission) and what the agents did in that project. Each ticket shows the reviewer's latest verdict, an **Ask the reviewer** button and a link to its Jira issue. The agents check in with the office over the loopback API every few seconds (`server/fetch-agents.mjs`) and take the jobs the page queues for them; nothing about them is saved, so an agent that stops shows as offline. Jobs from the page act for the person at this computer, as the rest of the local app does.
+
+**How they work together.** The watcher follows the office's event stream and sends each batch of changes (tasks that block, reach review or finish, new approvals, new missions, pauses, the office going offline) to the other three. The office agent forwards them to its owners and keeps the last 20 for `alerts`, in case a message an agent starts doesn't appear in the chat. The reviewer reviews every task that reaches review and sends its verdict through the office agent. The planner hands missions to the office agent, which starts them only for a paired owner. Agents reach each other directly on `127.0.0.1` and accept team messages only from each other's addresses, derived from the seeds each keeps in `.office/`. The watcher reconnects with backoff, compares against the last state it saw so nothing is missed while the office restarts, and drops repeats within a minute.
+
+- **Pairing.** Only paired ASI:One addresses can use the office agent; the planner trusts the same people. At startup the office agent prints a single-use code; send `pair <code>` from ASI:One. The code is accepted anywhere in a message, since ASI:One may reword what you type, and pairing locks after five wrong codes until restart. Paired addresses and seeds are kept in `.office/` (git-ignored). To check pairing without ASI:One, run `agents/pair_test.py <code>`: a local uAgent sends `pair <code>` and `status` and prints the replies (`PAIR_TEST_TARGET=planner` talks to the planner). It stays paired until you remove its address from `.office/fetch-agent.json`.
+- **Limits.** Missions need an explicit `confirm`, or a `start` the owner sends the planner. Command approvals, stopping agents and pausing stay in the Iteration1 app; no agent can approve anything, and the reviewer only reads. The planner works in one Jira project and only sends its credentials to an `https://*.atlassian.net` site. Chat text, Jira text and office content are treated as data.
+- **Model.** With an ASI:One API key, the reviewer judges each criterion against the receipts and the planner drafts stories with ASI:One's `asi1` model. Without one, the reviewer reports the office's own checks and the planner splits an idea into one story per line.
 
 ```sh
 python -m venv .office/runtime/agent-venv
 .office/runtime/agent-venv/Scripts/python -m pip install -r agents/requirements.txt   # bin/python on macOS and Linux
-.office/runtime/agent-venv/Scripts/python agents/office_agent.py
+.office/runtime/agent-venv/Scripts/python agents/configure.py   # Jira site, email, API token, project key, ASI:One key
+.office/runtime/agent-venv/Scripts/python agents/run_all.py     # starts all four and restarts any that exits
 ```
 
-With the office running (`npm start`), open the `agentverse.ai/inspect` link the agent prints and choose **Connect → Mailbox** once. On Windows on ARM, uAgents needs `grpcio`, which has no ARM64 wheel; create the venv from an x64 Python (for example the `python` NuGet package unpacked under `.office/runtime/python-x64`), which runs under emulation. Tests: `python -m unittest discover agents`.
-
-**iteration1-watcher** is a second, local uAgent that follows the office's live state stream and tells the office agent, agent to agent, when a task blocks, becomes ready for review or finishes (with whether it was verified), when an approval is waiting, when a new mission starts and when the office pauses or goes offline. The office agent forwards each batch to its paired owners in ASI:One and keeps the last 20 for `alerts`, in case a message the agent starts doesn't appear in the chat. The office agent accepts alerts only from the watcher whose seed sits beside its own in `.office/fetch-watcher.json`. The watcher reconnects with backoff when the office restarts, compares against the last state it saw so nothing is missed meanwhile, and drops repeats within a minute. Run it beside the office agent:
-
-```sh
-.office/runtime/agent-venv/Scripts/python agents/watcher_agent.py
-```
+With the office running (`npm start`), open each `agentverse.ai/inspect` link the agents print and choose **Connect → Mailbox** once per agent. `configure.py` checks the Jira token and model key before saving them to `.office/jira.json` and `.office/asi1.json`. On Windows on ARM, uAgents needs `grpcio`, which has no ARM64 wheel; create the venv from an x64 Python (for example the `python` NuGet package unpacked under `.office/runtime/python-x64`), which runs under emulation. Tests: `python -m unittest discover agents`.
 
 ## Claude agents
 

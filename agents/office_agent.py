@@ -1,6 +1,10 @@
 """Iteration1 office agent for ASI:One. Runs on your computer and reaches Agentverse through its mailbox.
 
-    python agents/office_agent.py
+    python agents/office_agent.py        (or agents/run_all.py to start every agent)
+
+It answers its paired owners in ASI:One and coordinates the local sibling agents: it forwards the
+watcher's alerts and the reviewer's verdicts to owners, asks the reviewer for reviews, and starts
+missions the planner hands it for an owner.
 
 Environment (all optional):
     ITERATION1_URL      local office origin, default http://127.0.0.1:4314
@@ -11,7 +15,6 @@ Environment (all optional):
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import secrets
 import sys
@@ -26,11 +29,14 @@ from uagents_core.contrib.protocols.chat import (
 )
 
 sys.path.insert(0, str(Path(__file__).parent))
-from alerts import OFFICE_CONFIG, OfficeAlert, alert_protocol, watcher_address  # noqa: E402
-from office_core import HELP, Gate, OfficeAgent, OfficeClient  # noqa: E402
+from office_core import HELP, Gate, OfficeAgent, OfficeClient, OfficeError  # noqa: E402
+from office_link import HEARTBEAT_SECONDS, OfficeLink  # noqa: E402
+from siblings import (  # noqa: E402
+    OFFICE_CONFIG, DispatchRequest, DispatchResult, LocalFirst, OfficeAlert, ReviewRequest, ReviewResult,
+    address, port, read_json, write_private,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
-CONFIG = OFFICE_CONFIG
 
 # Windows consoles may not encode every character ASI:One sends; never let logging crash a handler.
 sys.stdout.reconfigure(errors="backslashreplace")
@@ -38,26 +44,10 @@ sys.stdout.reconfigure(errors="backslashreplace")
 # Mailbox mode needs no inbound connections, so keep the agent's own server off the local network.
 uagents.asgi.HOST = "127.0.0.1"
 
-
-def load_config() -> dict:
-    try:
-        return json.loads(CONFIG.read_text(encoding="utf-8-sig"))
-    except (OSError, ValueError):
-        return {}
-
-
-def save_config(config: dict) -> None:
-    CONFIG.parent.mkdir(parents=True, exist_ok=True)
-    temp = CONFIG.with_suffix(".tmp")
-    temp.write_text(json.dumps(config, indent=2), encoding="utf-8")
-    os.chmod(temp, 0o600)
-    os.replace(temp, CONFIG)
-
-
-config = load_config()
+config = read_json(OFFICE_CONFIG)
 if not config.get("seed"):
     config["seed"] = secrets.token_urlsafe(32)
-    save_config(config)
+    write_private(OFFICE_CONFIG, config)
 
 
 def say(line: str) -> None:
@@ -66,7 +56,7 @@ def say(line: str) -> None:
 
 def save_owners(owners: set[str]) -> None:
     config["owners"] = sorted(owners)
-    save_config(config)
+    write_private(OFFICE_CONFIG, config)
 
 
 office = OfficeAgent(
@@ -77,19 +67,26 @@ office = OfficeAgent(
 agent = Agent(
     name="iteration1-office",
     seed=os.environ.get("OFFICE_AGENT_SEED") or config["seed"],
-    port=int(os.environ.get("OFFICE_AGENT_PORT", "8001")),
+    port=port("office"),
     mailbox=os.environ.get("OFFICE_AGENT_MAILBOX") != "0",
+    resolve=LocalFirst(),
     publish_agent_details=True,
     report_events=False,  # optional Agentverse telemetry; it needs an API key and logs 401s without one
     readme_path=str(Path(__file__).parent / "AGENT.md"),
     description="Check on, and hand missions to, an Iteration1 office of coding agents running on its owner's computer.",
 )
 chat = Protocol(spec=chat_protocol_spec)
-alerts = alert_protocol()
+team = Protocol(name="iteration1-office-team", version="0.2.0")
+link = OfficeLink(office.office, "office", agent.address, lambda: {"owners": len(office.gate.owners), "pairingLocked": office.gate.locked}, say)
 
 
 def reply(text: str) -> ChatMessage:
     return ChatMessage(content=[TextContent(text=text)], msg_id=uuid4(), timestamp=datetime.now(timezone.utc))
+
+
+async def tell_owners(ctx: Context, text: str, only: str = "") -> None:
+    for owner in [only] if only in office.gate.owners else sorted(office.gate.owners):
+        await ctx.send(owner, reply(text))
 
 
 @agent.on_event("startup")
@@ -100,6 +97,11 @@ async def announce(ctx: Context):
     say(f"PAIRING CODE: {office.gate.code}   (new on every restart, single use)")
     say(f"Send it from ASI:One, for example: pair {office.gate.code}")
     say("=" * 64)
+
+
+@agent.on_interval(period=HEARTBEAT_SECONDS)
+async def check_in(ctx: Context):
+    await asyncio.to_thread(link.beat)
 
 
 @chat.on_message(ChatMessage)
@@ -115,20 +117,16 @@ async def on_chat(ctx: Context, sender: str, msg: ChatMessage):
         return
     # Office calls are blocking HTTP to localhost; keep them off the event loop.
     answer = await asyncio.to_thread(office.handle, sender, text[:12000])
+    if office.gate.allowed(sender):
+        await asyncio.to_thread(link.report, "chat", f"ASI:One: {text[:160]}")
+    while office.outbox:
+        kind, requester, room_id, task_id = office.outbox.pop(0)
+        reviewer = address("reviewer")
+        if kind == "review" and reviewer:
+            await ctx.send(reviewer, ReviewRequest(room_id=room_id, task_id=task_id, requester=requester))
+        elif kind == "review":
+            answer = "The reviewer agent isn't set up. Start it with agents/run_all.py, then ask again."
     await ctx.send(sender, reply(answer))
-
-
-@alerts.on_message(OfficeAlert)
-async def on_alert(ctx: Context, sender: str, msg: OfficeAlert):
-    # Alerts are accepted only from this computer's own watcher agent.
-    if sender != watcher_address():
-        say(f"Ignored alert from unknown sender {sender}")
-        return
-    lines = [line[:300] for line in msg.lines[:20]]
-    office.remember(lines)
-    say(f"Alert from watcher -> {len(office.gate.owners)} owner(s): {lines}")
-    for owner in sorted(office.gate.owners):
-        await ctx.send(owner, reply("Office update:\n" + "\n".join(f"- {line}" for line in lines)))
 
 
 @chat.on_message(ChatAcknowledgement)
@@ -136,8 +134,48 @@ async def on_ack(ctx: Context, sender: str, msg: ChatAcknowledgement):
     pass
 
 
+# Sibling agents on this computer. Each handler checks the sender is the sibling it expects.
+
+@team.on_message(OfficeAlert)
+async def on_alert(ctx: Context, sender: str, msg: OfficeAlert):
+    if sender != address("watcher"):
+        say(f"Ignored alert from unknown sender {sender}")
+        return
+    lines = [line[:300] for line in msg.lines[:20]]
+    office.remember(lines)
+    say(f"Alert from watcher -> {len(office.gate.owners)} owner(s): {lines}")
+    await tell_owners(ctx, "Office update:\n" + "\n".join(f"- {line}" for line in lines))
+
+
+@team.on_message(ReviewResult)
+async def on_review(ctx: Context, sender: str, msg: ReviewResult):
+    if sender != address("reviewer"):
+        say(f"Ignored review from unknown sender {sender}")
+        return
+    office.remember([msg.text.splitlines()[0][:200] + " (say `alerts` for the list, or ask me to review it again)"])
+    say(f"Review from reviewer for task {msg.task_id} -> {'requester' if msg.requester else 'all owners'}")
+    await tell_owners(ctx, msg.text[:6000], only=msg.requester)
+
+
+@team.on_message(DispatchRequest)
+async def on_dispatch(ctx: Context, sender: str, msg: DispatchRequest):
+    if sender != address("planner"):
+        say(f"Ignored mission from unknown sender {sender}")
+        return
+    if msg.requester not in office.gate.owners:
+        await ctx.send(sender, DispatchResult(ok=False, text="Only the office's paired owner can start missions.", requester=msg.requester))
+        return
+    try:
+        text, ok = await asyncio.to_thread(office.dispatch, msg.prompt), True
+    except OfficeError as e:
+        text, ok = f"The office said: {e}", False
+    say(f"Mission from planner for {msg.requester}: {'started' if ok else text}")
+    await asyncio.to_thread(link.report, "mission", f"Planner started a mission from ASI:One: {msg.prompt.splitlines()[0][:160]}" if ok else text)
+    await ctx.send(sender, DispatchResult(ok=ok, text=text, requester=msg.requester))
+
+
 agent.include(chat, publish_manifest=True)
-agent.include(alerts)
+agent.include(team)
 
 if __name__ == "__main__":
     agent.run()

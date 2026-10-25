@@ -37,6 +37,7 @@ import { seedOf } from './sky/sky-math';
 import { ConflictNotice } from './ConflictNotice';
 import { SharePanel } from './SharePanel';
 import { ConnectAgent } from './ConnectAgent';
+import { FetchPanel, FetchRail } from './FetchAgents';
 import './style.css';
 import './quiet-office.css';
 import './workspace.css';
@@ -247,6 +248,7 @@ export default function App() {
         <button onClick={()=>setTool('templates')}><Play size={15}/>Start work</button>
         <button onClick={()=>openConnections()}><ArrowUpRight size={15}/>Connections</button>
         <button onClick={()=>setTool('settings')}><Settings2 size={15}/>Settings</button>
+        {!room.demo && <FetchRail fetch={data.fetchAgents} onOpen={()=>setTool('fetch')}/>}
       </aside>}
       {inProject && !docOpen && tool==='office' && !room.demo && !cinematic && !recording && <><PreviewDock cloud={room.preview} /><ConflictNotice conflicts={room.preview?.conflicts} /></>}
       {inProject && !docOpen && tool==='office' && !walk && !cinematic && !recording && !replayRoom && <div className="demo-team-controls">
@@ -270,9 +272,10 @@ export default function App() {
           {room && tool === 'agent' && selected && <AgentPanel agent={selected} room={room} connected={!!data.connection.account} onConnect={()=>openConnect(tool)} busy={busy} action={action} modelOptions={modelOptions} onSelect={select} onTask={id=>{setSelectedWork(id);setTool('work');}} onBack={()=>setTool('dashboard')} onFocus={() => {setTool('office');setCompact(false);scene.current?.focus(selected.id);}} />}
           {room && tool === 'agents' && <AgentRoster room={room} onSelect={select}/>}
           {room && tool === 'templates' && <MissionControl preferredModel={preferredModel} onCursor={()=>openConnections('cursor')} onClaude={()=>openConnections('claude',tool)} onConnect={()=>openConnect(tool)} onTask={id=>{setSelectedWork(id);setTool('work');}} initialCompose onCancel={()=>setTool('dashboard')} room={room} data={data} busy={busy} action={action} onSelect={select} onRoom={switchRoom} onStarted={()=>setTool('dashboard')}/>}
+          {room && tool === 'fetch' && <FetchPanel fetch={data.fetchAgents} room={room} onTask={id=>{setSelectedWork(id);setTool('work');}}/>}
           {room && tool === 'integrations' && <IntegrationsPanel key={room.id} room={room} connection={data.connection} focus={connectionFocus} onContinue={connectReturn?()=>setTool(room.demo?'newroom':connectReturn):undefined} onStartWork={()=>{setPreferredModel('claude-opus-5-5');setTool('templates');}}/>}
           {tool === 'recording' && <RecordingStudio unavailable={!!sceneError || !sceneReady} onStop={stop=>{setCompact(false);setWhip(false);setReplayRoom(null);scene.current?.tourStop(stop);}} onClean={()=>{setCompact(false);setWhip(false);setHelp(false);setRecording(true);}}/>}
-          {room && tool === 'work' && <><button className="text-button" onClick={()=>setTool('dashboard')}>Back to tickets</button><TaskWorkspace key={selectedWork} room={room} itemId={selectedWork} connected={!!data.connection.account} busy={busy} action={action} onAgent={select} onTask={setSelectedWork} onConnect={()=>openConnect(tool)} onInbox={()=>setTool('approvals')}/></>}
+          {room && tool === 'work' && <><button className="text-button" onClick={()=>setTool('dashboard')}>Back to tickets</button><TaskWorkspace key={selectedWork} room={room} fetch={data.fetchAgents} itemId={selectedWork} connected={!!data.connection.account} busy={busy} action={action} onAgent={select} onTask={setSelectedWork} onConnect={()=>openConnect(tool)} onInbox={()=>setTool('approvals')}/></>}
           {room && tool === 'mission' && <MissionControl preferredModel={preferredModel} onCursor={()=>openConnections('cursor')} onClaude={()=>openConnections('claude',tool)} onConnect={()=>openConnect(tool)} onTask={id=>{setSelectedWork(id);setTool('work');}} room={room} data={data} busy={busy} action={action} onSelect={select} onRoom={switchRoom}/>}
           {room && tool === 'modes' && <ModesPanel room={room} data={data} busy={busy} action={action}/>}
           {room && tool === 'replay' && <ReplayPanel spatial={historySpatial} onSpatial={()=>setHistorySpatial(v=>!v)} room={room} busy={busy} action={action} onFrame={setReplayRoom} onRoom={switchRoom}/>}

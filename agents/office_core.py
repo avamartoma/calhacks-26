@@ -163,11 +163,13 @@ def parse(text: str) -> Intent:
         return Intent("alerts")
     if re.search(r"\b(?:approvals?|permissions?|waiting on me|needs? (?:my )?approval)\b", low):
         return Intent("approvals")
+    if not re.search(r"\b(?:ready for|in|awaiting|waiting for) review\b", low) and (m := re.search(r"\breview\b\s*(?:of|on)?\s*(?:task\s*)?#?(?P<arg>[^?]*)", t, re.I)):
+        return Intent("review", m.group("arg").strip(EDGE))
     if m := re.search(r"\b(?:run ?doc|report|receipts?|evidence|how did)\b\s*(?:for|on|of|about)?\s*(?:task\s*)?#?(?P<arg>.*)$", t, re.I | re.S):
         return Intent("doc", re.sub(r"\s+(?:go|went|turn out|end up)$", "", m.group("arg").strip(EDGE), flags=re.I))
     if VERB.match(t):
         return Intent("mission", t)
-    if re.search(r"\b(?:status|blocked|blockers?|progress|what'?s (?:happening|going on)|any updates?|working on|tasks?|office)\b", low):
+    if re.search(r"\b(?:status|blocked|blockers?|progress|what'?s (?:happening|going on)|any updates?|working on|ready for review|tasks?|office)\b", low):
         return Intent("status")
     if re.search(r"\bpair(?:ing|ed)?\b", low) or code_tokens(t):
         return Intent("pair")
@@ -224,12 +226,14 @@ HELP = """I'm the Iteration1 office agent. I watch a local office where coding a
 
 - **status**: tasks, blockers and who is working
 - **report on <task>**: the run doc for a task: what was done and what is verified versus only self-reported
+- **review <task>**: ask the reviewer agent which acceptance criteria the evidence actually supports
 - **approvals**: commands waiting for you in the office
 - **alerts**: what the watcher noticed recently (blocked tasks, work ready for review, new approvals)
 - **mission: <what to build>**: hand a new mission to the office's implementation manager (I'll ask you to confirm first)
 
 Command approvals and stopping agents stay in the Iteration1 app on the owner's computer."""
 
+STOP = {"the", "task", "for", "and", "with", "that", "this", "one", "please"}
 ORDER = {"blocked": 0, "working": 1, "review": 2, "queued": 3, "done": 4}
 
 
@@ -283,7 +287,7 @@ def pick_task(room, query: str):
         return tasks[int(q) - 1]
     matches = [t for t in tasks if q in t["title"].lower()]
     if not matches:
-        words = [w for w in re.findall(r"\w+", q) if len(w) > 2]
+        words = [w for w in re.findall(r"\w+", q) if len(w) > 2 and w not in STOP]
         matches = [t for t in tasks if words and all(w in t["title"].lower() for w in words)]
     return max(matches, key=lambda t: t.get("updatedAt", 0)) if matches else None
 
@@ -317,6 +321,7 @@ class OfficeAgent:
     pending: dict[str, tuple[str, float]] = field(default_factory=dict)
     clock: Callable[[], float] = time.time
     inbox: list[tuple[float, str]] = field(default_factory=list)
+    outbox: list[tuple] = field(default_factory=list)  # requests for sibling agents, sent by the uAgents layer
 
     def remember(self, lines: list[str]) -> None:
         """Keep the watcher's latest alerts, in case a pushed message never reaches the chat."""
@@ -365,9 +370,7 @@ class OfficeAgent:
             prompt, expires = self.pending.pop(sender, ("", 0))
             if not prompt or expires < self.clock():
                 return "There is no mission waiting for confirmation. Say `mission: <what to build>` first."
-            room = self._room(create=True)
-            self.office.dispatch(room["id"], prompt)
-            return f"Mission sent to **{room['name']}**. Say `status` to follow it; any command approvals appear in the office app."
+            return self.dispatch(prompt)
         state = self.office.state()
         room = next(iter(self.office.rooms(state)), None)
         if room is None:
@@ -382,4 +385,16 @@ class OfficeAgent:
             if not task:
                 return "I couldn't find that task. Say `status` for the numbered list, then `report on 2`."
             return doc_text(self.office.run_doc(room["id"], task["id"]))
+        if intent.kind == "review":
+            task = pick_task(room, intent.arg)
+            if not task:
+                return "I couldn't find that task. Say `status` for the numbered list, then `review 2`."
+            self.outbox.append(("review", sender, room["id"], task["id"]))
+            return f"Asked the reviewer agent to check **{_clip(task['title'], 100)}** against its acceptance criteria. Its answer will follow."
         return "I didn't catch that. " + HELP
+
+    def dispatch(self, prompt: str) -> str:
+        """Start a mission. Used after an owner confirms here, or when the planner starts a Jira story an owner chose."""
+        room = self._room(create=True)
+        self.office.dispatch(room["id"], prompt[:12000])
+        return f"Mission sent to **{room['name']}**. Say `status` to follow it; any command approvals appear in the office app."
