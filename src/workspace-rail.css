@@ -1,0 +1,24 @@
+/* The workspace rail on the far left, as in Slack or Discord. The rest of the app sits beside it. */
+.workspace-rail{position:fixed;left:0;top:0;bottom:0;width:68px;z-index:40;display:flex;flex-direction:column;align-items:center;gap:10px;padding:68px 0 16px;box-sizing:border-box;background:#1f2840}
+.workspace-rail ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;align-items:center;overflow-y:auto;scrollbar-width:none}
+.workspace-rail li{position:relative}
+/* The active marker, a bar on the left edge. */
+.workspace-rail li::before{content:'';position:absolute;left:-14px;top:50%;width:4px;height:8px;border-radius:0 4px 4px 0;background:#fff;transform:translateY(-50%);opacity:0;transition:height .15s,opacity .15s}
+.workspace-rail li:hover::before{opacity:1;height:20px}
+.workspace-rail li.active::before{opacity:1;height:36px}
+.workspace-rail li button{position:relative;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:var(--workspace-color,#5b7fa6);color:#fff;font:700 14px Manrope,sans-serif;letter-spacing:.02em;text-shadow:0 1px 2px #0003;transition:border-radius .15s}
+.workspace-rail li button:hover,.workspace-rail li.active button{border-radius:14px}
+.workspace-rail li button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.rail-badge{position:absolute;right:-4px;bottom:-4px;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:99px;background:#e0a526;color:#1f2840;font:800 10px/18px Manrope,sans-serif;text-align:center;box-shadow:0 0 0 3px #1f2840}
+.rail-add{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:#2c3756;color:#8fd6a8;transition:border-radius .15s,background .15s}
+.rail-add:hover{border-radius:14px;background:#3a8f5f;color:#fff}
+.app.quiet-office.has-rail{padding-left:68px;box-sizing:border-box}
+.has-rail .workspace-nav{left:68px}
+@media(max-width:750px){.workspace-rail{display:none}.app.quiet-office.has-rail{padding-left:0}.has-rail .workspace-nav{left:0}}
+.rail-menu{position:fixed;left:76px;z-index:60;display:flex;flex-direction:column;min-width:200px;padding:6px;border-radius:10px;background:#fff;box-shadow:0 10px 30px rgba(20,32,60,.25)}
+.rail-menu b{padding:6px 10px 8px;font:700 12px Manrope,sans-serif;color:#24304a;border-bottom:1px solid #edf0f4;margin-bottom:4px}
+.rail-menu button{padding:8px 10px;border-radius:6px;text-align:left;font:600 12.5px Manrope,sans-serif;color:#3c4660}
+.rail-menu button:hover{background:#eef2f7}
+.rail-menu button.danger{color:#b55c48}
+.workspace-rail li button img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
+.workspace-rail li button:has(img){overflow:visible;background:#2c3756}

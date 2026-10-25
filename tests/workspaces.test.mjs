@@ -94,3 +94,26 @@ test('a cloud can be dragged to a new spot and the move is rejected if it is not
   assert.ok(Number.isFinite(moved.depth), 'depth survives a move so parallax stays stable');
   assert.throws(() => placeCloud(state, state.rooms[0], { x: Number.NaN, y: 0 }));
 });
+
+test('a workspace can have a picture, which must be a small PNG, JPEG or WebP image', () => {
+  const state = { rooms: [] };
+  const workspace = createWorkspace(state, { name: 'Design' });
+  const png = 'data:image/png;base64,iVBORw0KGgo=';
+  assert.equal(renameWorkspace(state, workspace.id, { image: png }).image, png);
+  assert.throws(() => renameWorkspace(state, workspace.id, { image: 'data:image/svg+xml;base64,PHN2Zz4=' }), /PNG, JPEG or WebP/);
+  assert.throws(() => renameWorkspace(state, workspace.id, { image: 'https://example.com/x.png' }), /PNG, JPEG or WebP/);
+  assert.throws(() => renameWorkspace(state, workspace.id, { image: `data:image/png;base64,${'A'.repeat(70000)}` }));
+  assert.equal(renameWorkspace(state, workspace.id, { image: null }).image, undefined);
+  assert.equal(renameWorkspace(state, workspace.id, { name: 'Design team' }).name, 'Design team');
+});
+
+test('a cloud dragged on the sky keeps its own position, apart from the older 3D spot', () => {
+  const state = { rooms: [{ id: 'r1', name: 'One', agents: [] }] };
+  initWorkspaces(state);
+  const before = { ...state.rooms[0].cloud };
+  const placed = placeCloud(state, state.rooms[0], { x: 900, y: -250, sky: true });
+  assert.deepEqual(placed.sky, { x: 900, y: -250 });
+  assert.equal(placed.x, before.x); assert.equal(placed.y, before.y);
+  assert.throws(() => placeCloud(state, state.rooms[0], { x: 1, y: 1, sky: true, extra: 1 }));
+  assert.throws(() => placeCloud(state, state.rooms[0], { x: 1e9, y: 0, sky: true }));
+});

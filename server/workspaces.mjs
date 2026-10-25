@@ -5,9 +5,14 @@ import { uid } from './domain.mjs';
 // is what keeps an unrelated project's clouds out of the sky while you work.
 export const skyPalette = ['#8fb6d8', '#c4a6d4', '#8fd0c0', '#e0b48a', '#b9c48f', '#d8a0a8'];
 
+/** A workspace picture: a small PNG, JPEG or WebP image, inlined. The app shrinks uploads first. */
+const workspaceImage = z.string().max(60000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/, 'Use a PNG, JPEG or WebP image.');
+
 export const workspaceFields = z.object({
   name: z.string().trim().min(1).max(60),
-  color: z.string().trim().regex(/^#[0-9a-f]{6}$/i).optional()
+  color: z.string().trim().regex(/^#[0-9a-f]{6}$/i).optional(),
+  // null removes the picture.
+  image: workspaceImage.nullable().optional()
 }).strict();
 
 /** Clouds sit on a ring that widens as projects are added, so a new one never lands on an old one. */
@@ -51,7 +56,7 @@ export function createWorkspace(state, body) {
   const input = workspaceFields.parse(body);
   const existing = initWorkspaces(state);
   if (existing.length >= 24) throw new Error('That is as many workspaces as the canvas holds. Remove one first.');
-  const workspace = { id: uid(), name: input.name, color: input.color || skyPalette[existing.length % skyPalette.length], createdAt: Date.now() };
+  const workspace = { id: uid(), name: input.name, color: input.color || skyPalette[existing.length % skyPalette.length], ...(input.image ? { image: input.image } : {}), createdAt: Date.now() };
   state.workspaces.push(workspace);
   return workspace;
 }
@@ -61,6 +66,8 @@ export function renameWorkspace(state, id, body) {
   const input = workspaceFields.partial().parse(body);
   if (input.name) workspace.name = input.name;
   if (input.color) workspace.color = input.color;
+  if (input.image) workspace.image = input.image;
+  if (input.image === null) delete workspace.image;
   return workspace;
 }
 
@@ -87,8 +94,13 @@ export function assignRoom(state, room, workspaceId) {
   return room;
 }
 
+/**
+ * Where a project's cloud sits. `sky: true` saves where you dragged it on the workspace sky, in
+ * that sky's own units, kept apart from the position the older 3D view uses.
+ */
 export function placeCloud(state, room, spot) {
-  const input = z.object({ x: z.number().finite(), y: z.number().finite() }).strict().parse(spot);
-  room.cloud = { ...room.cloud, x: input.x, y: input.y };
+  const input = z.object({ x: z.number().finite().min(-1e6).max(1e6), y: z.number().finite().min(-1e6).max(1e6), sky: z.boolean().optional() }).strict().parse(spot);
+  if (input.sky) room.cloud = { ...room.cloud, sky: { x: input.x, y: input.y } };
+  else room.cloud = { ...room.cloud, x: input.x, y: input.y };
   return room.cloud;
 }

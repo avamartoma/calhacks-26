@@ -8,17 +8,23 @@
  * @module
  */
 
+import type * as access from "../access.js";
+import type * as agentTokens from "../agentTokens.js";
 import type * as contributions from "../contributions.js";
 import type * as crons from "../crons.js";
 import type * as events from "../events.js";
+import type * as fileChanges from "../fileChanges.js";
 import type * as handoffs from "../handoffs.js";
+import type * as identity from "../identity.js";
 import type * as leases from "../leases.js";
 import type * as lib_previewCommand from "../lib/previewCommand.js";
+import type * as lib_previewShot from "../lib/previewShot.js";
 import type * as lib_sandbox from "../lib/sandbox.js";
 import type * as lib_workspacePath from "../lib/workspacePath.js";
 import type * as projects from "../projects.js";
 import type * as sessionSandbox from "../sessionSandbox.js";
 import type * as sessions from "../sessions.js";
+import type * as sharing from "../sharing.js";
 import type * as validators from "../validators.js";
 
 import type {
@@ -28,17 +34,23 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  access: typeof access;
+  agentTokens: typeof agentTokens;
   contributions: typeof contributions;
   crons: typeof crons;
   events: typeof events;
+  fileChanges: typeof fileChanges;
   handoffs: typeof handoffs;
+  identity: typeof identity;
   leases: typeof leases;
   "lib/previewCommand": typeof lib_previewCommand;
+  "lib/previewShot": typeof lib_previewShot;
   "lib/sandbox": typeof lib_sandbox;
   "lib/workspacePath": typeof lib_workspacePath;
   projects: typeof projects;
   sessionSandbox: typeof sessionSandbox;
   sessions: typeof sessions;
+  sharing: typeof sharing;
   validators: typeof validators;
 }>;
 

@@ -40,6 +40,37 @@ export function busyMessage(relative) {
   return `File is busy: ${relative} is held by another session.`;
 }
 
+const ECHO_CLOCK_SKEW_MS = 2000;
+
+export function contentHash(content) {
+  let hash = 2166136261;
+  for (let i = 0; i < content.length; i += 1) {
+    hash ^= content.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${(hash >>> 0).toString(16)}:${content.length}`;
+}
+
+export function isConflictSidecar(relative) {
+  const name = String(relative || '').split(/[\\/]/).pop() || '';
+  return name.endsWith('.remote');
+}
+
+export function isOfficeEcho(change, written) {
+  if (!written || change?.author !== 'local' || change.contentHash !== written.hash) return false;
+  return change.at <= written.finishedAt + ECHO_CLOCK_SKEW_MS;
+}
+
+export function supersededByUpload(changedAt, uploadFinishedAt) {
+  return typeof uploadFinishedAt === 'number' && changedAt <= uploadFinishedAt;
+}
+
+export function localEditsWin({ pendingWrite, localMtime, uploadedAt }) {
+  if (pendingWrite) return true;
+  if (typeof localMtime !== 'number' || typeof uploadedAt !== 'number') return false;
+  return localMtime > uploadedAt;
+}
+
 export function sandboxDead(error) {
   const message = String(error?.message || error).toLowerCase();
   if (message.includes('path escapes') || message.includes('path must be')) return false;

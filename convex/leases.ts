@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, mutation } from "./_generated/server";
+import { requireAccess } from "./access";
 import { recordEvent } from "./events";
 import { assertNonEmpty } from "./validators";
 
@@ -12,11 +13,8 @@ export const acquire = mutation({
     sessionId: v.id("sessions"),
   },
   handler: async (ctx, args) => {
+    await requireAccess(ctx, args.projectId, "editor");
     const path = assertNonEmpty(args.path, "path");
-    const project = await ctx.db.get(args.projectId);
-    if (!project) {
-      throw new Error(`Project ${args.projectId} not found`);
-    }
     const session = await ctx.db.get(args.sessionId);
     if (!session) {
       throw new Error(`Session ${args.sessionId} not found`);
@@ -66,6 +64,7 @@ export const release = mutation({
     sessionId: v.id("sessions"),
   },
   handler: async (ctx, args) => {
+    await requireAccess(ctx, args.projectId, "editor");
     const path = assertNonEmpty(args.path, "path");
     const existing = await ctx.db
       .query("leases")

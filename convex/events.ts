@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { query, type MutationCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import { grantedRole, requireAccess } from "./access";
+import { currentUser } from "./identity";
+import type { Doc, Id } from "./_generated/dataModel";
 
 export async function recordEvent(
   ctx: MutationCtx,
@@ -22,10 +24,7 @@ export async function recordEvent(
 export const byProject = query({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
-    const project = await ctx.db.get(args.projectId);
-    if (!project) {
-      throw new Error(`Project ${args.projectId} not found`);
-    }
+    await requireAccess(ctx, args.projectId, "viewer");
     return await ctx.db
       .query("events")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -37,6 +36,21 @@ export const byProject = query({
 export const recent = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("events").order("desc").take(50);
+    const user = await currentUser(ctx);
+    const events = await ctx.db.query("events").order("desc").collect();
+    const allowed = new Map<string, boolean>();
+    const visible: Doc<"events">[] = [];
+    for (const event of events) {
+      let canView = allowed.get(event.projectId);
+      if (canView === undefined) {
+        const project = await ctx.db.get(event.projectId);
+        canView = project ? (await grantedRole(ctx, project, user)) !== null : false;
+        allowed.set(event.projectId, canView);
+      }
+      if (!canView) continue;
+      visible.push(event);
+      if (visible.length >= 50) break;
+    }
+    return visible;
   },
 });

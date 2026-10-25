@@ -45,6 +45,12 @@ export interface SandboxProvider {
   destroy(sandboxId: string): Promise<void>;
   setTimeout(sandboxId: string, timeoutMs: number): Promise<void>;
   startPreview(sandboxId: string, input: PreviewInput): Promise<PreviewResult>;
+  resume(sandboxId: string): Promise<SandboxHandle>;
+  pause(sandboxId: string): Promise<void>;
+  portOpen(sandboxId: string, port: number): Promise<boolean>;
+  archive(sandboxId: string): Promise<Uint8Array | null>;
+  restore(sandboxId: string, archive: Uint8Array): Promise<void>;
+  sandboxState(sandboxId: string): Promise<"running" | "paused" | "missing">;
 }
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -76,6 +82,38 @@ export function sandboxProviderName(): "e2b" | "env-host" {
 export function getSandboxProvider(): SandboxProvider {
   return sandboxProviderName() === "env-host" ? new EnvHostProvider() : new E2BProvider();
 }
+
+const MAX_BACKUP_BYTES = 8_000_000;
+
+function e2bCreateOpts() {
+  return {
+    apiKey: e2bApiKey(),
+    timeoutMs: sandboxTimeoutMs(),
+    lifecycle: { onTimeout: "pause" as const, autoResume: false },
+  };
+}
+
+const ARCHIVE_SCRIPT = `
+set -eu
+cd "$WORKSPACE_DIR"
+rm -f /tmp/iteration1-backup.tgz
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git ls-files -z --cached --others --exclude-standard | tar --null -czf /tmp/iteration1-backup.tgz -T -
+else
+  tar -czf /tmp/iteration1-backup.tgz --exclude=node_modules --exclude=.git .
+fi
+test -s /tmp/iteration1-backup.tgz
+`;
+
+const RESTORE_SCRIPT = `
+set -eu
+mkdir -p "$WORKSPACE_DIR"
+tar -xzf /tmp/iteration1-backup.tgz -C "$WORKSPACE_DIR"
+`;
+
+const PORT_PROBE = `
+node -e "const n=require('net');const s=n.connect(Number(process.env.PREVIEW_PORT),'127.0.0.1',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),800)"
+`;
 
 function e2bApiKey(): string {
   const key = process.env.E2B_API_KEY;
@@ -136,7 +174,7 @@ export class E2BProvider implements SandboxProvider {
   readonly workspaceDir = "/home/user/workspace";
 
   async create(input: SandboxCreateInput): Promise<SandboxHandle> {
-    const sandbox = await Sandbox.create({ apiKey: e2bApiKey(), timeoutMs: sandboxTimeoutMs() });
+    const sandbox = await Sandbox.create(e2bCreateOpts());
     try {
       const result = await runIn(sandbox, CLONE_SCRIPT, {
         timeoutMs: 120_000,
@@ -158,7 +196,7 @@ export class E2BProvider implements SandboxProvider {
   }
 
   async createEmpty(): Promise<SandboxHandle> {
-    const sandbox = await Sandbox.create({ apiKey: e2bApiKey(), timeoutMs: sandboxTimeoutMs() });
+    const sandbox = await Sandbox.create(e2bCreateOpts());
     try {
       const result = await runIn(sandbox, 'mkdir -p "$WORKSPACE_DIR"', {
         timeoutMs: 30_000,
@@ -208,6 +246,56 @@ export class E2BProvider implements SandboxProvider {
   async destroy(sandboxId: string): Promise<void> {
     const sandbox = await this.connect(sandboxId);
     await sandbox.kill();
+  }
+
+  async resume(sandboxId: string): Promise<SandboxHandle> {
+    const sandbox = await Sandbox.connect(sandboxId, { apiKey: e2bApiKey(), timeoutMs: sandboxTimeoutMs() });
+    return { sandboxId: sandbox.sandboxId, url: `https://${sandbox.getHost(3000)}` };
+  }
+
+  async pause(sandboxId: string): Promise<void> {
+    await Sandbox.pause(sandboxId, { apiKey: e2bApiKey() });
+  }
+
+  async sandboxState(sandboxId: string): Promise<"running" | "paused" | "missing"> {
+    try {
+      const info = await Sandbox.getInfo(sandboxId, { apiKey: e2bApiKey() });
+      return info.state === "paused" ? "paused" : "running";
+    } catch {
+      return "missing";
+    }
+  }
+
+  async portOpen(sandboxId: string, port: number): Promise<boolean> {
+    const result = await runIn(await this.connect(sandboxId), PORT_PROBE, {
+      timeoutMs: 8_000,
+      envs: { PREVIEW_PORT: String(port) },
+    });
+    return result.code === 0;
+  }
+
+  async archive(sandboxId: string): Promise<Uint8Array | null> {
+    const sandbox = await this.connect(sandboxId);
+    const result = await runIn(sandbox, ARCHIVE_SCRIPT, {
+      timeoutMs: 60_000,
+      envs: { WORKSPACE_DIR: this.workspaceDir },
+    });
+    if (result.code !== 0) return null;
+    const bytes = await sandbox.files.read("/tmp/iteration1-backup.tgz", { format: "bytes" });
+    if (bytes.byteLength === 0 || bytes.byteLength > MAX_BACKUP_BYTES) return null;
+    return bytes;
+  }
+
+  async restore(sandboxId: string, archive: Uint8Array): Promise<void> {
+    const sandbox = await this.connect(sandboxId);
+    const buffer = new ArrayBuffer(archive.byteLength);
+    new Uint8Array(buffer).set(archive);
+    await sandbox.files.write("/tmp/iteration1-backup.tgz", buffer);
+    const result = await runIn(sandbox, RESTORE_SCRIPT, {
+      timeoutMs: 60_000,
+      envs: { WORKSPACE_DIR: this.workspaceDir },
+    });
+    if (result.code !== 0) throw new Error(result.stderr.slice(0, 500) || "could not restore the project backup");
   }
 
   async setTimeout(sandboxId: string, timeoutMs: number): Promise<void> {
@@ -420,6 +508,30 @@ export class EnvHostProvider implements SandboxProvider {
 
   async startPreview(): Promise<PreviewResult> {
     throw new Error("live preview requires SANDBOX_PROVIDER=e2b");
+  }
+
+  async resume(): Promise<SandboxHandle> {
+    throw new Error("resuming a sandbox requires SANDBOX_PROVIDER=e2b");
+  }
+
+  async pause(): Promise<void> {
+    throw new Error("pausing a sandbox requires SANDBOX_PROVIDER=e2b");
+  }
+
+  async portOpen(): Promise<boolean> {
+    return false;
+  }
+
+  async archive(): Promise<Uint8Array | null> {
+    return null;
+  }
+
+  async restore(): Promise<void> {
+    throw new Error("restoring a sandbox requires SANDBOX_PROVIDER=e2b");
+  }
+
+  async sandboxState(): Promise<"running" | "paused" | "missing"> {
+    return "missing";
   }
 
   private async lookup(sandboxId: string): Promise<{ url: string }> {

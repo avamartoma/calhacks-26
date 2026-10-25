@@ -77,12 +77,14 @@ test('a completed sign-in proves the subject and stores no token in the clear re
   assert.equal(verifier, null);
 
   const published = auth.publicSession(session);
-  for (const secret of ['refreshToken', 'accessToken']) assert.equal(published[secret], undefined, `${secret} must not be published`);
+  for (const secret of ['refreshToken', 'accessToken', 'idToken']) assert.equal(published[secret], undefined, `${secret} must not be published`);
   assert.equal(auth.publicProvider().clientId, CLIENT_ID);
 
   // Tokens are persisted for the next launch, but only to the ignored office directory.
   const stored = JSON.parse(await readFile(path.join(dataDir, 'session.json'), 'utf8'));
   assert.equal(stored.refreshToken, 'rt');
+  assert.equal(typeof stored.idToken, 'string');
+  assert.equal(stored.idToken.split('.').length, 3);
 });
 
 test('a replayed, unknown or tampered callback is refused', async t => {

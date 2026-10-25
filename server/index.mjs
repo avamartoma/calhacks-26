@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import { readFile, writeFile, mkdir, rename, realpath, stat, copyFile } from 'node:fs/promises';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { Codex, codexInstalled, installCodex, openInBrowser } from './codex.mjs';
@@ -30,7 +31,23 @@ import { createCodexCallback, createClaudeLogin, createCursorLogin } from './pro
 import { createCloud } from './cloud.mjs';
 import { editPaths } from './cloud-sync.mjs';
 
+function loadLocalEnv(file) {
+  let text;
+  try { text = readFileSync(file, 'utf8'); } catch { return; }
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+}
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+loadLocalEnv(path.join(root, '.env.local'));
 const dataDir = path.resolve(process.env.OFFICE_DATA_DIR || path.join(root, '.office'));
 await mkdir(dataDir, { recursive: true });
 const stateFile = path.join(dataDir, 'state.json');
@@ -99,7 +116,13 @@ function changed() {
     writeQueue = writeQueue.then(async () => { await writeFile(stateFile + '.tmp', serialized); await rename(stateFile + '.tmp', stateFile); }).catch(e => console.error('State could not be saved:', e.message));
   }, 500);
 }
-const cloud = createCloud({ changed, userId: () => liveIdentity?.sub || 'local' });
+const cloud = createCloud({
+  changed,
+  authToken: async () => {
+    const session = await auth.current();
+    return session && !session.stale ? session.idToken : null;
+  },
+});
 function findThread(threadId) { for (const room of state.rooms) { const a = room.agents.find(a => a.threadId === threadId); if (a) return { room, a }; } return {}; }
 const skillNames = ['office-manager', 'office-handoff', 'office-review'];
 const skillText = Object.fromEntries(await Promise.all(skillNames.map(async n => [n, await readFile(path.join(root, 'skills', n, 'SKILL.md'), 'utf8')])));
@@ -564,6 +587,58 @@ app.post('/api/rooms/:id/cursor/launch', wrap(async req => {
   try { const launched = await runner.launch(worker.id, input, { cwd: room.path, onMessage, onToolStart: message => cloud.claim(room, editPaths(message.name, message.args)), onDone }); event(worker, 'system', `Cursor ${launched.runtime} run ${launched.runId}. Execution is owned by this office and can be stopped here.`); record(room, 'Cursor agent launched', 'work'); changed(); return { roomId: room.id, agentId: worker.id, workItemId: item.id, ...launched }; }
   catch (error) { worker.turnId = null; worker.status = 'error'; event(worker, 'error', error.message); item.status = 'blocked'; item.blocker = error.message; item.updatedAt = Date.now(); changed(); throw error; }
 }));
+// A Claude agent the office launches at its own desk through the Claude Agent SDK. Office-member
+// turns use startClaudeTurn above. Like a Codex desk, a launched desk can be messaged mid-run,
+// continued after it finishes, and stopped.
+function claudeWriterBusy(room, a) {
+  return room.agents.some(w => w !== a && (w.turnId || startingAgents.has(w.id)) && (a.access === 'edit' || w.manager || w.access === 'edit'));
+}
+async function launchClaudeDesk(room, a, prompt) {
+  const item = assignedWork(room, a.id);
+  a.workStartedAt = Date.now(); a.status = 'working'; a.turnId = uid(); setWorkStatus(room, a, 'working'); event(a, 'user', prompt); changed();
+  const onMessage = entry => { event(a, entry.kind, entry.text); a.updatedAt = Date.now(); changed(); };
+  const onDone = outcome => {
+    a.turnId = null; a.sessionId = outcome.sessionId || a.sessionId;
+    if (a.status !== 'ejected') a.status = outcome.status === 'finished' ? 'done' : outcome.status === 'cancelled' ? 'paused' : 'error';
+    if (a.status === 'done') a.progress = 100;
+    if (outcome.error) event(a, 'error', outcome.error);
+    if (outcome.result) event(a, 'update', outcome.result);
+    if (outcome.costUsd != null) event(a, 'system', `Claude run used ${outcome.turns ?? '?'} turns, about $${outcome.costUsd.toFixed(2)}.`);
+    setWorkStatus(room, a, outcome.status === 'finished' ? 'review' : 'blocked', outcome.status === 'finished' ? '' : outcome.error || 'Run stopped. Send a message to continue.');
+    if (item) { identifyEvidence(room); trimEvidence(room, item); }
+    record(room, `${a.name}: Claude run ${outcome.status}`, 'work'); changed();
+    // Messages that arrived while the run was closing continue the same session right away.
+    if (outcome.status === 'finished' && outcome.unsent.length) startAgent(room, a, outcome.unsent.join('\n\n')).catch(() => {});
+  };
+  try { const launched = await claude.launch(a.id, { prompt, model: a.model, access: a.access, effort: a.effort || 'high' }, { cwd: room.path, resume: a.sessionId, beforeEdit: paths => cloud.claim(room, paths), onSession: id => { a.sessionId = id; changed(); }, onMessage, onDone }); if (!launched.resumed) event(a, 'system', `Claude ${a.access === 'edit' ? 'editing' : 'read-only'} run on ${launched.model}. Message this desk to steer or continue it.`); changed(); return launched; }
+  catch (error) { a.turnId = null; a.status = 'error'; event(a, 'error', error.message); setWorkStatus(room, a, 'blocked', error.message); changed(); throw error; }
+}
+async function continueClaude(room, a, prompt) {
+  if (room.archived) throw new Error('Restore this project before starting work.');
+  if (room.paused) throw new Error('Resume this office before starting work.');
+  if (room.capturing) throw new Error('A checkpoint is being captured. Try again shortly.');
+  if (a.status === 'ejected') throw new Error('This agent has been ejected. Replace it to continue.');
+  if (claude.running(a.id)) throw new Error('This agent is already working. Send a message to steer it.');
+  cursor.assertAvailable(room);
+  if (claudeWriterBusy(room, a)) throw new Error('Wait for the active office work to finish before continuing this Claude agent.');
+  await launchClaudeDesk(room, a, prompt);
+}
+app.post('/api/rooms/:id/claude/launch', wrap(async req => {
+  const room = roomBy(state, req.params.id);
+  if (room.demo) throw new Error('Choose a live project room for Claude work.');
+  const input = claudeLaunchFields.parse(req.body);
+  cursor.assertAvailable(room);
+  if (room.capturing) throw new Error('Wait for the checkpoint to finish before launching a run.');
+  // Only one writer per project: an editing run waits for every active turn; a read-only run only for other writers.
+  if (claudeWriterBusy(room, { access: input.access })) throw new Error('Wait for the active office work to finish before launching a Claude agent.');
+  const worker = agent('', input.access === 'edit' ? 'Implementation' : 'Research', input.prompt, room.agents.length, { provider: 'claude', model: input.model, modelSource: 'office-selected', access: input.access, effort: input.effort, status: 'idle' });
+  const item = workItem(input.prompt.split('\n')[0].slice(0, 120), input.prompt, { agentId: worker.id, status: 'queued', acceptanceCriteria: ['Return a concrete, evidence-backed result'], requiredEvidence: [input.access === 'edit' ? 'diff' : 'log'], checks: [], comments: [], files: [] });
+  room.paused = false; room.agents.push(worker); claimIdentity(worker, room); room.workItems.push(item); room.goal ||= input.prompt;
+  focusTicket(room, worker, item);
+  const launched = await launchClaudeDesk(room, worker, input.prompt);
+  record(room, 'Claude agent launched', 'work'); changed();
+  return { roomId: room.id, agentId: worker.id, workItemId: item.id, ...launched };
+}));
 // Cursor, Claude Code and Codex CLI sessions report in over MCP under /cursor, /claude-code and /codex-cli.
 for (const provider of Object.keys(reporters)) {
   app.post(`/api/rooms/:id/${provider}/start`, wrap(async req => { await syncIdentity(); return cursor.start(roomBy(state, req.params.id), req.body, provider); }));
@@ -715,6 +790,8 @@ app.post('/api/rooms', wrap(async req => {
   claimIdentity(manager, r);
   initOffice(r); state.rooms.push(r); changed(); return { room: r };
 }));
+app.post('/api/rooms/:id/cloud/open', wrap(req => cloud.open(roomBy(state, req.params.id))));
+app.post('/api/rooms/:id/cloud/close', wrap(req => cloud.close(roomBy(state, req.params.id))));
 // The cloud canvas shows one workspace at a time, so these decide which projects share a sky.
 app.get('/api/workspaces', wrap(async () => ({ workspaces: initWorkspaces(state) })));
 app.post('/api/workspaces', wrap(async req => { const workspace = createWorkspace(state, req.body); changed(); return { workspace }; }));
@@ -722,10 +799,7 @@ app.patch('/api/workspaces/:id', wrap(async req => { const workspace = renameWor
 app.delete('/api/workspaces/:id', wrap(async req => { const result = removeWorkspace(state, req.params.id); changed(); return result; }));
 app.post('/api/workspaces/:id/rooms', wrap(async req => { const room = assignRoom(state, roomBy(state, z.object({ roomId: z.string() }).strict().parse(req.body).roomId), workspaceBy(state, req.params.id).id); changed(); return { room }; }));
 app.post('/api/rooms/:id/workspace', wrap(async req => { const room = assignRoom(state, roomBy(state, req.params.id), z.object({ workspaceId: z.string() }).strict().parse(req.body).workspaceId); changed(); return { room }; }));
-app.post('/api/rooms/:id/cloud', wrap(async req => { const cloud = placeCloud(state, roomBy(state, req.params.id), req.body); changed(); return { cloud }; }));
-// A project's E2B sandbox opens while the project is open and closes when you leave it.
-app.post('/api/rooms/:id/sandbox/open', wrap(req => cloud.open(roomBy(state, req.params.id))));
-app.post('/api/rooms/:id/sandbox/close', wrap(req => cloud.close(roomBy(state, req.params.id))));
+app.post('/api/rooms/:id/cloud', wrap(async req => { const spot = placeCloud(state, roomBy(state, req.params.id), req.body); changed(); return { cloud: spot }; }));
 app.post('/api/rooms/:id/archive',wrap(async req=>{const r=roomBy(state,req.params.id);const {archived}=z.object({archived:z.boolean()}).strict().parse(req.body);if(r.capturing || r.agents.some(a=>a.turnId || startingAgents.has(a.id)))throw new Error('Pause all work before archiving this project.');r.archived=archived;if(archived)r.paused=true;record(r,archived?'Project archived':'Project restored','plan');changed();return {room:r};}));
 app.patch('/api/rooms/:id', wrap(async req => { const r = roomBy(state, req.params.id); const b = z.object({ permissionMode:permissionMode.optional(), name:z.string().trim().min(1).max(60).optional(), budget: z.number().int().min(1).max(6).optional(), skills: z.array(z.enum(skillNames)).optional() }).parse(req.body); const previous=r.permissionMode || 'project-write';Object.assign(r, b);if(b.permissionMode && b.permissionMode!==previous)record(r,`Permissions: ${b.permissionMode} for future runs`,'permissions');changed(); }));
 app.post('/api/rooms/:id/check',wrap(async req=>{const room=roomBy(state,req.params.id);await ensureConnected();room.workspaceCheck=await checkWorkspace(codex,room.path);changed();return room.workspaceCheck;}));
