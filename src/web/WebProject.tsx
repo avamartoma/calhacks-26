@@ -174,10 +174,11 @@ function AgentsPanel({ projectId, runs, editor, selected, onSelect }: { projectI
       {runs?.map(run => <li key={run.id} className={selected === run.id ? 'open' : ''}>
         <button className="web-run" onClick={() => onSelect(selected === run.id ? null : run.id)}>
           <i style={{ background: statusColor[run.status] }} />
-          <span><b>{run.prompt.split('\n')[0].slice(0, 90)}</b><small>{run.userLabel} · {providerNames[run.agent]} · {statusLabel[run.status]}{run.costUsd !== null ? ` · $${run.costUsd.toFixed(2)}` : ''}</small></span>
+          <span><b>{run.followUpOf && <em className="web-reply-mark">Reply · </em>}{run.prompt.split('\n')[0].slice(0, 90)}</b><small>{run.userLabel} · {providerNames[run.agent]} · {statusLabel[run.status]}{run.costUsd !== null ? ` · $${run.costUsd.toFixed(2)}` : ''}</small></span>
         </button>
         {selected === run.id ? <RunLog runId={run.id} /> : run.lastLine && <p className="web-last">{run.lastLine.text}</p>}
         {editor && run.mine && working(run) && <button className="text-button danger" onClick={() => void stop({ runId: run.id })}><Square size={12} /> Stop</button>}
+        {editor && selected === run.id && run.canFollowUp && <FollowUp runId={run.id} agent={providerNames[run.agent]} onSent={onSelect} />}
       </li>)}
     </ul>
   </aside>;
@@ -193,6 +194,22 @@ function RunLog({ runId }: { runId: Id<'agentRuns'> }) {
     <div className="web-log">{lines.map(line => <p key={line.id} className={`web-line ${line.kind}`}>{line.text}</p>)}<div ref={end} /></div>
     <RunChanges runId={runId} />
   </>;
+}
+
+/** Messages a finished agent; it picks up its conversation where it left off, as a new run. */
+function FollowUp({ runId, agent, onSent }: { runId: Id<'agentRuns'>; agent: string; onSent: (id: string) => void }) {
+  const followUp = useMutation(api.agentRuns.followUp);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  return <form className="web-followup" onSubmit={async event => {
+    event.preventDefault(); setBusy(true); setError('');
+    try { const next = await followUp({ runId, message: text }); setText(''); onSent(next); } catch (e) { setError(message(e)); } finally { setBusy(false); }
+  }}>
+    <textarea value={text} onChange={e => setText(e.target.value)} rows={2} maxLength={8000} placeholder={`Reply to ${agent}: ask for a change, or say what to do next`} />
+    <button className="secondary" disabled={busy || !text.trim()}>{busy ? 'Sending…' : 'Reply'}</button>
+    {error && <p className="web-error" role="alert">{error}</p>}
+  </form>;
 }
 
 /** The files a run changed, each opening its diff, like a ticket's files in the local office. */
