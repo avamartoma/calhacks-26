@@ -37,7 +37,8 @@ export function WebSky({ go }: { go: (path: string) => void }) {
       const radius = row.mine ? 80 * Math.sqrt(index) : 420 + 230 * Math.sqrt(index);
       const seed = seedOf(row.id);
       return {
-        id: row.id, name: row.name, description: describe(row), mine: row.mine, owner: row.owner?.split('@')[0],
+        // Everything on your web sky is a project you can view, so every cloud opens.
+        id: row.id, name: row.name, description: describe(row), mine: row.mine, enterable: true, owner: row.owner?.split('@')[0],
         agents: row.runs.map(run => ({ role: roles[run.agent], status: agentStatus(run.status) })),
         x: Math.cos(angle) * radius, y: Math.sin(angle) * radius * (row.mine ? .8 : .6), depth: row.mine ? 1 : .45 + .35 * seed, seed,
       };

@@ -14,7 +14,8 @@ import './sky.css';
  * projects you can see in the workspace sit further back, without text until you go to them.
  */
 /** `placed` is where you dragged one of your clouds; it stays there instead of joining the cluster. */
-export interface SkyProject { id: string; name: string; description: string; detail?: string; mine: boolean; x: number; y: number; depth: number; seed: number; kind?: 'you'; agents?: SkyAgent[]; owner?: string; size?: number; placed?: { x: number; y: number }; raise?: number }
+/** `enterable` lets someone else's project open like yours (the web app, where you can view shared projects). */
+export interface SkyProject { id: string; name: string; description: string; detail?: string; mine: boolean; enterable?: boolean; x: number; y: number; depth: number; seed: number; kind?: 'you'; agents?: SkyAgent[]; owner?: string; size?: number; placed?: { x: number; y: number }; raise?: number }
 /**
  * `clouds` is the default: vector clouds on a flat canvas with parallax layers. `balloons` is
  * the 3D option. `clouds3d` (vector clouds in 3D), `soft` (3D puff clouds) and `2d` (flat puff
@@ -24,6 +25,8 @@ export type SkyStyle = 'clouds' | 'balloons' | 'clouds3d' | 'soft' | '2d';
 
 /** Flat styles pan and zoom; 3D styles can also turn and fly. */
 const isFlat = (style: SkyStyle) => style === 'clouds' || style === '2d';
+/** Whether zooming into or clicking a project opens it. */
+const opens = (p: SkyProject) => p.mine || !!p.enterable;
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const cssColor = (rgb: number[]) => `rgb(${rgb.map(c => Math.round(c * 255)).join(',')})`;
@@ -186,7 +189,7 @@ function ProjectFolders({ projects, onOpen }: { projects: SkyProject[]; onOpen: 
     <header><b>{p.name}</b>{p.mine && <span className="folder-tag">Yours</span>}</header>
     <p>{p.description || 'No description yet.'}</p>
     <footer><AgentDots agents={p.agents} /><small>{p.agents?.length ? `${p.agents.length} agent${p.agents.length === 1 ? '' : 's'}` : 'No agents yet'}{p.owner ? ` · ${p.owner}` : ''}</small></footer>
-    {p.mine && <div className="folder-actions"><button className="primary" onClick={() => onOpen(p.id)}>Open</button></div>}
+    {opens(p) && <div className="folder-actions"><button className="primary" onClick={() => onOpen(p.id)}>Open</button></div>}
   </article>;
   return <div className="project-folders">
     <section><h2>Your projects <small>{mine.length}</small></h2>{mine.length ? <div className="folder-grid">{mine.map(card)}</div> : <p className="folder-empty">No projects yet.</p>}</section>
@@ -332,11 +335,11 @@ function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyM
     }
     return low;
   }
-  /** Fly to a project: into yours (its page opens), or over to someone else's. */
+  /** Fly to a project: into one you can open (its page opens), or over to someone else's. */
   function flyTo(p: SkyProject) {
     if (s.current.entering) return;
     if (p.kind === 'you') { animate(home(), 900); return; }
-    if (p.mine) {
+    if (opens(p)) {
       s.current.entering = true;
       const z = s.current.camera.z || 0;
       // From further back, come forward to your layer first, then into the project.
@@ -373,7 +376,7 @@ function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyM
     };
     resize();
     sky.setClouds(list.current);
-    const back = returnFrom && list.current.find(p => p.id === returnFrom && p.mine);
+    const back = returnFrom && list.current.find(p => p.id === returnFrom && opens(p));
     if (back && !reducedMotion()) {
       // Coming out of a project: start inside it and pull back out to your projects.
       state.camera = { x: back.x, y: back.y, zoom: insideZoom(back), z: 0, yaw: 0, pitch: 0 };
@@ -419,7 +422,7 @@ function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyM
       for (const p of list.current) {
         const c = placedNow.get(p.id)!;
         const onScreen = c.width > 0 && c.x + c.width / 2 > -40 && c.x - c.width / 2 < view.width + 40 && c.y + c.height / 2 > -40 && c.y - c.height / 2 < view.height + 40;
-        if (p.mine && p.kind !== 'you' && c.width > 0 && Math.abs(state.camera.z || 0) < 40) {
+        if (opens(p) && p.kind !== 'you' && c.width > 0 && Math.abs(state.camera.z || 0) < 40) {
           // You are inside a cloud once it is much wider than the screen and the middle of the screen
           // is well within its body. (Zooming toward the cursor keeps the point under it still, so
           // the cloud's own center may sit far off screen by then; that is fine.)
@@ -603,8 +606,8 @@ function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyM
       {list.current.filter(p => p.agents?.length).map(p => <span key={p.id} ref={el => { if (el) agentRows.current.set(p.id, el); else agentRows.current.delete(p.id); }} className="sky-agent-row"><AgentDots agents={p.agents} /></span>)}
     </div>
     <div className="sky-labels">
-      {list.current.map(p => p.mine
-        ? <button key={p.id} ref={ref(p.id)} className={`sky-label mine ${p.kind === 'you' ? 'you' : ''}`} onPointerDown={e => e.stopPropagation()} onClick={() => flyTo(p)} aria-label={p.kind === 'you' ? 'You. Return to your projects' : `Open ${p.name}`}>
+      {list.current.map(p => opens(p)
+        ? <button key={p.id} ref={ref(p.id)} className={`sky-label ${p.mine ? 'mine' : 'other'} ${p.kind === 'you' ? 'you' : ''}`} onPointerDown={e => e.stopPropagation()} onClick={() => flyTo(p)} aria-label={p.kind === 'you' ? 'You. Return to your projects' : `Open ${p.name}`}>
             <b>{p.name}</b>{p.description && <span>{p.description}</span>}
           </button>
         : <div key={p.id} ref={ref(p.id)} className="sky-label other" aria-hidden="true">
