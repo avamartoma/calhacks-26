@@ -179,6 +179,25 @@ export class OfficeScene {
     this.controls.enabled = this.altitude === 'project' && !this.walk && this.cinemaStep === null && !this.blending;
     this.renderer.setClearColor(this.altitude === 'sky' ? '#6fa0c6' : '#e3eae3');
     this.scene.fog = this.altitude === 'sky' ? new THREE.Fog('#7eafcb', 140, 640) : null;
+    // Inside a project, the time-of-day sky and its cloud sit behind the office; the older 3D
+    // cloud field (its blue dome, haze and clouds) is the workspace sky's job now, so it stays hidden.
+    this.clouds.suppressed = this.altitude === 'project' && !!this.backdrop;
+    if (this.clouds.suppressed) this.clouds.root.visible = false;
+    this.scene.background = this.altitude === 'project' && this.backdrop ? this.backdrop : null;
+  }
+  /** The office's backdrop: the sky for the time of day, fading into the color of its cloud. */
+  private backdrop: THREE.CanvasTexture | null = null;
+  setBackdrop(colors: { zenith: number[]; horizon: number[]; cloud: number[] }) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 4; canvas.height = 256;
+    const ctx = canvas.getContext('2d')!, css = (c: number[]) => `rgb(${c.map(v => Math.round(v * 255)).join(',')})`;
+    const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+    gradient.addColorStop(0, css(colors.zenith)); gradient.addColorStop(.48, css(colors.horizon)); gradient.addColorStop(.82, css(colors.cloud)); gradient.addColorStop(1, css(colors.cloud));
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, 4, 256);
+    this.backdrop?.dispose();
+    this.backdrop = new THREE.CanvasTexture(canvas);
+    this.backdrop.colorSpace = THREE.SRGBColorSpace;
+    this.applyShell();
   }
   setSky(rooms: Room[], tint?: string, waitingIds?: ReadonlySet<string>) {
     if (tint) this.clouds.setTint(tint);

@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { createSkyBackdrop, type ScreenCloud, type SkyCloud, type SkyRenderer } from './renderer';
+import { createSkyBackdrop, stackOrder, type ScreenCloud, type SkyCloud, type SkyRenderer } from './renderer';
 import { createRig, random } from './renderer-3d';
-import { CLOUD_WIDTH, place, type Camera, type Viewport } from './sky-math';
+import { CLOUD_WIDTH, place, type Viewport } from './sky-math';
 import type { SkyPalette } from './time-of-day';
+import { drawBlob, drawLabel } from './cloud-text';
 
 // Projects as simple vector clouds, like a clean illustrated map: a flat rounded base with
 // rounded bumps on top, crisp edges and flat colors. Each cloud always faces you and is sized so
@@ -149,25 +150,23 @@ export function createSkyRendererVector(canvas: HTMLCanvasElement): SkyRenderer 
 
 /** Your project clouds in the flat sky, in world units: bigger than in 3D so text has room. */
 export const FLAT_WIDTH = 660;
-const flatSize = (c: SkyCloud) => FLAT_WIDTH * (c.size ?? 1) / CLOUD_WIDTH;
+/** Your project clouds are drawn at this share of their full size (their text with them). */
+export const YOUR_SCALE = .9;
+const flatSize = (c: SkyCloud) => FLAT_WIDTH * (c.size ?? 1) * (c.mine ? YOUR_SCALE : 1) / CLOUD_WIDTH;
 /**
  * How far you have zoomed in to the projects further back, 0 to 1: at the home view they are
  * small and gray, as if far away; zoomed in, they are white and full size.
  */
-export const backgroundNear = (zoom: number) => { const t = Math.min(1, Math.max(0, (zoom - .5) / .6)); return t * t * (3 - 2 * t); };
+export const backgroundNear = (zoom: number, home: number) => { const t = Math.min(1, Math.max(0, (zoom / home - 1) / .6)); return t * t * (3 - 2 * t); };
 /** Size of a cloud on the flat canvas: projects further back shrink until you zoom in to them. */
-const sizeAt = (c: SkyCloud, zoom: number) => flatSize(c) * zoomedOutBoost(zoom) * (c.mine ? 1 : .68 + .32 * backgroundNear(zoom));
+const sizeAt = (c: SkyCloud, zoom: number, home: number) => flatSize(c) * zoomedOutBoost(zoom) * (c.mine ? 1 : .5 + .5 * backgroundNear(zoom, home));
 /**
  * Zoomed out, clouds shrink a little less than the space between them, so more of them fit on
  * screen. Their centers keep moving with the camera, so zooming stays anchored to the cursor.
  */
-const zoomedOutBoost = (zoom: number) => zoom < 1 ? Math.pow(zoom, -.18) : 1;
+export const zoomedOutBoost = (zoom: number) => zoom < 1 ? Math.pow(zoom, -.18) : 1;
 /** The share of a cloud's width its text may use; the rest is margin on either side. */
-export const LABEL_SHARE = .58;
-/** Screen gap kept between any two clouds, in CSS pixels. */
-const GAP = 16;
-/** The drawn cloud fills almost all of its quad's width and about 85% of its height. */
-const VISIBLE_WIDTH = .98, VISIBLE_HEIGHT = .85;
+export const LABEL_SHARE = .5;
 
 /**
  * The same vector clouds on a flat 2D canvas with parallax layers: your projects move with you,
@@ -183,60 +182,8 @@ export function createSkyRendererVector2D(canvas: HTMLCanvasElement): SkyRendere
   let view: Viewport = { width: 1, height: 1 }, dpr = 1, clouds: SkyCloud[] = [];
   const meshes = new Map<string, THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>>();
 
-  /**
-   * Where each cloud sits on screen for this camera, with overlaps pushed apart. Parallax moves
-   * layers at different speeds, so clouds would otherwise slide over each other. Shared clouds
-   * give way to yours; two of the same kind each move half. Solved once per camera position.
-   */
-  let solvedFor = '', dragging: string | null = null;
-  const solved = new Map<string, { x: number; y: number; width: number }>();
-  function solve(cam: Camera) {
-    const key = `${cam.x},${cam.y},${cam.zoom},${view.width},${view.height},${dragging},${clouds.map(c => `${c.id}:${c.x}:${c.y}:${c.size ?? 1}`).join('|')}`;
-    if (key === solvedFor) return;
-    solvedFor = key; solved.clear();
-    // The cloud being dragged is left out: it floats over the others, which stay where they are.
-    const held = clouds.find(c => c.id === dragging);
-    if (held) { const box = place(held, cam, view, sizeAt(held, cam.zoom)); solved.set(held.id, { x: box.x, y: box.y, width: box.width }); }
-    const items = clouds.filter(c => c.id !== 'you' && c.id !== dragging).map(c => {
-      const box = place(c, cam, view, sizeAt(c, cam.zoom));
-      return { c, x: box.x, y: box.y, width: box.width, w: box.width * VISIBLE_WIDTH, h: box.width * CLOUD_SHAPE * VISIBLE_HEIGHT };
-    });
-    // The middle of your projects on screen: stuck shared clouds move outward, away from it.
-    const yours = items.filter(item => item.c.mine);
-    const middle = yours.length ? { x: yours.reduce((t, item) => t + item.x, 0) / yours.length, y: yours.reduce((t, item) => t + item.y, 0) / yours.length } : { x: view.width / 2, y: view.height / 2 };
-    for (let pass = 0; pass < 80; pass++) {
-      let moved = false;
-      for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
-        const a = items[i], b = items[j];
-        // Your clouds placed by hand stay exactly where you put them, even over another of yours, as in Finder.
-        if (a.c.mine && b.c.mine && (a.c.placed || b.c.placed)) continue;
-        const dx = b.x - a.x, dy = b.y - a.y;
-        const overlapX = (a.w + b.w) / 2 + GAP - Math.abs(dx), overlapY = (a.h + b.h) / 2 + GAP - Math.abs(dy);
-        if (overlapX <= 0 || overlapY <= 0) continue;
-        // A shared cloud still stuck on one of yours after a few rounds is squeezed between your
-        // clouds, where every direct push hits another one. It moves outward from your cluster.
-        if (pass >= 10 && a.c.mine !== b.c.mine) {
-          const shared = a.c.mine ? b : a;
-          let ox = shared.x - middle.x, oy = shared.y - middle.y;
-          const length = Math.hypot(ox, oy) || 1;
-          if (length < 1) { ox = 0; oy = 1; }
-          const step = Math.min(overlapX, overlapY) * .6 + 4;
-          shared.x += ox / length * step; shared.y += oy / length * step;
-          moved = true;
-          continue;
-        }
-        // Otherwise move along whichever direction needs the shorter push.
-        const sideways = overlapX / (a.w + b.w) < overlapY / (a.h + b.h);
-        const sign = (sideways ? dx : dy) >= 0 ? 1 : -1, push = (sideways ? overlapX : overlapY) + .5;
-        const aShare = a.c.mine === b.c.mine ? .5 : a.c.mine ? 0 : 1, bShare = 1 - aShare;
-        if (sideways) { a.x -= sign * push * aShare; b.x += sign * push * bShare; }
-        else { a.y -= sign * push * aShare; b.y += sign * push * bShare; }
-        moved = true;
-      }
-      if (!moved) break;
-    }
-    for (const item of items) solved.set(item.c.id, { x: item.x, y: item.y, width: item.width });
-  }
+  /** The cloud being dragged, drawn on top; and the home zoom, for clouds further back. */
+  let dragging: string | null = null, homeZoom = .3;
   function meshFor(id: string, seed: number) {
     let mesh = meshes.get(id);
     if (!mesh) {
@@ -245,6 +192,41 @@ export function createSkyRendererVector2D(canvas: HTMLCanvasElement): SkyRendere
       meshes.set(id, mesh); scene.add(mesh);
     }
     return mesh;
+  }
+
+  // Each cloud's text and agents are drawn right after the cloud itself, so a cloud above covers
+  // them exactly as it covers the cloud. Text is drawn to a texture, redrawn sharper as you zoom.
+  const textMeshes = new Map<string, { mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; key: string; width: number; height: number }>();
+  const blobMeshes = new Map<string, THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[]>();
+  const blobTextures = new Map<string, THREE.CanvasTexture>();
+  let fonts = 0;
+  document.fonts?.ready.then(() => { fonts++; });
+  const texture = (canvas: HTMLCanvasElement) => { const t = new THREE.CanvasTexture(canvas); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; };
+  const flatMaterial = (map: THREE.Texture) => new THREE.MeshBasicMaterial({ map, transparent: true, depthTest: false, depthWrite: false });
+  /** Canvas pixels per label pixel for this on-screen scale: sharp, without redrawing every frame. */
+  const resolutionFor = (scale: number) => Math.min(6, Math.max(1, Math.ceil(scale * dpr * 1.5 * 2) / 2));
+  function textFor(c: SkyCloud, detail: boolean, scale: number) {
+    const resolution = resolutionFor(scale), text = c.text!;
+    const key = `${text.title}|${text.description}|${text.width}|${text.mine}|${detail}|${resolution}|${fonts}`;
+    let entry = textMeshes.get(c.id);
+    if (entry?.key === key) return entry;
+    const drawn = drawLabel(text, detail, resolution), map = texture(drawn.canvas);
+    if (entry) { entry.mesh.material.map?.dispose(); entry.mesh.material.map = map; entry.mesh.material.needsUpdate = true; Object.assign(entry, { key, width: drawn.width, height: drawn.height }); }
+    else { entry = { mesh: new THREE.Mesh(geometry, flatMaterial(map)), key, width: drawn.width, height: drawn.height }; textMeshes.set(c.id, entry); scene.add(entry.mesh); }
+    return entry;
+  }
+  function blobTexture(color: string, scale: number) {
+    const resolution = resolutionFor(scale), key = `${color}|${resolution}`;
+    let t = blobTextures.get(key);
+    if (!t) { t = texture(drawBlob(color, resolution)); blobTextures.set(key, t); }
+    return t;
+  }
+  function blobsFor(id: string, count: number) {
+    let list = blobMeshes.get(id) || [];
+    while (list.length < count) { const mesh = new THREE.Mesh(geometry, flatMaterial(blobTexture('#8a93a4', 1))); scene.add(mesh); list.push(mesh); }
+    for (const extra of list.slice(count)) { scene.remove(extra); extra.material.dispose(); }
+    list = list.slice(0, count); blobMeshes.set(id, list);
+    return list;
   }
 
   return {
@@ -256,15 +238,16 @@ export function createSkyRendererVector2D(canvas: HTMLCanvasElement): SkyRendere
       camera.updateProjectionMatrix();
     },
     setClouds(next) { clouds = next; },
-    setDragging(id) { dragging = id; solvedFor = ''; },
+    setDragging(id) { dragging = id; },
+    setHomeZoom(zoom) { if (zoom > 0) homeZoom = zoom; },
     project(cloud, cam): ScreenCloud {
-      solve(cam);
-      const box = solved.get(cloud.id) || place(cloud, cam, view, sizeAt(cloud, cam.zoom));
+      // Each cloud is exactly where it was put: nothing is moved to make room for another.
+      const box = place(cloud, cam, view, sizeAt(cloud, cam.zoom, homeZoom));
       const height = box.width * CLOUD_SHAPE;
       // The text sits in the body of the cloud, just below its middle.
-      // The title and description are centered on the cloud's body, its flat base, not its bumps;
-      // its agents stand on the bottom edge.
-      return { x: box.x, y: box.y, width: box.width, height, label: { x: box.x, y: box.y + height * .1, width: box.width * LABEL_SHARE }, agents: { x: box.x, y: box.y + height * .39 } };
+      // A cloud, its text and its agents are one unit: the text is centered on the cloud at a fixed
+      // share of its width, and the agents stand at its bottom right, half hanging off the edge.
+      return { x: box.x, y: box.y, width: box.width, height, label: { x: box.x, y: box.y + height * .02, width: box.width * LABEL_SHARE }, agents: { x: box.x + box.width * .4, y: box.y + height * .4 } };
     },
     render(frame) {
       const { camera: cam, palette, hover } = frame;
@@ -272,26 +255,52 @@ export function createSkyRendererVector2D(canvas: HTMLCanvasElement): SkyRendere
       fill(shared, palette);
       const seen = new Set<string>();
       // One cloud per project, far layers first so nearer clouds are drawn over them. You are a marker, not a cloud.
-      clouds.filter(c => c.id !== 'you').sort((a, b) => a.depth - b.depth || Number(a.mine) - Number(b.mine) || Number(a.id === dragging) - Number(b.id === dragging) || (a.raise || 0) - (b.raise || 0)).forEach((c, order) => {
+      clouds.filter(c => c.id !== 'you').sort((a, b) => Number(a.id === dragging) - Number(b.id === dragging) || stackOrder(a, b)).forEach((c, order) => {
         const box = this.project(c, cam);
         if (box.x + box.width / 2 < -40 || box.x - box.width / 2 > view.width + 40 || box.y + box.height / 2 < -40 || box.y - box.height / 2 > view.height + 40) return;
         const mesh = meshFor(c.id, c.seed); seen.add(c.id);
-        mesh.visible = true; mesh.renderOrder = order;
+        mesh.visible = true; mesh.renderOrder = order * 3;
         mesh.position.set(box.x - view.width / 2, view.height / 2 - box.y, 0);
         mesh.scale.set(box.width, box.height, 1);
+        // Its text, then its agents: drawn above this cloud and below the next one.
+        const shown = frame.labels?.get(c.id);
+        if (c.text && shown && box.label) {
+          const scale = box.label.width / c.text.width, entry = textFor(c, shown.detail, scale);
+          entry.mesh.visible = shown.opacity > .02; entry.mesh.renderOrder = order * 3 + 1;
+          entry.mesh.material.opacity = shown.opacity;
+          entry.mesh.position.set(box.label.x - view.width / 2, view.height / 2 - box.label.y, 0);
+          entry.mesh.scale.set(entry.width * scale, entry.height * scale, 1);
+          const agents = shown.detail && shown.opacity > .02 ? c.agentBlobs || [] : [], blobs = blobsFor(c.id, agents.length), spot = box.agents || { x: box.x + box.width * .4, y: box.y + box.height * .4 };
+          agents.forEach((agent, i) => {
+            const blob = blobs[i], map = blobTexture(agent.color, scale);
+            if (blob.material.map !== map) { blob.material.map = map; blob.material.needsUpdate = true; }
+            // Right-aligned along the bottom edge; an agent running something hops.
+            const step = 34 * scale, x = spot.x - (agents.length - 1 - i) * step - 15 * scale;
+            const hop = agent.working ? Math.max(0, Math.sin(frame.time * 7 + i * 1.3)) * 9 * scale : 0;
+            blob.visible = true; blob.renderOrder = order * 3 + 2; blob.material.opacity = shown.opacity;
+            blob.position.set(x - view.width / 2, view.height / 2 - spot.y + hop, 0);
+            blob.scale.set(30 * scale, 31 * scale, 1);
+          });
+          seen.add(`text:${c.id}`);
+        }
         const u = mesh.material.uniforms;
         // Layers further back are hazy, and come fully into focus as you zoom toward them.
-        const near = backgroundNear(cam.zoom);
-        u.uFar.value = c.mine ? 0 : .22 * (1 - near);
-        u.uGray.value = c.mine ? 0 : .9 * (1 - near);
+        const near = backgroundNear(cam.zoom, homeZoom);
+        u.uFar.value = c.mine ? 0 : .08 * (1 - near);
+        u.uGray.value = c.mine ? 0 : 1 - near;
         u.uMine.value = c.mine ? 1 : 0;
         u.uHover.value = hover.id === c.id ? hover.amount : 0;
       });
       for (const [id, mesh] of meshes) if (!seen.has(id)) mesh.visible = false;
+      for (const [id, entry] of textMeshes) if (!seen.has(`text:${id}`)) entry.mesh.visible = false;
+      for (const [id, blobs] of blobMeshes) if (!seen.has(`text:${id}`)) blobs.forEach(blob => { blob.visible = false; });
       renderer.render(scene, camera);
     },
     dispose() {
       for (const mesh of meshes.values()) mesh.material.dispose();
+      for (const entry of textMeshes.values()) { entry.mesh.material.map?.dispose(); entry.mesh.material.dispose(); }
+      for (const blobs of blobMeshes.values()) blobs.forEach(blob => blob.material.dispose());
+      for (const t of blobTextures.values()) t.dispose();
       geometry.dispose(); backdrop.dispose(); renderer.dispose();
     }
   };

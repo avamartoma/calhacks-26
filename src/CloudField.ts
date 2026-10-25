@@ -104,6 +104,8 @@ export class CloudField {
   onHover?: (id: string | null) => void;
   private lastRooms = '';
   entered = false;
+  /** Hidden regardless of height, e.g. inside a project, where the office draws its own backdrop. */
+  suppressed = false;
 
   constructor(private scene: THREE.Scene, private camera: THREE.PerspectiveCamera, private canvas: HTMLElement) {
     this.root.name = 'Iteration1 cloud field';
@@ -355,7 +357,7 @@ export class CloudField {
   }
 
   update(elapsed: number, reduced: boolean) {
-    this.root.visible = this.active || this.height < LEAVE_HEIGHT;
+    this.root.visible = !this.suppressed && (this.active || this.height < LEAVE_HEIGHT);
     if (!this.active && !this.root.visible) return;
     if (!this.dragging && !this.dragCloud) this.pan.lerp(this.targetPan, reduced ? 1 : .12);
     if (this.active) this.look();

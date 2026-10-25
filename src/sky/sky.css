@@ -29,7 +29,6 @@
 .sky-style-switch{position:absolute;top:16px;right:16px;z-index:7;display:flex;gap:2px;padding:3px;border-radius:99px;background:#ffffffd0;border:1px solid #ffffff;box-shadow:0 6px 18px rgba(20,32,60,.12);backdrop-filter:blur(8px)}
 .sky-style-switch button{padding:6px 14px;border-radius:99px;font:600 12px Manrope,sans-serif;color:#46506a}
 .sky-style-switch button.active{background:#26324a;color:#fff}
-.sky-controls{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:3;margin:0;padding:7px 14px;border-radius:99px;background:#ffffffc4;color:#3c4660;font:600 11.5px Manrope,sans-serif;white-space:nowrap;pointer-events:none;box-shadow:0 4px 14px rgba(20,32,60,.1)}
 /* Vector clouds: crisp white shapes, so text is dark and needs no glow. */
 .vector-sky .sky-label{color:#26324a;text-shadow:none;gap:2px}
 .vector-sky .sky-label b{font-size:17px}
@@ -72,7 +71,6 @@
 .sky-view-toggle{display:flex;gap:2px;padding:3px;border-radius:99px;background:#ffffffd8;box-shadow:0 6px 18px rgba(20,32,60,.12)}
 .sky-view-toggle button{padding:6px 13px;border-radius:99px;font:600 12px Manrope,sans-serif;color:#46506a}
 .sky-view-toggle button.active{background:#26324a;color:#fff}
-.sky-controls{bottom:22px}
 /* The folder view: every project as a card. */
 .project-folders{position:absolute;inset:0;z-index:7;overflow:auto;padding:32px 32px 84px;background:#f5f7fa;animation:folders-in .2s ease-out}
 @keyframes folders-in{from{opacity:0}}
@@ -93,7 +91,7 @@
 .folder-actions{display:flex;gap:6px;margin-top:2px}
 .folder-actions button{padding:6px 11px;font-size:12px}
 .folder-empty{margin:0;font:500 13px Manrope,sans-serif;color:#7a8396}
-@media(max-width:750px){.sky-legend{display:none}.sky-controls{display:none}.project-folders{padding:20px 14px 84px}}
+@media(max-width:750px){.sky-legend{display:none}.project-folders{padding:20px 14px 84px}}
 .sky-only-mine{display:inline-flex;align-items:center;gap:6px;margin:7px 0 0 12px;padding:4px 10px 4px 8px;border-radius:99px;background:#ffffffc8;font:600 11.5px Manrope,sans-serif;color:#3c4660;cursor:pointer;box-shadow:0 3px 10px rgba(20,32,60,.08)}
 .sky-only-mine input{width:14px;height:14px;margin:0;accent-color:#26324a}
 /* Your clouds are dragged from anywhere on them, text included; clicking still opens them. */
@@ -120,3 +118,19 @@
 .vector-sky .sky-label.mine b{font-size:21px}
 .vector-sky .sky-label b{overflow-wrap:break-word;word-break:normal}
 .vector-sky .sky-label.other b{font-size:16px}
+/* Cloud labels: the description is at most two lines, ending in an ellipsis. */
+.vector-sky .sky-label span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sky-agent-row{transform-origin:100% 50%}
+/* Descriptions show only once a cloud is close enough (overrides the two-line rule above). */
+.vector-sky .sky-label.compact span{display:none}
+.vector-sky .sky-label.other b{font-size:20px}
+/* In the cloud sky, text and agents are drawn with the clouds (so a cloud above covers them); the
+   HTML labels stay, invisible, for clicks, keyboard focus and screen readers. */
+.drawn-text .sky-label{opacity:0!important}
+.drawn-text .sky-label:focus-visible{opacity:1!important;color:transparent;outline:2px solid #26324a;outline-offset:6px;border-radius:12px}
+.drawn-text .sky-agent-row{display:none}
+/* Beside the Sky/Folders toggle in the bottom-left corner. */
+.sky-corner .sky-only-mine{margin:0;padding:8px 13px 8px 11px;background:#ffffffd8;box-shadow:0 6px 18px rgba(20,32,60,.12)}
+.sky-view-toggle button{display:grid;place-items:center;width:38px;height:32px;padding:0}
+/* The agent color key on one line. */
+.sky-legend{flex-wrap:nowrap;max-width:none;white-space:nowrap}
