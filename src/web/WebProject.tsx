@@ -16,6 +16,7 @@ import { FetchAgents } from './FetchWeb';
 import { ShareLinkButtons } from './ShareLinks';
 import { CloneButton, clearArrival, peekArrival, type CloneTarget } from './CloneAgent';
 import { kindOf } from '../sky/agents';
+import { BlobIcon } from '../sky/BlobIcon';
 import { AskManager, TicketArchive, TicketItem, sortTickets, useTickets, type Ticket } from './Tickets';
 import { MODELS, modelName } from '../../convex/lib/models';
 
@@ -219,7 +220,7 @@ function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, o
         const active = mine.some(ticket => ticket.status === 'working' || ticket.status === 'planning');
         return <li key={item.id} className={open ? 'open' : ''}>
           <button className="web-run" onClick={() => onSelect(open ? null : key)}>
-            <i style={{ background: kindOf(item.role, item.manager).color }} />
+            <BlobIcon color={kindOf(item.role, item.manager).color} working={active} />
             <span><b>{item.name} <em className="web-role">{item.role}</em></b><small>{active ? 'Working' : mine.length ? `${mine.length} ticket${mine.length === 1 ? '' : 's'}` : 'No tickets yet'} · {providerNames[item.engine]}{item.model ? ` · ${modelName(item.engine, item.model)}` : ''}{item.clonedFrom ? ` · cloned from ${item.clonedFrom.projectName}` : ''}</small></span>
           </button>
           {open && <p className="web-last">{item.instructions}</p>}

@@ -180,3 +180,10 @@
 .web-archive .web-runs li{display:block;font-size:inherit}
 .web-archive .web-runs{margin-top:6px}
 .web-archive .web-runs li b{text-decoration:none}
+/* Each agent's card leads with its blob, as on the clouds and in the office. Working ones bob. */
+.web-team>li>.web-run{align-items:center;gap:10px}
+.web-team .blob-icon{flex:none;overflow:visible}
+.web-team .blob-icon.working{animation:blob-icon-bob 1.4s ease-in-out infinite}
+.web-team .web-tickets,.web-team .web-last,.web-team .web-lasting-actions,.web-team .web-agent-program{margin-left:38px}
+@keyframes blob-icon-bob{50%{transform:translateY(-2px)}}
+@media (prefers-reduced-motion:reduce){.web-team .blob-icon.working{animation:none}}
