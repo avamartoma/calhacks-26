@@ -54,6 +54,43 @@ export const start = mutation({
   },
 });
 
+/**
+ * Sends a finished run's agent a follow-up: a new run that resumes the agent's own conversation,
+ * on the same agent and the caller's own connection, like messaging an agent in the local office.
+ * Only the person who started the conversation can continue it.
+ */
+export const followUp = mutation({
+  args: { runId: v.id("agentRuns"), message: v.string() },
+  handler: async (ctx, args) => {
+    const user = await currentUser(ctx);
+    const parent = await ctx.db.get(args.runId);
+    if (!parent) throw new Error("Run not found");
+    await requireAccess(ctx, parent.projectId, "editor");
+    if (parent.userId !== user.id) throw new Error("Only the person who started this agent can message it");
+    if (active(parent)) throw new Error("Wait for the agent to finish, or stop it, before sending a follow-up");
+    if (!parent.agentSession) throw new Error("This agent didn't report a conversation to continue. Start a new agent instead.");
+    const message = args.message.trim();
+    if (!message) throw new Error("Write a message for the agent");
+    if (message.length > MAX_PROMPT) throw new Error(`Keep the message under ${MAX_PROMPT} characters`);
+    const agent = parent.agent ?? "claude";
+    const problem = connectionProblem(await keyRow(ctx, user.id, agent), NAMES[agent]);
+    if (problem) throw new Error(problem);
+    const runs = await ctx.db.query("agentRuns").withIndex("by_project", (q) => q.eq("projectId", parent.projectId)).collect();
+    if (runs.filter(active).length >= MAX_ACTIVE_PER_PROJECT) {
+      throw new Error(`${MAX_ACTIVE_PER_PROJECT} agents are already working on this project. Wait for one to finish.`);
+    }
+    const sessionId = await beginSession(ctx, parent.projectId, agent);
+    const runId = await ctx.db.insert("agentRuns", {
+      projectId: parent.projectId, agent, userId: user.id, userLabel: parent.userLabel, sessionId,
+      prompt: message, status: "starting", offset: 0, startedAt: Date.now(),
+      parentRunId: parent.parentRunId ?? parent._id, resumeSession: parent.agentSession,
+    });
+    await ctx.scheduler.runAfter(0, internal.agentRunner.launch, { runId });
+    await recordEvent(ctx, { projectId: parent.projectId, sessionId, kind: "agent.followup", detail: `${parent.userLabel} (${NAMES[agent]}): ${message.slice(0, 200)}` });
+    return runId;
+  },
+});
+
 /** Runs on this project, newest first, each with its latest line. */
 export const list = query({
   args: { projectId: v.id("projects") },
@@ -75,6 +112,8 @@ export const list = query({
         startedAt: run.startedAt,
         finishedAt: run.finishedAt ?? null,
         lastLine: last ? { kind: last.kind, text: last.text.slice(0, 280) } : null,
+        followUpOf: run.parentRunId ?? null,
+        canFollowUp: run.userId === user.id && !active(run) && !!run.agentSession,
       };
     }));
   },
@@ -134,13 +173,14 @@ export const append = internalMutation({
     runId: v.id("agentRuns"),
     offset: v.number(),
     lines: v.array(v.object({ kind: v.union(v.literal("text"), v.literal("tool"), v.literal("result"), v.literal("error")), text: v.string() })),
+    session: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const run = await ctx.db.get(args.runId);
     if (!run) return;
     const at = Date.now();
     for (const line of args.lines) await ctx.db.insert("runLines", { runId: args.runId, at, kind: line.kind, text: line.text.slice(0, LINE_LIMIT) });
-    await ctx.db.patch(args.runId, { offset: args.offset });
+    await ctx.db.patch(args.runId, { offset: args.offset, ...(args.session ? { agentSession: args.session } : {}) });
     if (run.sessionId) await ctx.db.patch(run.sessionId, { lastActiveAt: at });
   },
 });

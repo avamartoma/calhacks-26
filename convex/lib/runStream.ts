@@ -43,14 +43,21 @@ function codexItem(item: Record<string, unknown>): RunLine | null {
   }
 }
 
-export function parseStream(text: string, agent: "codex" | "claude" | "cursor" = "claude"): { lines: RunLine[]; result: RunResult | null } {
+/**
+ * `session` is the agent's own conversation id, for resuming it with a follow-up: Claude Code and
+ * Cursor send `session_id`, Codex starts with `thread.started` and a `thread_id`.
+ */
+export function parseStream(text: string, agent: "codex" | "claude" | "cursor" = "claude"): { lines: RunLine[]; result: RunResult | null; session: string | null } {
   const lines: RunLine[] = [];
   let result: RunResult | null = null;
+  let session: string | null = null;
   let lastMessage = "";
   for (const raw of text.split("\n")) {
     if (!raw.trim()) continue;
     let event: Event;
     try { event = JSON.parse(raw); } catch { lines.push({ kind: "text", text: raw.slice(0, 1000) }); continue; }
+    const id = str(event.session_id) || (event.type === "thread.started" ? str(event.thread_id) : "");
+    if (id && /^[A-Za-z0-9_-]{6,100}$/.test(id)) session = id;
     if (agent === "codex") {
       if (event.type === "item.completed" && event.item && typeof event.item === "object") {
         const line = codexItem(event.item as Record<string, unknown>);
@@ -87,5 +94,5 @@ export function parseStream(text: string, agent: "codex" | "claude" | "cursor" =
       lines.push({ kind: isError ? "error" : "result", text: body });
     }
   }
-  return { lines, result };
+  return { lines, result, session };
 }
