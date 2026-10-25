@@ -164,6 +164,8 @@ export const markRunning = internalMutation({
     const run = await ctx.db.get(args.runId);
     if (!run || run.status !== "starting") return { stillWanted: false };
     await ctx.db.patch(args.runId, { status: "running", pid: args.pid });
+    // The built-in watcher notes each run that starts, finishes or fails.
+    await ctx.db.insert("fetchActivity", { name: "watcher", kind: "noticed", text: `${run.userLabel} started ${NAMES[run.agent ?? "claude"]}: ${run.prompt.slice(0, 160)}`, projectId: run.projectId });
     return { stillWanted: true };
   },
 });
@@ -209,6 +211,11 @@ export const finish = internalMutation({
       kind: `agent.${status}`,
       detail: `${run.userLabel}: ${(args.detail ?? run.prompt).slice(0, 200)}`,
     });
+    if (status !== "stopped") {
+      const what = status === "done" ? "finished" : "failed";
+      const detail = args.detail ? `\n${args.detail.slice(0, 300)}` : "";
+      await ctx.db.insert("fetchActivity", { name: "watcher", kind: "noticed", text: `**${NAMES[run.agent ?? "claude"]} ${what}** for ${run.userLabel}: ${run.prompt.slice(0, 160)}${detail}`, projectId: run.projectId });
+    }
     await ctx.scheduler.runAfter(0, internal.runChanges.capture, { runId: args.runId });
   },
 });

@@ -167,7 +167,7 @@ def project_status(project: dict) -> str:
 
 def status_text(projects: list[dict]) -> str:
     if not projects:
-        return "No team demo projects yet. A project owner can mark one in the web office under ASI:One agents."
+        return "No team demo projects yet. A project owner can mark one in the web office under Built-In Agents."
     return "\n\n".join(project_status(p) for p in projects)
 
 
@@ -208,7 +208,7 @@ def office_answer(text: str, cloud: Cloud, project: dict | None = None, paired: 
             return OFFICE_HELP
         if lower.startswith("status"):
             if project is not None and not projects:
-                return f"**{project['name']}** isn't a team demo project, so I can only answer what's asked about it here. Its owner can mark it under ASI:One agents."
+                return f"**{project['name']}** isn't a team demo project, so I can only answer what's asked about it here. Its owner can mark it under Built-In Agents."
             return status_text(projects)
         if lower.startswith("report"):
             target = find_project(projects, message[6:])

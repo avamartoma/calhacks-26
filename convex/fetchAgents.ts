@@ -8,10 +8,12 @@ import { currentUser } from "./identity";
 import { keyRow } from "./keyStore";
 import { openSession } from "./sessions";
 
-// The four ASI:One (Fetch.ai) agents, hosted on Agentverse, work with the web office through here,
-// the same way the local ones work with server/fetch-agents.mjs: they check in, report what they did,
-// and take the jobs people queue for them. Office and planner can also start work, but only on
-// projects their owners marked as team demo projects.
+declare const process: { env: Record<string, string | undefined> };
+
+// The built-in agents (office, watcher, reviewer, planner; the ASI:One / Fetch.ai agents). Jobs people
+// queue in the web office are done here in Convex by builtinAgents.ts. The same agents can also run
+// hosted on Agentverse for ASI:One chat; those reach these functions over HTTPS (http.ts), check in,
+// report activity and may claim jobs, and only read or start work on team demo projects.
 
 export const AGENTS = ["office", "watcher", "reviewer", "planner"] as const;
 export const JOB_KINDS: Record<string, string[]> = { office: ["chat"], reviewer: ["review"], planner: ["plan", "create", "start"] };
@@ -140,7 +142,7 @@ export const requestFromAgent = internalMutation({
   },
 });
 
-async function queue(ctx: MutationCtx, job: { agent: string; kind: string; projectId: Id<"projects">; runId?: Id<"agentRuns">; payload: unknown; requestedBy: string }) {
+async function queue(ctx: MutationCtx, job: { agent: string; kind: string; projectId: Id<"projects">; runId?: Id<"agentRuns">; payload: unknown; requestedBy: string; requesterId?: string }) {
   if (!JOB_KINDS[job.agent]?.includes(job.kind)) throw new Error("That agent doesn't take this kind of job");
   if (JSON.stringify(job.payload ?? {}).length > 20_000) throw new Error("That request is too large");
   if (job.kind === "chat") {
@@ -157,8 +159,82 @@ async function queue(ctx: MutationCtx, job: { agent: string; kind: string; proje
       throw new Error("That request is already in progress");
     }
   }
-  return await ctx.db.insert("fetchJobs", { agent: job.agent, kind: job.kind, projectId: job.projectId, ...(job.runId ? { runId: job.runId } : {}), payload: job.payload ?? {}, status: "queued", requestedBy: job.requestedBy });
+  const jobId = await ctx.db.insert("fetchJobs", { agent: job.agent, kind: job.kind, projectId: job.projectId, ...(job.runId ? { runId: job.runId } : {}), payload: job.payload ?? {}, status: "queued", requestedBy: job.requestedBy, ...(job.requesterId ? { requesterId: job.requesterId } : {}) });
+  // The built-in agents take it straight away. A hosted Agentverse agent checking in first would claim it instead.
+  await ctx.scheduler.runAfter(0, internal.builtinAgents.run, { jobId });
+  return jobId;
 }
+
+// ---- Used by the built-in agents (builtinAgents.ts), which run here in Convex ----
+
+/** Marks a queued job as taken and returns what's needed to do it, or null if someone else took it. */
+export const claim = internalMutation({
+  args: { jobId: v.id("fetchJobs") },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job || job.status !== "queued") return null;
+    await ctx.db.patch(job._id, { status: "running", startedAt: Date.now() });
+    const project = await ctx.db.get(job.projectId);
+    const runs = await ctx.db.query("agentRuns").withIndex("by_project", (q) => q.eq("projectId", job.projectId)).order("desc").take(8);
+    return {
+      id: job._id, agent: job.agent, kind: job.kind, payload: job.payload, requestedBy: job.requestedBy,
+      requesterId: job.requesterId ?? project?.ownerId ?? "",
+      runs: runs.map((run) => ({ id: run._id, prompt: clip(run.prompt, 300), status: run.status, detail: run.detail ? clip(run.detail, 500) : null, by: run.userLabel, agent: run.agent ?? "claude" })),
+      ...(await context(ctx, job.projectId, job.runId)),
+    };
+  },
+});
+
+/** A run and its output, for the office agent's `report`. The job was access-checked when it was queued. */
+export const runContext = internalQuery({
+  args: { projectId: v.id("projects"), runId: v.id("agentRuns") },
+  handler: async (ctx, args) => await context(ctx, args.projectId, args.runId),
+});
+
+/** The office agent asking the reviewer, on behalf of whoever asked the office agent. */
+export const queueFor = internalMutation({
+  args: { agent: v.string(), kind: v.string(), projectId: v.id("projects"), runId: v.optional(v.id("agentRuns")), requestedBy: v.string(), requesterId: v.string() },
+  handler: async (ctx, args) => await queue(ctx, { ...args, payload: {} }),
+});
+
+/** Jobs still waiting, for builtinAgents.drain. */
+export const queued = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const ids = [];
+    for (const name of AGENTS) for (const job of await ctx.db.query("fetchJobs").withIndex("by_agent_status", (q) => q.eq("agent", name).eq("status", "queued")).take(50)) ids.push(job._id);
+    return ids;
+  },
+});
+
+/** A Claude API key the built-in agents can use for this person: their own, if it's an API key. */
+export const modelKey = internalQuery({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    const row = args.userId ? await keyRow(ctx, args.userId, "claude") : null;
+    return row && !row.subscription ? { ciphertext: row.ciphertext, iv: row.iv } : null;
+  },
+});
+
+/** Starts an agent run for the person who asked, on the first of their connections that's set up. */
+export const startFor = internalMutation({
+  args: { projectId: v.id("projects"), userId: v.string(), userLabel: v.string(), prompt: v.string(), via: v.string() },
+  handler: async (ctx, args) => {
+    const text = args.prompt.trim();
+    if (!text) throw new Error("Describe the work to start");
+    let agent: "claude" | "codex" | "cursor" | null = null;
+    for (const provider of ["claude", "codex", "cursor"] as const) if (!agent && (await keyRow(ctx, args.userId, provider))) agent = provider;
+    if (!agent) throw new Error("Connect Codex, Claude or Cursor in Accounts first, so there's an agent to start");
+    const sessionId = await openSession(ctx, args.projectId, agent, args.userId);
+    const runId = await ctx.db.insert("agentRuns", {
+      projectId: args.projectId, agent, userId: args.userId, userLabel: args.userLabel, sessionId,
+      prompt: clip(text, 8000), status: "starting", offset: 0, startedAt: Date.now(),
+    });
+    await ctx.scheduler.runAfter(0, internal.agentRunner.launch, { runId });
+    await ctx.db.insert("fetchActivity", { name: args.via, kind: "dispatch", text: `Started work for ${args.userLabel}: ${clip(text, 300)}`, projectId: args.projectId });
+    return { runId, agent };
+  },
+});
 
 // ---- Called by the web office ----
 
@@ -177,6 +253,9 @@ export const snapshot = query({
     const jobs = await ctx.db.query("fetchJobs").withIndex("by_project", (q) => q.eq("projectId", args.projectId)).order("desc").take(30);
     return {
       demo: !!project?.fetchDemo,
+      // The agents also run here in Convex, so they're always available; a hosted copy only adds ASI:One chat.
+      builtIn: true,
+      jira: process.env.JIRA_PROJECT && process.env.JIRA_SITE ? { project: process.env.JIRA_PROJECT.toUpperCase(), site: process.env.JIRA_SITE.replace(/\/$/, "").replace(/^(?!https:\/\/)/, "https://") } : null,
       agents,
       activity: activity.map((row) => ({ id: row._id, at: row._creationTime, name: row.name, kind: row.kind, text: row.text })),
       jobs: jobs.map((job) => ({ id: job._id, at: job._creationTime, agent: job.agent, kind: job.kind, runId: job.runId ?? null, payload: job.payload, status: job.status, result: job.result ?? null, requestedBy: job.requestedBy })),
@@ -189,12 +268,9 @@ export const request = mutation({
   args: { projectId: v.id("projects"), agent: v.string(), kind: v.string(), runId: v.optional(v.id("agentRuns")), payload: v.optional(v.any()) },
   handler: async (ctx, args) => {
     const user = await currentUser(ctx);
-    if (user.local) throw new Error("Sign in to work with the Fetch.ai agents");
+    if (user.local) throw new Error("Sign in to work with the built-in agents");
     await requireAccess(ctx, args.projectId, "editor");
-    const project = await ctx.db.get(args.projectId);
-    // Starting work goes through the planner on the owner's connection, so it needs a team demo project.
-    if (args.kind === "start" && !project?.fetchDemo) throw new Error("Mark this as a team demo project to let the planner start work");
-    return await queue(ctx, { agent: args.agent, kind: args.kind, projectId: args.projectId, runId: args.runId, payload: args.payload ?? {}, requestedBy: user.name || user.email || "Someone" });
+    return await queue(ctx, { agent: args.agent, kind: args.kind, projectId: args.projectId, runId: args.runId, payload: args.payload ?? {}, requestedBy: user.name || user.email || "Someone", requesterId: user.id });
   },
 });
 

@@ -44,19 +44,20 @@ export function FetchPanel({ projectId, runs, editor, mine, onClose }: { project
   const [open, setOpen] = useState<Name>('office');
   if (!snapshot) return null;
   const agent = (name: Name) => snapshot.agents.find(item => item.name === name);
-  const online = (name: Name) => { const row = agent(name); return !!row && row.lastSeen > 0 && now - row.lastSeen < ONLINE_MS; };
+  // Built in: they run in the backend whenever they're asked, so they're always available.
+  const online = (name: Name) => { const row = agent(name); return snapshot.builtIn || (!!row && row.lastSeen > 0 && now - row.lastSeen < ONLINE_MS); };
   return <aside className="web-panel fetch-web" aria-label="Fetch.ai agents">
-    <header><h2>ASI:One agents</h2><button className="icon-button" aria-label="Close" onClick={onClose}><X size={16} /></button></header>
-    <p className="web-note">Four Fetch.ai agents, hosted on Agentverse. Talk to them here or in ASI:One.</p>
+    <header><h2>Built-In Agents</h2><button className="icon-button" aria-label="Close" onClick={onClose}><X size={16} /></button></header>
+    <p className="web-note">Four agents that come with every project. They answer with Claude when you've connected a Claude API key under Accounts.</p>
     <div className="web-tabs fetch-web-tabs" role="tablist">
       {order.map(name => { const Icon = roles[name].icon; return <button key={name} role="tab" aria-selected={open === name} onClick={() => setOpen(name)}><Icon size={14} /> {roles[name].title}<i className={`fetch-dot ${online(name) ? 'on' : ''}`} /></button>; })}
     </div>
     {!online(open) && <p className="web-note">The {roles[open].title.toLowerCase()} agent isn't checking in right now. Work you queue waits until it's back.</p>}
     {open === 'office' && <OfficeChat projectId={projectId} jobs={snapshot.jobs} editor={editor} />}
     {open === 'reviewer' && <Reviewer projectId={projectId} jobs={snapshot.jobs} runs={runs} editor={editor} />}
-    {open === 'planner' && <Planner projectId={projectId} jobs={snapshot.jobs} editor={editor} demo={snapshot.demo} details={agent('planner')?.details as Record<string, unknown> | undefined} />}
-    {open === 'watcher' && <Activity items={snapshot.activity.filter(item => item.name === 'watcher')} empty="Nothing noticed yet. The watcher reports when agents on team demo projects finish or fail." />}
-    {mine && <label className="web-check fetch-demo"><input type="checkbox" checked={snapshot.demo} onChange={e => void setDemo({ projectId, on: e.target.checked })} /> Team demo project: the office and planner agents can read this project and start work on your Claude connection</label>}
+    {open === 'planner' && <Planner projectId={projectId} jobs={snapshot.jobs} editor={editor} jira={snapshot.jira} />}
+    {open === 'watcher' && <Activity items={snapshot.activity.filter(item => item.name === 'watcher')} empty="Nothing noticed yet. The watcher notes each agent run on this project as it starts, finishes or fails." />}
+    {mine && <label className="web-check fetch-demo"><input type="checkbox" checked={snapshot.demo} onChange={e => void setDemo({ projectId, on: e.target.checked })} /> Also let the agents on ASI:One (Fetch.ai) read this project and start work on your Claude connection</label>}
     {open !== 'watcher' && snapshot.activity.length > 0 && <details className="compact-disclosure"><summary>Recent agent activity · {snapshot.activity.length}</summary><Activity items={snapshot.activity} empty="" /></details>}
   </aside>;
 }
@@ -119,7 +120,7 @@ function Reviewer({ projectId, jobs, runs, editor }: { projectId: Id<'projects'>
   </ul>;
 }
 
-function Planner({ projectId, jobs, editor, demo, details }: { projectId: Id<'projects'>; jobs: Job[]; editor: boolean; demo: boolean; details?: Record<string, unknown> }) {
+function Planner({ projectId, jobs, editor, jira }: { projectId: Id<'projects'>; jobs: Job[]; editor: boolean; jira: { project: string; site: string } | null }) {
   const { send, error } = useQueue(projectId);
   const [idea, setIdea] = useState('');
   const [planId, setPlanId] = useState<string | null>(null), [createId, setCreateId] = useState<string | null>(null), [starts, setStarts] = useState<Record<string, string>>({});
@@ -127,23 +128,22 @@ function Planner({ projectId, jobs, editor, demo, details }: { projectId: Id<'pr
   const drafted = byId(planId), created = byId(createId);
   const plan = drafted?.status === 'done' ? (drafted.result as { plan?: Plan } | null)?.plan : undefined;
   const issues = created?.status === 'done' ? (created.result as { issues?: { key: string; summary: string }[] } | null)?.issues : undefined;
-  const project = String(details?.jira || ''), site = String(details?.site || '');
+  const project = jira?.project ?? '', site = jira?.site ?? '';
   if (!editor) return <p className="web-note">Editors of this project can plan work with the planner.</p>;
-  if (!project) return <p className="web-note">The planner drafts Jira stories once Jira is set up in its Agentverse secrets.</p>;
   return <div className="fetch-planner">
     <label>What should the team build?<textarea rows={3} value={idea} placeholder="Search box reachable by keyboard; Enter submits; show a no-results message" onChange={e => setIdea(e.target.value)} /></label>
-    <button className="primary" disabled={idea.trim().length < 6 || pending(drafted)} onClick={() => void send('planner', 'plan', { payload: { idea } }).then(id => { if (id) { setPlanId(id); setCreateId(null); setStarts({}); } })}>{pending(drafted) ? <><LoaderCircle className="spin" size={14} /> Drafting…</> : `Draft stories for ${project}`}</button>
+    <button className="primary" disabled={idea.trim().length < 6 || pending(drafted)} onClick={() => void send('planner', 'plan', { payload: { idea } }).then(id => { if (id) { setPlanId(id); setCreateId(null); setStarts({}); } })}>{pending(drafted) ? <><LoaderCircle className="spin" size={14} /> Drafting…</> : project ? `Draft stories for ${project}` : 'Draft stories'}</button>
     {(error || failure(drafted) || failure(created)) && <p className="web-error" role="alert">{error || failure(drafted) || failure(created)}</p>}
     {plan && !issues && <div className="fetch-plan">
       <b>{plan.epic.summary}</b>
       <ol>{plan.stories.map((story, i) => <li key={i}>{story.summary}<ul>{story.acceptance_criteria.map((item, j) => <li key={j}>{item}</li>)}</ul></li>)}</ol>
-      <button className="primary" disabled={pending(created)} onClick={() => void send('planner', 'create', { payload: { plan } }).then(id => id && setCreateId(id))}>{pending(created) ? <><LoaderCircle className="spin" size={14} /> Creating…</> : `Create ${plan.stories.length} stories in Jira`}</button>
+      {project
+        ? <button className="primary" disabled={pending(created)} onClick={() => void send('planner', 'create', { payload: { plan } }).then(id => id && setCreateId(id))}>{pending(created) ? <><LoaderCircle className="spin" size={14} /> Creating…</> : `Create ${plan.stories.length} stories in Jira`}</button>
+        : <p className="web-note">To create these in Jira, add JIRA_SITE, JIRA_EMAIL, JIRA_TOKEN and JIRA_PROJECT to Convex. Or start one now from the office chat: <code>mission {plan.stories[0]?.summary}</code></p>}
     </div>}
     {issues && <ul className="fetch-issues">{issues.map(issue => { const job = byId(starts[issue.key] || null); return <li key={issue.key}>
       <a href={`${site}/browse/${issue.key}`} target="_blank" rel="noreferrer">{issue.key} <ExternalLink size={11} /></a><span>{issue.summary}</span>
-      {job?.status === 'done' ? <em>Started</em> : demo
-        ? <button className="secondary" disabled={pending(job)} onClick={() => void send('planner', 'start', { payload: { key: issue.key } }).then(id => id && setStarts(current => ({ ...current, [issue.key]: id })))}>{pending(job) ? 'Starting…' : 'Start'}</button>
-        : <small>Mark this as a team demo project to start stories here.</small>}
+      {job?.status === 'done' ? <em>Started</em> : <button className="secondary" disabled={pending(job)} onClick={() => void send('planner', 'start', { payload: { key: issue.key } }).then(id => id && setStarts(current => ({ ...current, [issue.key]: id })))}>{pending(job) ? 'Starting…' : 'Start'}</button>}
       {failure(job) && <small className="error">{failure(job)}</small>}
     </li>; })}</ul>}
   </div>;

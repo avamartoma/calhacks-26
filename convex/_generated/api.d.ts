@@ -14,6 +14,7 @@ import type * as agentRuns from "../agentRuns.js";
 import type * as agentTokens from "../agentTokens.js";
 import type * as contributions from "../contributions.js";
 import type * as crons from "../crons.js";
+import type * as builtinAgents from "../builtinAgents.js";
 import type * as events from "../events.js";
 import type * as fetchAgents from "../fetchAgents.js";
 import type * as fileChanges from "../fileChanges.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   agentTokens: typeof agentTokens;
   contributions: typeof contributions;
   crons: typeof crons;
+  builtinAgents: typeof builtinAgents;
   events: typeof events;
   fetchAgents: typeof fetchAgents;
   fileChanges: typeof fileChanges;

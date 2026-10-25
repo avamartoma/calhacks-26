@@ -246,6 +246,8 @@ export default defineSchema({
     status: v.union(v.literal("queued"), v.literal("running"), v.literal("done"), v.literal("failed")),
     result: v.optional(v.any()),
     requestedBy: v.string(),
+    // The signed-in person who asked, so the built-in agents can use their own connection.
+    requesterId: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     finishedAt: v.optional(v.number()),
   })

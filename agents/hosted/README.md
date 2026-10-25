@@ -7,7 +7,7 @@ The same four agents as `agents/` (office, watcher, reviewer, planner), rewritte
 - **Planner** drafts Jira stories from an idea, creates them, and starts one as a Claude agent run.
 - **Watcher** notices when runs on demo projects start, finish or fail, and messages ASI:One users who said `watch`.
 
-They only read and start work on **team demo projects**: projects whose owner ticked *Team demo project* under **ASI:One agents** in the web office. Runs they start use that owner's Claude connection.
+They only read and start work on **team demo projects**: projects whose owner ticked *Team demo project* under **Built-In Agents** in the web office. Runs they start use that owner's Claude connection.
 
 ## Files
 
@@ -30,7 +30,7 @@ They only read and start work on **team demo projects**: projects whose owner ti
    - `ASI1_API_KEY`: optional, for written reviews and plans
    - Office and planner: `OPENCLOUD_PAIR_CODE`, a code you give the team, so only they can start work from ASI:One
    - Planner: `JIRA_SITE`, `JIRA_EMAIL`, `JIRA_TOKEN`, `JIRA_PROJECT`
-4. Start each agent. Within a few seconds, its dot in the web office's **ASI:One agents** panel turns green.
+4. Start each agent. Within a few seconds, its dot in the web office's **Built-In Agents** panel turns green.
 5. In ASI:One, find the office agent by name and say `pair <code>`, then `status`.
 
 Never commit the token, the Jira token or the pair code. They belong in Convex and Agentverse secrets only.

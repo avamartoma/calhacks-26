@@ -114,7 +114,7 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
       <div className="opencloud-actions">
         <button className="sky-return" aria-pressed={accountsOpen} onClick={() => { setAccountsOpen(open => !open); setShareOpen(false); setFetchOpen(false); }}>Accounts</button>
         <button className="sky-return" aria-pressed={shareOpen} onClick={() => { setShareOpen(open => !open); setAccountsOpen(false); setFetchOpen(false); }}><ExternalLink size={16} /> Share</button>
-        <button className="sky-return" aria-pressed={fetchOpen} onClick={() => { setFetchOpen(open => !open); setAccountsOpen(false); setShareOpen(false); }}>ASI:One agents</button>
+        <button className="sky-return" aria-pressed={fetchOpen} onClick={() => { setFetchOpen(open => !open); setAccountsOpen(false); setShareOpen(false); }}>Built-In Agents</button>
         {editor && <DownloadButton projectId={projectId} />}
         <button className="sky-return" onClick={() => go('/')}><Cloud size={16} /> Sky</button>
         <span className="web-title">{row.name}<small>{describe(row)}</small></span>
