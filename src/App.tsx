@@ -38,7 +38,7 @@ import { seedOf } from './sky/sky-math';
 import { ConflictNotice } from './ConflictNotice';
 import { SharePanel } from './SharePanel';
 import { ConnectAgent } from './ConnectAgent';
-import { FetchPanel, FetchRail } from './FetchAgents';
+import { FetchPanel, FetchRail, FetchRoster } from './FetchAgents';
 import './style.css';
 import './quiet-office.css';
 import './workspace.css';
@@ -160,7 +160,13 @@ export default function App() {
   }, []);
   useEffect(() => {
     if(room?.archived){scene.current?.dispose();scene.current=null;setSceneReady(false);return;}
-    if (sceneError || (compact && altitude==='project' && tool!=='recording' && !cinematic && !recording) || !container.current || scene.current || (!spatial && tool!=='recording' && !cinematic && !recording && altitude!=='sky')) return;
+    // SkyView has its own canvas. Building the office WebGL scene on this tab blanks the
+    // clouds on machines that keep one GPU context, and the office loop is stopped anyway.
+    if (altitude === 'sky' && !cinematic && !recording) {
+      if (scene.current) { scene.current.dispose(); scene.current = null; setSceneReady(false); }
+      return;
+    }
+    if (sceneError || (compact && altitude==='project' && tool!=='recording' && !cinematic && !recording) || !container.current || scene.current || (!spatial && tool!=='recording' && !cinematic && !recording)) return;
     try {
       scene.current = new OfficeScene(container.current, select);
       scene.current.onTeammate=()=>setTool('team'); scene.current.onMode = setWalk; scene.current.onMarkers=setMarkers; scene.current.onStatus = setToast;
@@ -247,7 +253,7 @@ export default function App() {
       <div ref={container} className="world" />
       {altitude==='sky' && !cinematic && !recording && <SkyView projects={skyProjects} returnFrom={skyReturn.current} onMove={(id,x,y)=>{api(`/rooms/${id}/cloud`,{x,y,sky:true}).catch(e=>setError((e as Error).message));}} onEnter={id=>{setArrival(n=>n+1);setRoomId(id);setAltitude('project');setProjectView('office');setCompact(false);setTool('office');}}/>}
       {arrival>0 && altitude==='project' && !cinematic && !recording && <div key={arrival} className="cloud-arrival" style={{background:`rgb(${paletteAt(localHour()).cloudLight.map(v=>Math.round(v*255)).join(',')})`}}/>}
-      {docOpen && room && <ProjectDoc room={room} workspaceName={workspace?.name} selected={selection} onAgent={select} onTask={id=>{setSelectedWork(id);setTool('work');}} onStartWork={()=>setTool('templates')} onSky={showSky} onOffice={()=>{setProjectView('office');setCompact(false);}}/>}
+      {docOpen && room && <ProjectDoc room={room} workspaceName={workspace?.name} selected={selection} fetch={data.fetchAgents} onAgent={select} onTask={id=>{setSelectedWork(id);setTool('work');}} onStartWork={()=>setTool('templates')} onFetch={()=>setTool('fetch')} onSky={showSky} onOffice={()=>{setProjectView('office');setCompact(false);}}/>}
       {altitude==='sky' && tool==='office' && !cinematic && !recording && !skyRooms.length && <div className="sky-hint"><Cloud size={16}/><span>{skyRooms.length ? 'Drag to pan · scroll into a cloud to open that project' : 'This workspace has no projects yet'}</span>{!skyRooms.length && <button className="primary" onClick={()=>setTool('newroom')}>New project</button>}</div>}
       {inProject && !docOpen && tool==='office' && !walk && !cinematic && !recording && !compact && <aside className="project-rail" aria-label="Project actions">
         <button onClick={showSky}><Cloud size={15}/>Back to sky</button>
@@ -280,7 +286,7 @@ export default function App() {
           {!room && !['rooms','newroom','approvals'].includes(tool) && <div className="board-empty"><h3>Open a project from the sky</h3><p className="quiet-copy">This workspace’s canvas only shows its own projects. Zoom into a cloud, or create one.</p><button className="primary" onClick={()=>setTool('newroom')}>New project</button></div>}
           {room && tool==='team' && <TeamPanel key={room.id} room={room} onFloor={()=>{setTool('office');setCompact(!!sceneError);scene.current?.focusTeam();}} onHandoffs={()=>setTool('messages')}/>}
           {room && tool === 'agent' && selected && <AgentPanel agent={selected} room={room} connected={!!data.connection.account} onConnect={()=>openConnect(tool)} busy={busy} action={action} modelOptions={modelOptions} onSelect={select} onTask={id=>{setSelectedWork(id);setTool('work');}} onBack={()=>setTool('dashboard')} onFocus={() => {setTool('office');setCompact(false);scene.current?.focus(selected.id);}} />}
-          {room && tool === 'agents' && <AgentRoster room={room} onSelect={select}/>}
+          {room && tool === 'agents' && <AgentRoster room={room} fetch={data.fetchAgents} onSelect={select} onFetch={()=>setTool('fetch')}/>}
           {room && tool === 'templates' && <MissionControl preferredModel={preferredModel} onCursor={()=>openConnections('cursor')} onClaude={()=>openConnections('claude',tool)} onConnect={()=>openConnect(tool)} onTask={id=>{setSelectedWork(id);setTool('work');}} initialCompose onCancel={()=>setTool('dashboard')} room={room} data={data} busy={busy} action={action} onSelect={select} onRoom={switchRoom} onStarted={()=>setTool('dashboard')}/>}
           {room && tool === 'fetch' && <FetchPanel fetch={data.fetchAgents} room={room} onTask={id=>{setSelectedWork(id);setTool('work');}}/>}
           {room && tool === 'integrations' && <IntegrationsPanel key={room.id} room={room} connection={data.connection} focus={connectionFocus} onContinue={connectReturn?()=>setTool(room.demo?'newroom':connectReturn):undefined} onStartWork={()=>{setPreferredModel('claude-opus-5-5');setTool('templates');}}/>}
@@ -307,7 +313,7 @@ export default function App() {
         <button aria-current={tool==='office' && altitude==='sky'?'page':undefined} onClick={showSky}><Cloud size={17}/>Sky</button>
         <button aria-current={tool==='office' && altitude==='project'?'page':undefined} onClick={()=>{if(room){setAltitude('project');setProjectView('office');setCompact(false);setWhip(false);setTool('office');}else setTool('rooms');}}><Building2 size={17}/>Project</button>
         <button aria-current={['dashboard','work','templates','mission'].includes(tool)?'page':undefined} onClick={()=>{setWhip(false);setTool(room?'dashboard':'newroom');}}><LayoutGrid size={17}/>Tickets</button>
-        <button aria-current={['agents','agent'].includes(tool)?'page':undefined} onClick={()=>setTool(room?'agents':'newroom')}><Users size={17}/>Agents</button>
+        <button aria-current={['agents','agent','fetch'].includes(tool)?'page':undefined} onClick={()=>setTool(room?'agents':'newroom')}><Users size={17}/>Agents</button>
         <button aria-current={tool==='messages'?'page':undefined} onClick={()=>setTool(room?'messages':'newroom')}><MessageSquare size={17}/>Handoffs</button>
         <button aria-current={tool==='team'?'page':undefined} onClick={()=>setTool(room?'team':'newroom')}><Users size={17}/>Team{room?.team?.overlaps.length ? <span className="nav-count">{new Set(room.team.overlaps.flatMap(o=>o.files)).size}</span> : null}</button>
         <button aria-current={tool==='approvals'?'page':undefined} onClick={()=>setTool('approvals')}><Bell size={17}/>Inbox{approvalCount>0 && <span className="nav-count">{approvalCount}</span>}</button>
@@ -324,10 +330,10 @@ export default function App() {
     {(toast || error) && <div className={`toast ${error ? 'error' : ''}`} role={error ? 'alert' : 'status'}>{error ? <Bell size={18} /> : <Check size={18} />}<span>{error || toast}</span><button aria-label="Dismiss notification" onClick={() => { setToast(''); setError(''); }}><X size={16} /></button></div>}
   </div>;
 }
-function AgentRoster({room,onSelect}:{room:Room;onSelect:(id:string)=>void}) {
+function AgentRoster({room,fetch,onSelect,onFetch}:{room:Room;fetch?:OfficeState['fetchAgents'];onSelect:(id:string)=>void;onFetch:()=>void}) {
   const row=(a:Agent)=><button className="agent-row" key={a.id} aria-label={agentSpeech(a)} onClick={()=>onSelect(a.id)}><Avatar agent={a}/><span><b>{agentLine(a)}</b><p>{a.task}</p><small className="agent-model">{modelLabel(a.effectiveModel || a.model)}</small><Status agent={a}/></span><ChevronRight size={16}/></button>;
-  const past=room.agents.filter(a=>a.status==='ejected');
-  return <><h2>Agents</h2>{room.agents.filter(a=>a.status!=='ejected').map(row)}{!!past.length && <details className="compact-disclosure"><summary>Previous agents · {past.length}</summary>{past.map(row)}</details>}</>;
+  const live=room.agents.filter(a=>a.status!=='ejected'), past=room.agents.filter(a=>a.status==='ejected');
+  return <><h2>Agents</h2><FetchRoster fetch={fetch} onOpen={onFetch}/>{!!live.length && <h3 className="roster-heading">Desks in this office</h3>}{live.map(row)}{!live.length && <p className="quiet-copy">No desk agents yet. Start work to add a manager in this office.</p>}{!!past.length && <details className="compact-disclosure"><summary>Previous agents · {past.length}</summary>{past.map(row)}</details>}</>;
 }
 function time(value: number) { return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 type Action = (fn: () => Promise<unknown>, success?: string) => Promise<void>;
@@ -358,7 +364,8 @@ function ToolsPanel({ room, connected, action, onConnect, onTool, onDemo, onWhip
     {name:'Workflows',icon:Layers,target:'templates'},
     {name:'Run mode',icon:Zap,target:'modes'},
     {name:'Skills',icon:Sparkles,target:'skills'},
-    {name:'Connections',icon:ArrowUpRight,target:'integrations'}
+    {name:'Connections',icon:ArrowUpRight,target:'integrations'},
+    {name:'ASI:One agents',icon:Radio,target:'fetch'}
   ];
   return <><h2>Tools</h2>{tools.map(t=><button className="tool-row" key={t.target} onClick={()=>onTool(t.target as Tool)}><t.icon size={19}/><span><b>{t.name}</b></span><ChevronRight size={14}/></button>)}
     <details className="compact-disclosure"><summary>Presentation</summary><button className="tool-row" onClick={onDemo}><Play size={19}/><span>Watch demo</span></button><button className="tool-row" onClick={()=>onTool('recording')}><Monitor size={19}/><span>Recording studio</span></button><button className="tool-row" onClick={onWhip}><Zap size={19}/><span>Whip · Crunch mode</span></button></details>

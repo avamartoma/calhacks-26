@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { ArrowRight, Box, Check, Cloud, Link2, Play } from 'lucide-react';
-import type { Agent, CloudPreview, Room } from './types';
+import type { Agent, CloudPreview, FetchState, Room } from './types';
+import { FetchRoster } from './FetchAgents';
 import { agentWork, workColors, workLabels } from './Operations';
 import { modelLabel } from './identity';
 import './project-doc.css';
@@ -28,9 +29,9 @@ function ago(time: number) {
  * page (agents and what each is doing, tickets, recent activity, the live preview), and opens
  * an agent's panel, where you chat with it, on click.
  */
-export function ProjectDoc({ room, workspaceName, selected, onAgent, onTask, onStartWork, onSky, onOffice }: {
-  room: Room; workspaceName?: string; selected?: string | null;
-  onAgent: (id: string) => void; onTask: (id: string) => void; onStartWork: () => void; onSky: () => void; onOffice: () => void;
+export function ProjectDoc({ room, workspaceName, selected, fetch, onAgent, onTask, onStartWork, onFetch, onSky, onOffice }: {
+  room: Room; workspaceName?: string; selected?: string | null; fetch?: FetchState;
+  onAgent: (id: string) => void; onTask: (id: string) => void; onStartWork: () => void; onFetch: () => void; onSky: () => void; onOffice: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   // Leaving fades the page back to cloud white, then the sky pulls back out of the cloud.
@@ -73,9 +74,15 @@ export function ProjectDoc({ room, workspaceName, selected, onAgent, onTask, onS
         </div>
       </header>
 
+      <section aria-labelledby="doc-fetch">
+        <h2 id="doc-fetch">Fetch.ai agents <small>ASI:One</small></h2>
+        <p className="doc-quiet">Office, planner, watcher and reviewer run on this computer. Open one to talk to it, plan in Jira, or see what it did here.</p>
+        <FetchRoster fetch={fetch} onOpen={onFetch} layout="cards" />
+      </section>
+
       <section aria-labelledby="doc-agents">
-        <h2 id="doc-agents">Agents <small>{agents.length}</small></h2>
-        {!agents.length ? <div className="doc-empty"><p>No agents yet. Start work and a manager agent plans it, then brings in helpers.</p><button className="primary" onClick={onStartWork}><Play size={15} />Start work</button></div>
+        <h2 id="doc-agents">Office desks <small>{agents.length}</small></h2>
+        {!agents.length ? <div className="doc-empty"><p>No desk agents yet. Start work and a manager agent plans it, then brings in helpers.</p><button className="primary" onClick={onStartWork}><Play size={15} />Start work</button></div>
           : <div className="doc-agents">{agents.map(a => {
             const ticket = agentWork(room, a);
             const steps = a.plan.length ? `${a.plan.filter(s => s.status === 'completed').length}/${a.plan.length} steps` : '';
