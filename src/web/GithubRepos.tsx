@@ -27,6 +27,7 @@ export function GithubRepos({ githubLogin, onAdded }: { githubLogin: boolean; on
   const [loaded, setLoaded] = useState<{ username: string; repos: GithubRepo[] } | null>(null);
   const [chosen, setChosen] = useState<Set<number>>(new Set());
   const [showAll, setShowAll] = useState(false);
+  const [everyone, setEveryone] = useState(true);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
 
@@ -48,7 +49,7 @@ export function GithubRepos({ githubLogin, onAdded }: { githubLogin: boolean; on
   async function add() {
     const repos = (loaded?.repos || []).filter(repo => chosen.has(repo.id)).map(repo => ({ id: repo.id, name: repo.name, description: repo.description, cloneUrl: repo.cloneUrl }));
     setBusy(`Adding ${repos.length}…`); setError('');
-    try { onAdded(await importRepos({ repos })); }
+    try { onAdded(await importRepos({ repos, visibility: everyone ? 'public' : 'private' })); }
     catch (e) { setError(message(e)); }
     finally { setBusy(''); }
   }
@@ -69,6 +70,9 @@ export function GithubRepos({ githubLogin, onAdded }: { githubLogin: boolean; on
       </label>
     </li>)}</ul>
     {hidden > 0 && <button type="button" className="text-button" onClick={() => setShowAll(true)}>Show {hidden} fork{hidden === 1 ? '' : 's'} and archived repo{hidden === 1 ? '' : 's'}</button>}
+    <label className="web-check github-public"><input type="checkbox" checked={everyone} onChange={e => setEveryone(e.target.checked)} />
+      <span>Everyone signed in can see these<small>View only. They'll also see what agents do in them, including the tasks you give.</small></span>
+    </label>
     {error && <p className="web-error" role="alert">{error}</p>}
     <button type="button" className="primary" disabled={!!busy || !chosen.size} onClick={() => void add()}>{busy || (chosen.size ? `Add ${chosen.size} to my sky` : 'Choose repos to add')}</button>
   </div>;
