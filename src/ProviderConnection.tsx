@@ -90,7 +90,7 @@ export function ProviderConnection({ provider, onChange }: { provider: 'claude' 
     {error && <p className="notice error" role="alert">{error}</p>}
     {(connection?.error && connection.error !== error) && <p className="notice error" role="alert">{connection.error}</p>}
     {notice && <p className="notice" role="status">{notice}</p>}
-    {connection?.configured && <p className="account-info"><CheckCheck size={20} /><span><b>{connection.email || `${title} account connected`}</b>{connection.source === 'environment' && <small>Using CURSOR_API_KEY</small>}</span></p>}
+    {connection?.configured && <p className="account-info"><CheckCheck size={20} /><span><b>{connection.email || `${title} account connected`}</b>{connection.source === 'environment' && <small>{provider === 'cursor' ? 'Using CURSOR_API_KEY' : 'Using the configured API key'}</small>}</span></p>}
     {connection?.login ? <>
       <p>Finish signing in on {title}’s website.</p>
       <a className="secondary full" href={connection.login.url} target="_blank" rel="noreferrer">Open {title} sign-in <ExternalLink size={16} /></a>

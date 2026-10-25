@@ -1,5 +1,11 @@
 import type { Agent } from './types';
 
+/** The overview names an agent by the work they own, not by a personal name. */
+export function agentCharge(agent: { task?: string; title?: string; role?: string }, ticketTitle?: string) {
+  const line = (ticketTitle || agent.task || agent.title || agent.role || 'Agent').split('\n')[0].trim();
+  return (line || 'Agent').slice(0, 72);
+}
+
 export function agentLine(agent?: { name: string; title?: string } | null) {
   if (!agent) return 'Unassigned';
   return agent.title ? `${agent.name} · ${agent.title}` : agent.name;

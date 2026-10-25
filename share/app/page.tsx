@@ -5,7 +5,7 @@ export default function HomePage() {
     <main className="share-app">
       <header className="share-top">
         <div>
-          <p className="eyebrow">Iteration1</p>
+          <p className="eyebrow">opencloud</p>
           <h1>Shared projects</h1>
         </div>
       </header>

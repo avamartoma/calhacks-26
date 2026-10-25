@@ -113,10 +113,13 @@ export function ProjectDoc({ room, workspaceName, selected, fetch, onAgent, onTa
 }
 
 function SandboxSection({ sandbox }: { sandbox: CloudPreview }) {
+  const live = sandbox.status === 'live' && !!sandbox.previewUrl;
   return <section aria-labelledby="doc-preview">
-    <h2 id="doc-preview">Live preview <small className={`doc-preview-${sandbox.status}`}>{sandbox.status === 'live' ? 'Live' : sandbox.status === 'error' ? 'Unavailable' : 'Starting'}</small></h2>
-    {sandbox.status === 'live' && sandbox.previewUrl
+    <h2 id="doc-preview">Live preview <small className={`doc-preview-${sandbox.status}`}>{live ? 'Live' : sandbox.status === 'error' ? 'Unavailable' : 'Starting'}</small></h2>
+    {live
       ? <iframe className="doc-preview" title="Live preview" src={sandbox.previewUrl} />
-      : <p className="doc-quiet">{sandbox.detail || 'Opening the cloud environment…'}</p>}
+      : sandbox.snapshotUrl
+        ? <img className="doc-preview" alt="Last preview" src={sandbox.snapshotUrl} />
+        : <p className="doc-quiet">{sandbox.detail || 'Opening the cloud environment…'}</p>}
   </section>;
 }

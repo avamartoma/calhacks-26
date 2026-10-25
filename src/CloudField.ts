@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { CloudSpot, Room } from './types';
+import { cloudStatus, cloudStatusLabel, liveAgentCount } from './office-panel';
 
 type CloudActor = {
   id: string;
@@ -51,26 +52,29 @@ function puffTexture() {
   return texture;
 }
 
-function labelTexture(title: string, subtitle: string, color: string) {
+function labelTexture(title: string, agents: string, status: string, color: string) {
   const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 128;
+  canvas.width = 640;
+  canvas.height = 176;
   const ctx = canvas.getContext('2d')!;
-  ctx.clearRect(0, 0, 512, 128);
+  ctx.clearRect(0, 0, 640, 176);
   ctx.fillStyle = '#1b2c38ee';
   ctx.beginPath();
-  ctx.roundRect(18, 18, 476, 92, 18);
+  ctx.roundRect(16, 16, 608, 144, 18);
   ctx.fill();
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.arc(52, 64, 10, 0, Math.PI * 2);
+  ctx.arc(48, 58, 10, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = '#f4f8fb';
   ctx.font = 'bold 32px sans-serif';
-  ctx.fillText(title.slice(0, 28), 74, 62);
+  ctx.fillText(title.slice(0, 28), 70, 68);
+  ctx.fillStyle = '#d5e0e8';
+  ctx.font = '22px sans-serif';
+  ctx.fillText(agents.slice(0, 24), 70, 102);
   ctx.fillStyle = '#b7c6d2';
-  ctx.font = '18px sans-serif';
-  ctx.fillText(subtitle.slice(0, 42), 74, 90);
+  ctx.font = '20px sans-serif';
+  ctx.fillText(status.slice(0, 36), 70, 136);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
@@ -129,9 +133,9 @@ export class CloudField {
 
   setTint(color: string) { this.tint = color || '#8fb6d8'; }
 
-  setRooms(rooms: Room[]) {
+  setRooms(rooms: Room[], waitingIds: ReadonlySet<string> = new Set()) {
     const live = rooms.filter(room => !room.archived);
-    const signature = live.map(room => [room.id, room.name, room.goal, room.paused, room.demo, room.cloud?.x, room.cloud?.y, room.cloud?.depth, room.agents.filter(a => a.turnId).length, room.workItems.filter(t => !t.archived && t.status !== 'done').length].join(':')).join('|');
+    const signature = live.map(room => [room.id, room.name, room.paused, room.preview?.status, room.viewOnly ? 'shared' : '', waitingIds.has(room.id) ? 'wait' : '', room.cloud?.x, room.cloud?.y, room.cloud?.depth, liveAgentCount(room)].join(':')).join('|');
     if (signature === this.lastRooms) return;
     const firstLayout = !this.lastRooms;
     this.lastRooms = signature;
@@ -147,11 +151,11 @@ export class CloudField {
         ? { x: room.cloud.x, y: room.cloud.y, depth: room.cloud.depth ?? ((index * 7) % 5) - 2 }
         : { x: 0, y: 0, depth: 0 };
       const existing = this.actors.get(room.id);
-      const open = room.workItems.filter(t => !t.archived && t.status !== 'done').length;
-      const running = room.agents.filter(a => !!a.turnId).length;
-      const status = running ? 'working' : room.paused ? 'paused' : open ? 'ready' : 'quiet';
+      const status = cloudStatus(room, waitingIds.has(room.id), !!room.viewOnly);
+      const agents = `${liveAgentCount(room)} agent${liveAgentCount(room) === 1 ? '' : 's'}`;
+      const statusText = cloudStatusLabel(status);
       if (!existing) {
-        const actor = this.makeCloud(room, spot, status, open, running);
+        const actor = this.makeCloud(room, spot, status, agents, statusText);
         this.actors.set(room.id, actor);
         this.root.add(actor.group);
       } else {
@@ -160,7 +164,7 @@ export class CloudField {
         existing.home.copy(this.worldOf(spot));
         existing.status = status;
         if (!this.dragCloud || this.dragCloud !== room.id) existing.group.position.copy(existing.home);
-        const map = this.labelMap(room.name, `${open} open · ${running} running`, status);
+        const map = this.labelMap(room.name, agents, statusText, status);
         const material = existing.label.material as THREE.SpriteMaterial;
         material.map?.dispose();
         material.map = map;
@@ -175,12 +179,12 @@ export class CloudField {
     }
   }
 
-  private labelMap(title: string, subtitle: string, status: string) {
-    const colors: Record<string, string> = { working: '#4d8ec8', paused: '#b88732', ready: '#3d8a72', quiet: '#8aa0b0' };
-    return labelTexture(title, subtitle, colors[status] || this.tint);
+  private labelMap(title: string, agents: string, statusText: string, status: string) {
+    const colors: Record<string, string> = { 'Preview live': '#3d8a72', 'Waiting on you': '#b88732', Paused: '#8aa0b0', 'View only': '#4d8ec8' };
+    return labelTexture(title, agents, statusText, colors[status] || this.tint);
   }
 
-  private makeCloud(room: Room, spot: CloudSpot, status: string, open: number, running: number): CloudActor {
+  private makeCloud(room: Room, spot: CloudSpot, status: string, agents: string, statusText: string): CloudActor {
     const group = new THREE.Group();
     const seed = hash(room.id);
     const puff = new THREE.Group();
@@ -206,8 +210,8 @@ export class CloudField {
     shadow.rotation.x = -Math.PI / 2;
     shadow.position.y = -4.6;
     group.add(shadow);
-    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.labelMap(room.name, `${open} open · ${running} running`, status), transparent: true, depthWrite: false }));
-    label.scale.set(7.2, 1.8, 1);
+    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.labelMap(room.name, agents, statusText, status), transparent: true, depthWrite: false }));
+    label.scale.set(8.4, 2.3, 1);
     label.position.y = 3.4;
     group.add(label);
     group.userData.roomId = room.id;

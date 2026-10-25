@@ -9,7 +9,7 @@ export async function officeApi(url:string,body?:unknown) {
   const r=await fetch('/api'+url,{method:body===undefined?'GET':'POST',...(body!==undefined?{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})});
   const data=await r.json();if(!r.ok)throw new Error(data.error || 'Request failed');return data;
 }
-type Action=(fn:()=>Promise<unknown>,success?:string)=>Promise<void>;
+export type Action=(fn:()=>Promise<unknown>,success?:string)=>Promise<void>;
 export const workLabels={ready:'Ready',queued:'Queued',working:'Working',blocked:'Blocked',review:'Review',done:'Verified'};
 export const workColors={ready:'#8a969f',queued:'#8a969f',working:'#477ead',blocked:'#b55c48',review:'#b88732',done:'#38826c'};
 export function agentWork(room:Room,a:Agent){return (a.currentWorkItemId?room.workItems.find(t=>t.id===a.currentWorkItemId && !t.archived):room.workItems.find(t=>t.agentId===a.id && !t.archived && t.status!=='done')) || room.workItems.find(t=>t.agentId===a.id && !t.archived);}

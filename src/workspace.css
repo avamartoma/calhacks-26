@@ -65,13 +65,27 @@
 .workspace-menu form{display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid #e2e6e3}
 .workspace-menu input{margin:0;padding:8px}
 .sky-hint{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;background:#f7fafce8;border:1px solid #d5e2ea;color:#355066;font-size:12px;z-index:8}
+.agent-side{position:absolute;top:16px;left:16px;bottom:16px;z-index:12;width:300px;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid #d7ded8;border-radius:8px;background:#fafbf9f5}
+.agent-side header{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.agent-side header b{font:600 15px/1.3 Urbanist,sans-serif;color:#24362d}
+.agent-side header span,.agent-side-note,.agent-side small{font-size:11px;color:#66756c}
+.agent-side-note button{color:#254b35;text-decoration:underline}
+.agent-side article{border:1px solid #e2e7e3;border-radius:6px;background:#fff}
+.agent-side-name{display:flex;gap:8px;align-items:flex-start;width:100%;padding:8px;text-align:left}
+.agent-side-name i{width:8px;height:8px;margin-top:5px;border-radius:99px;flex:none}
+.agent-side-name b{display:block;font:600 13px/1.35 Urbanist,sans-serif;color:#24362d}
+.agent-side-body{display:flex;flex-direction:column;gap:8px;padding:0 8px 8px}
+.agent-side-ticket{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px}
+.agent-side-ticket b{flex:1;min-width:120px}
+.agent-side form{display:flex;flex-direction:column;gap:6px}
+.agent-side input,.agent-side textarea,.agent-side select{width:100%;font:inherit}
+.agent-side-handoffs{margin:0;padding-left:16px;font-size:11px;color:#536158}
 .project-rail{position:absolute;top:20px;right:20px;z-index:12;width:196px;display:flex;flex-direction:column;gap:4px;padding:12px;border:1px solid #d7ded8;border-radius:8px;background:#fafbf9f2}
 .project-rail p{font:600 13px/1.4 Urbanist,sans-serif;padding:4px 8px 10px;color:#24362d}
 .project-rail button{display:flex;align-items:center;gap:8px;padding:8px;border-radius:5px;font-size:12px;color:#536158;text-align:left}
 .project-rail button:hover,.project-rail button[aria-current]{background:#e7eee9;color:#254b35}
 .app.sky-shell{background:#6fa0c6}
 .sky-shell .workspace{background:#6fa0c6}
-.sky-shell .world{visibility:hidden;pointer-events:none}
 .quiet-office .desk-badge b { max-width: 116px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media(max-width:750px) {
   .quiet-office .desk-badge:not(.selected) b { display: none; }
@@ -93,7 +107,55 @@
 .share-panel .share-members li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid #e2e6e3}
 .share-panel .share-members small{display:block;color:#758279;font-size:11px}
 .share-panel .share-members button{border:0;background:none;color:#8a3b2a;padding:4px}
-.share-panel .share-slug{font-family:ui-monospace,monospace;font-size:12px;color:#29362f}
+.share-panel .share-slug{font-family:ui-monospace,monospace;font-size:12px;color:#29362f;overflow-wrap:anywhere}
+
+/* Two views: the sky fills the canvas, and an office keeps one column beside the floor preview. */
+.app.quiet-office.opencloud{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+.opencloud .workspace{position:relative;grid-column:1;grid-row:1;display:flex;flex-direction:column;min-height:0;height:100%;margin:0}
+.opencloud .opencloud-actions{position:absolute;top:14px;left:14px;z-index:20;display:flex;align-items:center;gap:8px}
+.opencloud .world{position:relative;inset:auto;flex:1;min-height:0}
+.opencloud .world-canvas{position:absolute;inset:0}
+.opencloud .world-canvas canvas{display:block}
+.opencloud .floor-preview{flex:0 0 34%;min-height:168px;max-height:42%;display:flex;background:#fff;border-top:1px solid #d7ded8}
+.opencloud .floor-preview .preview-dock{position:relative;inset:auto;width:100%;height:100%;border:0;border-radius:0;box-shadow:none}
+.opencloud .floor-preview .conflict-notice{position:relative;left:auto;top:auto;flex:0 0 240px;margin:0;border-radius:0;border-top:0;border-bottom:0;border-left:1px solid #e2c7b8}
+.opencloud.sky-shell .world-canvas{visibility:hidden}
+.opencloud .agent-side{top:12px;right:12px;left:auto;bottom:12px;width:min(380px,42vw);gap:14px}
+.opencloud .agent-side .handoffs-panel h2,.opencloud .agent-side .operations h2{font:600 13px/1.3 Urbanist,sans-serif;margin:8px 0 0}
+.opencloud .agent-side .operations,.opencloud .agent-side .handoffs-panel{display:flex;flex-direction:column;gap:8px;min-width:0}
+.opencloud .agent-side .peer-message,.opencloud .agent-side .evidence-dossier{font-size:12px}
+.opencloud .agent-side pre{max-height:160px;overflow:auto;white-space:pre-wrap}
+.opencloud .agent-side-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.opencloud .agent-side-list button{width:100%;padding:8px;border-radius:6px;text-align:left;background:#fff;border:1px solid #e2e7e3}
+.opencloud .agent-side-list button.selected{border-color:#9bb6a2;background:#eef4ef}
+.opencloud .agent-side-list b,.opencloud .agent-side-detail h2{display:block;font:600 13px/1.35 Urbanist,sans-serif;color:#24362d}
+.opencloud .agent-side-list small,.opencloud .agent-side-note{display:block;font-size:11px;color:#66756c}
+.opencloud .agent-side-detail{display:flex;flex-direction:column;gap:8px}
+.opencloud .agent-side-detail h2,.opencloud .agent-side-detail h3{margin:8px 0 0;font:600 13px/1.3 Urbanist,sans-serif}
+.opencloud .agent-side-detail h3{color:#536158}
+.opencloud .agent-side-ticket{border-top:1px solid #e2e7e3;padding-top:6px}
+.opencloud .agent-side-ticket>button{display:flex;flex-wrap:wrap;gap:6px;width:100%;text-align:left;align-items:baseline}
+.opencloud .agent-side-ticket ul{list-style:none;margin:6px 0 0;padding:0}
+.opencloud .agent-side-ticket li button{width:100%;text-align:left;font-size:12px;padding:4px 0}
+.opencloud .agent-side-diff{margin:0;max-height:180px;overflow:auto;font:11px/1.45 ui-monospace,monospace;white-space:pre-wrap;background:#fff;border:1px solid #e2e7e3;border-radius:4px;padding:8px}
+.opencloud .agent-side-diff .diff-added{color:#1f7a45}
+.opencloud .agent-side-diff .diff-removed{color:#a33b32}
+.opencloud .agent-side-handoffs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.opencloud .agent-side-handoffs li{display:flex;flex-direction:column;gap:2px;font-size:12px}
+.opencloud .sky-return{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:6px;background:#fff;border:1px solid #d7ded8;font-size:12px}
+.opencloud .sky-return[aria-pressed="true"]{background:#e7efe8;border-color:#9bb6a2}
+.opencloud .accounts-panel{position:absolute;top:58px;left:14px;bottom:14px;z-index:22;width:min(440px,calc(100vw - 28px));overflow:auto;padding:16px 16px 24px;border:1px solid #d7ded8;border-radius:8px;background:#fafbf9f5}
+.opencloud .accounts-panel .accounts-close{margin:0 0 8px}
+.opencloud .accounts-panel h2{font-size:20px}
+.opencloud .accounts-panel label{display:block;font-size:12px;font-weight:600;color:#536158;margin:12px 0}
+.opencloud .accounts-panel input,.opencloud .accounts-panel textarea,.opencloud .accounts-panel select{display:block;width:100%;margin-top:6px;padding:8px;border:1px solid #d3dbd5;border-radius:4px;background:#fff;font-size:13px}
+@media(max-width:750px){.opencloud .accounts-panel{right:14px;width:auto;bottom:auto;max-height:70%}}
+.opencloud .workspace-switch{display:flex;align-items:center;gap:8px;font-size:12px;color:#536158}
+.opencloud .workspace-switch select{margin:0;padding:6px 8px}
+.opencloud .new-project{position:absolute;left:16px;bottom:16px;z-index:14;width:min(360px,calc(100% - 32px));display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid #d7ded8;border-radius:8px;background:#fafbf9f5}
+.opencloud .new-project h2{margin:0;font:600 16px/1.3 Urbanist,sans-serif}
+.opencloud .new-project-actions{display:flex;gap:8px;justify-content:flex-end}
+@media(max-width:750px){.app.quiet-office.opencloud{grid-template-columns:minmax(0,1fr)}.opencloud .workspace{grid-column:1;height:100%;margin:0}.opencloud .agent-side{width:auto;left:12px;right:12px;bottom:auto;max-height:46%}.opencloud .floor-preview{flex-basis:28%;min-height:140px}}
 .share-panel .share-error{color:#8a3b2a}
 /* Arriving from the sky: the cloud's color fades away over the office. */
 .cloud-arrival{position:absolute;inset:0;z-index:9;pointer-events:none;animation:cloud-arrival .9s ease-out .1s forwards}

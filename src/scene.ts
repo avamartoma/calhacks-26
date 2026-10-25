@@ -13,6 +13,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import type { Agent, Altitude, Room } from './types';
+import { agentCharge } from './identity';
 import { accessoriesFor, costumeColors } from './costume';
 
 interface Actor { beacon: THREE.Mesh<THREE.RingGeometry,THREE.MeshBasicMaterial>; workStatus: string; group: THREE.Group; home: THREE.Vector3; agent: Agent; screen: THREE.CanvasTexture; label: THREE.Sprite; signature: string; eyes: THREE.Group[]; pupils: THREE.Mesh[]; body: THREE.Group; phase: number; visiting: boolean; meetingUntil:number; route: THREE.Vector3[]; outbound: THREE.Vector3[] }
@@ -56,6 +57,7 @@ export class OfficeScene {
   showingTeam = false;
   private blend = 0;
   private blending = false;
+  private officeSettledAt = 0;
   private blendFrom = { position: new THREE.Vector3(), target: new THREE.Vector3() };
   private blendTo = { position: new THREE.Vector3(16, 15, 20), target: new THREE.Vector3(-.4, .7, -.3) };
   onOfficeSelect?: (id:string) => void;
@@ -197,9 +199,9 @@ export class OfficeScene {
     this.backdrop.colorSpace = THREE.SRGBColorSpace;
     this.applyShell();
   }
-  setSky(rooms: Room[], tint?: string) {
+  setSky(rooms: Room[], tint?: string, waitingIds?: ReadonlySet<string>) {
     if (tint) this.clouds.setTint(tint);
-    this.clouds.setRooms(rooms);
+    this.clouds.setRooms(rooms, waitingIds);
     if (this.altitude === 'sky') this.applyShell();
   }
   openProject(room: Room) {
@@ -313,7 +315,7 @@ export class OfficeScene {
     this.box(this.world,x-width/2+.45,1.82,z-.45,.46,.07,.19,'#dccbae',.025);
     if(!a)return;
     const avatar = this.avatar(a); avatar.position.set(x, 0, z + 1.12); this.world.add(avatar);
-    const label = this.sign(a.name, a.title || a.role, x, 3.15, z + .4, 2.65); label.userData.agentId = a.id; this.clickable.push(label);
+    const label = this.sign(agentCharge(a), a.role, x, 3.15, z + .4, 2.65); label.userData.agentId = a.id; this.clickable.push(label);
     const beacon=new THREE.Mesh(new THREE.RingGeometry(.72,.8,48),new THREE.MeshBasicMaterial({color:'#477ead',transparent:true,opacity:.85,side:THREE.DoubleSide,depthWrite:false}));
     beacon.rotation.x=-Math.PI/2;beacon.position.set(x,.09,z+1.12);beacon.userData.agentId=a.id;this.world.add(beacon);
     this.actors.set(a.id, { beacon,workStatus:'queued',group: avatar, home: avatar.position.clone(), agent: a, screen: texture, label, signature: '', eyes: avatar.userData.eyes, pupils: avatar.userData.pupils, body: avatar.userData.body, phase: x * 2.17 + z * .6, visiting: false, meetingUntil:0, route: [], outbound: [] });
@@ -497,19 +499,21 @@ export class OfficeScene {
     if (this.roomId !== room.id || this.actors.size!==visible.length || visible.some(a => !this.actors.has(a.id) || (this.actors.get(a.id)!.agent.effectiveModel || this.actors.get(a.id)!.agent.model)!==(a.effectiveModel || a.model) || this.actors.get(a.id)!.agent.name!==a.name || this.actors.get(a.id)!.agent.title!==a.title || this.actors.get(a.id)!.agent.role!==a.role)) this.build(room);
     for (const a of room.agents) {
       const actor = this.actors.get(a.id); if (!actor) continue; actor.agent = a;
-      const task=(a.currentWorkItemId?room.workItems?.find(t=>t.id===a.currentWorkItemId):room.workItems?.find(t=>t.agentId===a.id && t.status!=='done')) || room.workItems?.find(t=>t.agentId===a.id);
+      const current=a.currentWorkItemId?room.workItems?.find(t=>t.id===a.currentWorkItemId && t.status!=='done'):undefined;
+      const task=current || room.workItems?.find(t=>t.agentId===a.id && t.status!=='done' && !t.archived);
       const status=task?.status || (a.status==='error'?'blocked':a.status==='done'?'review':a.status==='working'?'working':'ready');
       const colors:Record<string,string>={ready:'#8a969f',working:'#477ead',blocked:'#b55c48',review:'#b88732',done:'#38826c',queued:'#8a969f'};
       const labels:Record<string,string>={ready:'READY',working:'WORKING',blocked:'BLOCKED',review:'REVIEW',done:'VERIFIED',queued:'QUEUED'};
       actor.workStatus=status;actor.beacon.material.color.set(colors[status]);
       const checks=task?.checks?.filter(c=>c.passed).length || 0;
-      const sig = [a.name,a.title,a.status,a.effectiveModel,a.model,status,task?.evidence.length,checks,a.events.at(-1)?.text,a.task,selected===a.id].join('|');
+      const charge = agentCharge(a, task?.title);
+      const sig = [charge,a.status,a.effectiveModel,a.model,status,task?.evidence.length,checks,a.events.at(-1)?.text,a.task,selected===a.id].join('|');
       if (sig !== actor.signature) {
         actor.signature = sig;
         const receiptLine=task ? `${task.evidence.length} evidence items / ${checks} of ${task.acceptanceCriteria.length} checks. ` : '';
-        const replacement = this.textTexture(a.name, `${labels[status]} / ${a.title || a.role}`, colors[status], true, (task?.title || a.task).split('\n')[0].slice(0,100)+'\n'+(task?.blocker || a.events.filter(e=>e.kind==='update').at(-1)?.text || receiptLine).replace(/\s+/g,' ').slice(0,180),a.progress);
+        const replacement = this.textTexture(charge, `${labels[status]} / ${a.role}`, colors[status], true, (task?.title || a.task).split('\n')[0].slice(0,100)+'\n'+(task?.blocker || a.events.filter(e=>e.kind==='update').at(-1)?.text || receiptLine).replace(/\s+/g,' ').slice(0,180),a.progress);
         actor.screen.image = replacement.image; actor.screen.needsUpdate = true; replacement.dispose();
-        const material=actor.label.material as THREE.SpriteMaterial;material.map?.dispose();material.map=this.textTexture(a.name, a.title || labels[status], colors[status]);material.needsUpdate=true;
+        const material=actor.label.material as THREE.SpriteMaterial;material.map?.dispose();material.map=this.textTexture(charge, labels[status], colors[status]);material.needsUpdate=true;
       }
 
     }
@@ -682,7 +686,15 @@ export class OfficeScene {
       if (this.blending) {
         const goal = this.altitude === 'project' ? 1 : 0;
         this.blend = THREE.MathUtils.damp(this.blend, goal, 3.4, dt);
-        if (Math.abs(this.blend - goal) < .012) { this.blend = goal; this.blending = false; this.applyShell(); }
+        if (Math.abs(this.blend - goal) < .012) {
+          this.blend = goal; this.blending = false;
+          this.camera.position.copy(this.blendTo.position);
+          this.controls.target.copy(this.blendTo.target);
+          this.camera.lookAt(this.controls.target);
+          this.controls.update();
+          if (goal === 1) this.officeSettledAt = performance.now();
+          this.applyShell();
+        }
         else this.applyShell();
         const t = this.reduced ? goal : this.blend * this.blend * (3 - 2 * this.blend);
         this.camera.position.lerpVectors(this.blendFrom.position, this.blendTo.position, this.altitude === 'project' ? t : 1 - t);
@@ -693,7 +705,7 @@ export class OfficeScene {
       } else if(this.cinemaShot){const amount=this.reduced?1:1-Math.exp(-dt*1.65);this.camera.position.lerp(this.cinemaShot.position,amount);this.controls.target.lerp(this.cinemaShot.target,amount);this.camera.lookAt(this.controls.target);}
       else {
         this.controls.update();
-        this.clouds.maybeLeaveFromProject(this.camera.position.distanceTo(this.controls.target));
+        if (!this.officeSettledAt || performance.now() - this.officeSettledAt > 500) this.clouds.maybeLeaveFromProject(this.camera.position.distanceTo(this.controls.target));
       }
     }
     let chatting = 0;

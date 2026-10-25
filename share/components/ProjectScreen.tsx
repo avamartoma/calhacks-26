@@ -238,7 +238,7 @@ function ProjectSession({ slug, auth }: { slug: string; auth: AuthHandle | null 
     <main className="share-app">
       <header className="share-top">
         <div>
-          <p className="eyebrow">Iteration1</p>
+          <p className="eyebrow">opencloud</p>
           <h1>{name}</h1>
         </div>
         <div className="share-auth">

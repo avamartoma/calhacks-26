@@ -26,6 +26,7 @@ export function createCloud({ changed, authToken }) {
   const retries = new Map();
   const openedAt = new Map();
   const inbound = new Map();
+  const ensuring = new Map();
 
   async function convex() {
     const url = process.env.CONVEX_URL || process.env.VITE_CONVEX_URL || 'http://127.0.0.1:3210';
@@ -146,10 +147,10 @@ export function createCloud({ changed, authToken }) {
     startSync(room, token);
   }
 
-  async function boot(room, token) {
-    const client = await convex();
-    patch(room, { status: 'starting', detail: 'Opening the cloud environment', previewUrl: undefined });
-    try {
+  function resolveProjectId(room, client) {
+    const pending = ensuring.get(room.id);
+    if (pending) return pending;
+    const job = (async () => {
       const repoUrl = await gitHttpsRemote(room.path);
       let projectId = room.preview?.projectId;
       if (projectId) {
@@ -160,7 +161,6 @@ export function createCloud({ changed, authToken }) {
         const projects = await client.query(anyApi.projects.list, {});
         projectId = (projects || []).find(project => sameRepo(project.repoUrl, repoUrl))?._id;
       }
-      if (!alive(room.id, token)) return;
       if (!projectId) {
         projectId = await client.mutation(anyApi.projects.create, {
           name: room.name || 'Project',
@@ -168,8 +168,79 @@ export function createCloud({ changed, authToken }) {
           ...(repoUrl ? { repoUrl } : {}),
         });
       }
+      if (room.preview?.projectId !== projectId) patch(room, { projectId });
+      return projectId;
+    })().finally(() => {
+      if (ensuring.get(room.id) === job) ensuring.delete(room.id);
+    });
+    ensuring.set(room.id, job);
+    return job;
+  }
+
+  function shareMembers(rows) {
+    return (Array.isArray(rows) ? rows : []).flatMap(row => {
+      if (!row || typeof row.email !== 'string' || !row.email.trim()) return [];
+      return [{ email: row.email, role: typeof row.role === 'string' ? row.role : 'viewer' }];
+    });
+  }
+
+  async function share(room) {
+    if (!room || room.demo) throw new Error('This project cannot be shared.');
+    const client = await convex();
+    const projectId = await resolveProjectId(room, client);
+    const project = await client.query(anyApi.projects.get, { projectId });
+    const members = shareMembers(await client.query(anyApi.sharing.list, { projectId }));
+    const slug = project.shareSlug || project.slug;
+    let previewUrl = '';
+    try {
+      const shared = await client.query(anyApi.sharing.get, { slug });
+      if (shared?.previewStatus === 'live' && typeof shared.previewUrl === 'string') previewUrl = shared.previewUrl;
+    } catch { /* The project record is enough when no session is live yet. */ }
+    return {
+      projectId,
+      name: project.name,
+      visibility: project.visibility === 'public' ? 'public' : 'private',
+      shareSlug: slug,
+      previewUrl,
+      members,
+    };
+  }
+
+  async function setVisibility(room, visibility) {
+    if (visibility !== 'private' && visibility !== 'public') throw new Error('Visibility must be private or public.');
+    const client = await convex();
+    const projectId = await resolveProjectId(room, client);
+    await client.mutation(anyApi.sharing.setVisibility, { projectId, visibility });
+    return share(room);
+  }
+
+  function shareEmail(email) {
+    const value = String(email || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) throw new Error('Enter an email address.');
+    return value;
+  }
+
+  async function invite(room, email, role) {
+    if (role !== 'viewer' && role !== 'editor') throw new Error('Role must be viewer or editor.');
+    const client = await convex();
+    const projectId = await resolveProjectId(room, client);
+    await client.mutation(anyApi.sharing.invite, { projectId, email: shareEmail(email), role });
+    return share(room);
+  }
+
+  async function removeInvite(room, email) {
+    const client = await convex();
+    const projectId = await resolveProjectId(room, client);
+    await client.mutation(anyApi.sharing.remove, { projectId, email: shareEmail(email) });
+    return share(room);
+  }
+
+  async function boot(room, token) {
+    const client = await convex();
+    patch(room, { status: 'starting', detail: 'Opening the cloud environment', previewUrl: undefined });
+    try {
+      const projectId = await resolveProjectId(room, client);
       if (!alive(room.id, token)) return;
-      patch(room, { projectId });
 
       let sessionId = room.preview?.sessionId;
       let session = null;
@@ -553,7 +624,7 @@ export function createCloud({ changed, authToken }) {
     return null;
   }
 
-  return { open, close, claim };
+  return { open, close, claim, share, setVisibility, invite, removeInvite };
 }
 
 function delay(ms) {

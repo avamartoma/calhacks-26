@@ -10,6 +10,7 @@ export class CityEnvironment {
   sky = new Sky();
   environment: THREE.WebGLRenderTarget;
   traffic: THREE.InstancedMesh;
+  skyClouds: { group: THREE.Group; x: number; y: number; z: number; speed: number }[] = [];
   cars: { lane:number; offset:number; horizontal:boolean; direction:number; speed:number }[] = [];
   waterTime = { value:0 };
   dummy = new THREE.Object3D();
@@ -124,6 +125,33 @@ export class CityEnvironment {
       this.traffic.setColorAt(i,new THREE.Color(['#d8d6ca','#414b50','#b5aa84','#6c868d'][i%4]));
     }
     this.traffic.castShadow=true;this.traffic.frustumCulled=false;this.root.add(this.traffic);
+    const puff = new THREE.SphereGeometry(1, 10, 8);
+    const cloudMaterial = new THREE.MeshStandardMaterial({ color: '#f7f4ee', roughness: 1, transparent: true, opacity: .92, depthWrite: false });
+    // Separate clouds across the sky outside the office. Wide gaps so they do not merge into one.
+    const spots: { x: number; y: number; z: number; scale: number }[] = [];
+    for (const band of [
+      { z: -42, y: 18, step: 34, scale: 1.15 },
+      { z: -68, y: 28, step: 40, scale: .9 },
+      { z: -95, y: 16, step: 46, scale: 1.3 },
+      { z: 48, y: 22, step: 42, scale: 1 },
+    ]) {
+      for (let x = -100; x <= 100; x += band.step) {
+        spots.push({ x: x + (random() - .5) * 6, y: band.y + (random() - .5) * 6, z: band.z + (random() - .5) * 8, scale: band.scale * (.85 + random() * .3) });
+      }
+    }
+    for (const spot of spots) {
+      const group = new THREE.Group();
+      for (let blob = 0; blob < 3; blob++) {
+        const mesh = new THREE.Mesh(puff, cloudMaterial);
+        mesh.scale.set((7 + random() * 3) * spot.scale, (3 + random() * 1.2) * spot.scale, (6 + random() * 2) * spot.scale);
+        mesh.position.set((blob - 1) * 5.5 * spot.scale, random() * .8, (random() - .5) * 2);
+        mesh.castShadow = false; mesh.receiveShadow = false;
+        group.add(mesh);
+      }
+      group.position.set(spot.x, spot.y, spot.z);
+      this.skyClouds.push({ group, x: spot.x, y: spot.y, z: spot.z, speed: .15 + random() * .2 });
+      this.root.add(group);
+    }
     this.update(0,false);
     renderer.domElement.dataset.skyline='procedural-3d-city';
     renderer.domElement.dataset.cityBuildings=String(this.count);
@@ -254,6 +282,11 @@ export class CityEnvironment {
       this.dummy.rotation.set(0,car.horizontal?Math.PI/2:0,0);this.dummy.scale.set(1.65,1,3.7);this.dummy.updateMatrix();this.traffic.setMatrixAt(i,this.dummy.matrix);
     });
     this.traffic.instanceMatrix.needsUpdate=true;
+    for (const cloud of this.skyClouds) {
+      cloud.group.position.x = cloud.x + (reduced ? 0 : Math.sin(t * cloud.speed * .15) * 1.5);
+      cloud.group.position.y = cloud.y + Math.sin(t * .04 + cloud.x) * .35;
+      cloud.group.position.z = cloud.z;
+    }
   }
 
   bakeReflections(renderer:THREE.WebGLRenderer,scene:THREE.Scene) {
