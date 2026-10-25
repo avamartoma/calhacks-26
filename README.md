@@ -154,9 +154,9 @@ Four uAgents let the office's owner run it from ASI:One. Two talk to people over
 | Agent | Address | Role |
 |---|---|---|
 | **iteration1-office** | `agent1q0r5evneykvtpltu348zc0nq6a32lwuaq4ywjt0twxw7kz9945y0qgxn6mk` | Chat. Office status, run docs, approvals, alerts, reviews on request, and missions after `confirm` |
-| **iteration1-planner** | printed at startup | Chat. Turns ideas into Jira stories and hands a story to the office as a mission |
+| **iteration1-planner** | `agent1qwvw8fqk2tqj3pls2veyz47edn8vgz40xut74rcwe7fcfwk0gu68sfql7tz` | Chat. Turns ideas into Jira stories and hands a story to the office as a mission |
 | **iteration1-watcher** | `agent1qvjcfmt858hr6g47nu6jymzd7sz556us5a4ydjraa9vjevk94x5zw2d2npx` | Follows the office's live state and tells the other three what changed |
-| **iteration1-reviewer** | printed at startup | Judges finished work against its acceptance criteria |
+| **iteration1-reviewer** | `agent1qwvswxgwh720v9d44jnpgwjjr47cr205twsv3xmdt9huwz54jag22lp9jme` | Judges finished work against its acceptance criteria |
 
 **Talking to the office agent.** `status` lists tasks, blockers and who is working; `report on <task>` shows a run doc that separates verified receipts from self-reported ones; `review <task>` asks the reviewer for a verdict; `approvals` lists commands waiting in the office; `alerts` shows what the watcher and reviewer reported recently; `mission: <what to build>` hands a new mission to the implementation manager after `confirm`.
 
