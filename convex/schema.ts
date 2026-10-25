@@ -191,7 +191,33 @@ export default defineSchema({
     instructions: v.string(),
     clonedFrom: v.optional(v.object({ projectId: v.id("projects"), projectName: v.string(), agentName: v.string() })),
     createdBy: v.string(),
+    // The project manager: every project has one. It splits requests into tickets for the others.
+    manager: v.optional(v.boolean()),
   }).index("by_project", ["projectId"]),
+
+  // A task one of a project's agents does. The project manager splits a request into tickets for
+  // each role (its own "plan" ticket comes first), hands them out, and they run one after another.
+  // Moving a ticket to another agent is a handoff, kept on the ticket. Archived ones sit at the bottom.
+  tickets: defineTable({
+    projectId: v.id("projects"),
+    agentId: v.optional(v.id("projectAgents")),
+    // The manager's plan ticket this came from; none on the plan ticket itself.
+    requestId: v.optional(v.id("tickets")),
+    order: v.number(),
+    title: v.string(),
+    description: v.string(),
+    role: v.string(),
+    status: v.union(v.literal("planning"), v.literal("todo"), v.literal("working"), v.literal("done"), v.literal("failed")),
+    runId: v.optional(v.id("agentRuns")),
+    note: v.optional(v.string()),
+    handoffs: v.array(v.object({ from: v.string(), to: v.string(), at: v.number(), note: v.optional(v.string()) })),
+    createdBy: v.string(),
+    createdByLabel: v.string(),
+    archivedAt: v.optional(v.number()),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_run", ["runId"])
+    .index("by_request", ["requestId"]),
 
   agentRuns: defineTable({
     projectId: v.id("projects"),

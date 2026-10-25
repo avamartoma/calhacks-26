@@ -32,6 +32,7 @@ import type * as lib_keyCrypto from "../lib/keyCrypto.js";
 import type * as lib_numstat from "../lib/numstat.js";
 import type * as lib_previewCommand from "../lib/previewCommand.js";
 import type * as lib_previewShot from "../lib/previewShot.js";
+import type * as lib_roles from "../lib/roles.js";
 import type * as lib_runStream from "../lib/runStream.js";
 import type * as lib_sandbox from "../lib/sandbox.js";
 import type * as lib_workspacePath from "../lib/workspacePath.js";
@@ -45,6 +46,7 @@ import type * as sessionSandbox from "../sessionSandbox.js";
 import type * as sessions from "../sessions.js";
 import type * as shareLinks from "../shareLinks.js";
 import type * as sharing from "../sharing.js";
+import type * as tickets from "../tickets.js";
 import type * as validators from "../validators.js";
 import type * as workspaces from "../workspaces.js";
 
@@ -79,6 +81,7 @@ declare const fullApi: ApiFromModules<{
   "lib/numstat": typeof lib_numstat;
   "lib/previewCommand": typeof lib_previewCommand;
   "lib/previewShot": typeof lib_previewShot;
+  "lib/roles": typeof lib_roles;
   "lib/runStream": typeof lib_runStream;
   "lib/sandbox": typeof lib_sandbox;
   "lib/workspacePath": typeof lib_workspacePath;
@@ -92,6 +95,7 @@ declare const fullApi: ApiFromModules<{
   sessions: typeof sessions;
   shareLinks: typeof shareLinks;
   sharing: typeof sharing;
+  tickets: typeof tickets;
   validators: typeof validators;
   workspaces: typeof workspaces;
 }>;

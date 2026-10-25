@@ -130,3 +130,38 @@
 .web-clone select{flex:1;min-width:120px;width:auto;height:auto;margin:0;padding:6px 8px;font-size:12.5px;background:#fff;border-color:#d3d9e3}
 .web-clone .primary{padding:6px 12px;font-size:12.5px;background:#26324a;border-color:#26324a;color:#fff}
 .web-clone .text-button{padding:4px;font-size:12px}
+/* The team: each agent with its tickets underneath, handoffs on the tickets, and the archive at the bottom. */
+.web-ask label{font:600 12.5px/1.4 Urbanist,sans-serif;color:#24304a}
+.web-ask small{font-size:11px}
+.web-role{font-style:normal;font-weight:500;font-size:11px;color:#66708a;margin-left:4px}
+.web-tickets{list-style:none;margin:4px 0 2px 16px;padding:0;display:flex;flex-direction:column;gap:2px}
+.web-runs .web-tickets li{border:0;border-top:1px solid #edf0f4;border-radius:0;padding:4px 0 2px;background:none}
+.web-ticket-head{display:flex;align-items:flex-start;gap:4px}
+.web-ticket-title{display:flex;gap:7px;align-items:flex-start;flex:1;min-width:0;padding:2px 0;text-align:left}
+.web-ticket-title i{flex:none;width:7px;height:7px;margin-top:5px;border-radius:2px}
+.web-ticket-title b{display:block;font:600 12px/1.35 Urbanist,sans-serif;color:#24304a}
+.web-ticket-title small{display:flex;flex-wrap:wrap;align-items:center;gap:3px;font-size:10.5px;color:#66708a}
+.web-ticket-trash{flex:none;width:22px;height:22px;padding:0;display:inline-flex;align-items:center;justify-content:center;color:#8a93a4;background:none;border:0;border-radius:4px}
+.web-ticket-trash:hover{color:#b55c48;background:#f7eeec}
+.web-ticket-note{margin:2px 0 0 14px;font-size:11px;line-height:1.4;color:#8a6a2a}
+.web-ticket-body{margin:4px 0 0 14px;display:flex;flex-direction:column;gap:6px}
+.web-ticket-text{margin:0;font-size:11.5px;line-height:1.45;color:#45506a;white-space:pre-wrap}
+.web-handoffs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.web-runs .web-handoffs li{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:4px 6px;border:0;border-radius:4px;background:#f3f5f8;font-size:11px;color:#45506a}
+.web-handoffs b{font-weight:600;color:#24304a}
+.web-handoffs small{color:#8a93a4}
+.web-handoffs span{flex-basis:100%;color:#55607a}
+.web-handoff-pick{display:inline-flex;align-items:center;gap:4px}
+.web-handoff-pick select{width:auto;height:auto;margin:0;padding:3px 6px;font-size:11.5px;background:#fff;border-color:#d3d9e3}
+.web-subhead{margin:6px 0 0;font:600 12px/1.3 Urbanist,sans-serif;color:#55607a}
+.web-direct summary,.web-archive summary{cursor:pointer;font:600 12px/1.3 Urbanist,sans-serif;color:#55607a;display:flex;align-items:center;gap:5px}
+.web-direct .web-start{margin-top:8px}
+.web-archive{margin-top:auto;padding-top:8px;border-top:1px solid #e2e7e3}
+.web-archive summary span{font-weight:400;color:#8a93a4}
+.web-archive ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.web-archive li{display:flex;align-items:center;gap:4px;font-size:11.5px}
+.web-archive li>span{flex:1;min-width:0}
+.web-archive li b{display:block;font-weight:600;color:#45506a;text-decoration:line-through;text-decoration-color:#c3c9d4}
+.web-archive li small{display:block;font-size:10.5px;color:#8a93a4}
+.web-archive .icon-button{width:24px;height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;background:none;border:0;color:#66708a}
+.web-archive .icon-button.danger:hover{color:#b55c48}
