@@ -30,6 +30,7 @@ import { agentLine, agentSpeech, modelLabel } from './identity';
 import { accessoriesFor, costumeColors, type CostumeKind } from './costume';
 import { PreviewDock } from './PreviewDock';
 import { WorkspaceRail } from './WorkspaceRail';
+import { localHour, paletteAt } from './sky/time-of-day';
 import { ProjectDoc } from './ProjectDoc';
 import { SkyView, type SkyProject } from './sky/SkyView';
 import { placeholderNeighbors } from './sky/neighbors';
@@ -81,6 +82,8 @@ export default function App() {
   // Zooming into a cloud opens that project's office.
   const [projectView,setProjectView]=useState<'doc'|'office'>('office');
   const [allowDemo,setAllowDemo]=useState(false);
+  // Arriving in a project from the sky: the cloud's color fades away over the office.
+  const [arrival,setArrival]=useState(0);
   const [connectReturn,setConnectReturn]=useState<Tool | null>(null);
   const [connectionFocus,setConnectionFocus]=useState<{provider:ConnectionProvider;request:number}|null>(null);
   const [preferredModel,setPreferredModel]=useState<string>();
@@ -173,6 +176,12 @@ export default function App() {
     catch(e) { console.error('Office graphics initialization failed', e); setSceneError('The browser could not start 3D graphics.'); }
   }, [!!data, !!room?.archived, select,tool,cinematic,recording,spatial,sceneError,compact,altitude]);
   useEffect(()=>()=>{scene.current?.dispose();scene.current=null;},[]);
+  // The office sits in the same time-of-day sky as the workspace, fading into its cloud's color.
+  useEffect(()=>{
+    if(!sceneReady)return;
+    const apply=()=>{const p=paletteAt(localHour());scene.current?.setBackdrop({zenith:p.zenith,horizon:p.horizon,cloud:p.cloudLight});};
+    apply();const timer=setInterval(apply,60000);return()=>clearInterval(timer);
+  },[sceneReady]);
   useEffect(()=>{if(tool!=='office' && !cinematic && !recording)scene.current?.setWalk(false);},[tool,cinematic,recording]);
   useEffect(()=>{if(tool==='office' && selection && sceneReady)scene.current?.focus(selection);},[tool,selection,sceneReady]);
   useEffect(() => { if (displayRoom && altitude==='project') scene.current?.update(replayRoom || {...displayRoom,workItems:displayRoom.workItems.filter(t=>!t.archived)}, selection); }, [displayRoom, replayRoom, selection, sceneReady, altitude]);
@@ -236,7 +245,8 @@ export default function App() {
     </header>
     <main className="workspace">
       <div ref={container} className="world" />
-      {altitude==='sky' && !cinematic && !recording && <SkyView projects={skyProjects} returnFrom={skyReturn.current} onMove={(id,x,y)=>{api(`/rooms/${id}/cloud`,{x,y,sky:true}).catch(e=>setError((e as Error).message));}} onEnter={id=>{setRoomId(id);setAltitude('project');setProjectView('office');setCompact(false);setTool('office');}}/>}
+      {altitude==='sky' && !cinematic && !recording && <SkyView projects={skyProjects} returnFrom={skyReturn.current} onMove={(id,x,y)=>{api(`/rooms/${id}/cloud`,{x,y,sky:true}).catch(e=>setError((e as Error).message));}} onEnter={id=>{setArrival(n=>n+1);setRoomId(id);setAltitude('project');setProjectView('office');setCompact(false);setTool('office');}}/>}
+      {arrival>0 && altitude==='project' && !cinematic && !recording && <div key={arrival} className="cloud-arrival" style={{background:`rgb(${paletteAt(localHour()).cloudLight.map(v=>Math.round(v*255)).join(',')})`}}/>}
       {docOpen && room && <ProjectDoc room={room} workspaceName={workspace?.name} selected={selection} onAgent={select} onTask={id=>{setSelectedWork(id);setTool('work');}} onStartWork={()=>setTool('templates')} onSky={showSky} onOffice={()=>{setProjectView('office');setCompact(false);}}/>}
       {altitude==='sky' && tool==='office' && !cinematic && !recording && !skyRooms.length && <div className="sky-hint"><Cloud size={16}/><span>{skyRooms.length ? 'Drag to pan · scroll into a cloud to open that project' : 'This workspace has no projects yet'}</span>{!skyRooms.length && <button className="primary" onClick={()=>setTool('newroom')}>New project</button>}</div>}
       {inProject && !docOpen && tool==='office' && !walk && !cinematic && !recording && !compact && <aside className="project-rail" aria-label="Project actions">

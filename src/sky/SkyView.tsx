@@ -98,7 +98,15 @@ function honeycomb(mine: SkyProject[]): SkyProject[] {
 /** The camera that frames you and your projects, at the front layer. */
 function homeCamera(projects: SkyProject[], view: Viewport, style: SkyStyle): Camera {
   const mine = projects.filter(p => p.mine);
-  if (!mine.length) return { x: 0, y: 0, zoom: 1, z: 0 };
+  if (!mine.length) {
+    // No projects of your own yet: frame everything shared in this workspace instead of an empty sky.
+    if (style !== 'clouds' || !projects.length) return { x: 0, y: 0, zoom: 1, z: 0 };
+    const half = (p: SkyProject) => FLAT_CLOUD * (p.size || 1) * .25;
+    const minX = Math.min(...projects.map(p => p.x - half(p))), maxX = Math.max(...projects.map(p => p.x + half(p)));
+    const minY = Math.min(...projects.map(p => p.y - half(p) * .6)), maxY = Math.max(...projects.map(p => p.y + half(p) * .6));
+    const zoom = Math.min(.6, Math.max(.12, Math.min(view.width * .8 / (maxX - minX), view.height * .75 / (maxY - minY))));
+    return { x: (minX + maxX) / 2, y: (minY + maxY) / 2, zoom, z: 0 };
+  }
   // A balloon reaches about 130 units above its center and, with its basket, about 200 below;
   // a vector cloud is 660 wide and 340 tall on the flat canvas, 420 by 220 in 3D.
   const balloon = style === 'balloons', vector = style === 'clouds', vector3d = style === 'clouds3d';
@@ -388,8 +396,12 @@ function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyM
         const c = placedNow.get(p.id)!;
         const onScreen = c.width > 0 && c.x + c.width / 2 > -40 && c.x - c.width / 2 < view.width + 40 && c.y + c.height / 2 > -40 && c.y - c.height / 2 < view.height + 40;
         if (p.mine && p.kind !== 'you' && c.width > 0 && Math.abs(state.camera.z || 0) < 40) {
-          const centered = 1 - Math.min(1, Math.hypot(c.x - view.width / 2, c.y - view.height / 2) / (c.width * .35));
-          const depth = smooth(immerse().start, immerse().full, c.width / view.width) * Math.max(0, centered);
+          // You are inside a cloud once it is much wider than the screen and the middle of the screen
+          // is well within its body. (Zooming toward the cursor keeps the point under it still, so
+          // the cloud's own center may sit far off screen by then; that is fine.)
+          const ex = (view.width / 2 - c.x) / (c.width * .45), ey = (view.height / 2 - c.y) / (c.height * .42);
+          const inside = 1 - smooth(.6, 1, Math.hypot(ex, ey));
+          const depth = smooth(immerse().start, immerse().full, c.width / view.width) * inside;
           if (depth > immersion) { immersion = depth; deepest = p; }
         }
         const label = labels.current.get(p.id);

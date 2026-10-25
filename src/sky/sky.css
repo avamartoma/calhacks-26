@@ -132,3 +132,5 @@
 /* Beside the Sky/Folders toggle in the bottom-left corner. */
 .sky-corner .sky-only-mine{margin:0;padding:8px 13px 8px 11px;background:#ffffffd8;box-shadow:0 6px 18px rgba(20,32,60,.12)}
 .sky-view-toggle button{display:grid;place-items:center;width:38px;height:32px;padding:0}
+/* The agent color key on one line. */
+.sky-legend{flex-wrap:nowrap;max-width:none;white-space:nowrap}

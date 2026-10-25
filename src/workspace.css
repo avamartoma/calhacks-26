@@ -94,3 +94,7 @@
 .share-panel .share-members button{border:0;background:none;color:#8a3b2a;padding:4px}
 .share-panel .share-slug{font-family:ui-monospace,monospace;font-size:12px;color:#29362f}
 .share-panel .share-error{color:#8a3b2a}
+/* Arriving from the sky: the cloud's color fades away over the office. */
+.cloud-arrival{position:absolute;inset:0;z-index:9;pointer-events:none;animation:cloud-arrival .9s ease-out .1s forwards}
+@keyframes cloud-arrival{to{opacity:0;visibility:hidden}}
+@media(prefers-reduced-motion:reduce){.cloud-arrival{animation-duration:.01s}}
