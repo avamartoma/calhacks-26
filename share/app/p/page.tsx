@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { OpenLink } from "@/components/OpenLink";
 
 export default function ShareIndexPage() {
   return (
@@ -9,10 +9,8 @@ export default function ShareIndexPage() {
           <h1>Shared projects</h1>
         </div>
       </header>
-      <p className="banner">
-        This address needs the project slug, like <Link href="/p/preview-check-ntja4r">/p/preview-check-ntja4r</Link>.
-        Copy it from the office Share panel.
-      </p>
+      <p className="banner">This address needs the rest of the share link. Paste the whole link you were sent.</p>
+      <OpenLink />
     </main>
   );
 }

@@ -101,7 +101,9 @@
 .share-panel input,.share-panel select{margin:0;background:#fff;border:1px solid #d3dbd5;border-radius:4px;padding:8px;font-size:12px}
 .share-panel button{font-size:12px;padding:8px 10px;border-radius:4px}
 .share-panel button.primary{background:#355c43;color:#fff;border:1px solid #355c43}
-.share-panel button.secondary{background:#fff;color:#29362f;border:1px solid #d3dbd5}
+.share-panel button.secondary,.share-panel a.secondary{background:#fff;color:#29362f;border:1px solid #d3dbd5}
+.share-panel a.secondary{font-size:12px;padding:8px 10px;border-radius:4px;text-decoration:none}
+.share-panel .share-hint{font-size:11px;color:#758279}
 .share-panel button.on{background:#e3ebe5;border:1px solid #9bb6a2;color:#254b35}
 .share-panel .share-members{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
 .share-panel .share-members li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid #e2e6e3}

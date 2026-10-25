@@ -24,6 +24,11 @@ async function officeShare(url: string, body?: unknown): Promise<unknown> {
   return data;
 }
 
+function shareOrigin(): string {
+  const env = (import.meta as unknown as { env?: { VITE_SHARE_ORIGIN?: string } }).env;
+  return (env?.VITE_SHARE_ORIGIN?.trim() || hosted.shareOrigin).replace(/\/$/, '');
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
   return 'The request failed.';
@@ -138,7 +143,10 @@ export function SharePanel({ projectId, shareSlug, projectName, roomId, previewU
     }
   }
 
-  const link = previewUrl || info?.previewUrl || '';
+  // The share site's page for this project: anyone with access opens it in a browser, with nothing to install.
+  const slug = info?.shareSlug || shareSlug || '';
+  const link = slug ? `${shareOrigin()}/p/${encodeURIComponent(slug)}` : '';
+  const preview = previewUrl || info?.previewUrl || '';
   const canShare = !!(projectId || roomId);
 
   async function copyLink() {
@@ -160,8 +168,10 @@ export function SharePanel({ projectId, shareSlug, projectName, roomId, previewU
       <button type="button" className={visibility === 'private' ? 'on' : 'secondary'} disabled={busy || !canShare} aria-pressed={visibility === 'private'} onClick={() => { void mutate((client) => roomId ? officeShare(`/rooms/${roomId}/share/visibility`, { visibility: 'private' }) : (client.mutation as Call)(anyApi.sharing.setVisibility, { projectId, visibility: 'private' }), 'Visibility is private.'); }}>Private</button>
       <button type="button" className={visibility === 'public' ? 'on' : 'secondary'} disabled={busy || !canShare} aria-pressed={visibility === 'public'} onClick={() => { void mutate((client) => roomId ? officeShare(`/rooms/${roomId}/share/visibility`, { visibility: 'public' }) : (client.mutation as Call)(anyApi.sharing.setVisibility, { projectId, visibility: 'public' }), 'Visibility is public.'); }}>Public</button>
     </div>
-    {link ? <p>Share link <code className="share-slug">{link}</code></p> : <p>{canShare ? 'The share link appears when this preview is live.' : 'Open a project to copy its share link.'}</p>}
-    {link && <div className="share-row"><button type="button" className="secondary" onClick={() => void copyLink()}>{copied ? 'Copied' : 'Copy link'}</button></div>}
+    {link ? <p>Share link <code className="share-slug">{link}</code></p> : <p>{!canShare ? 'Open a project to copy its share link.' : error ? 'The share link appears once the project reaches the cloud.' : 'Getting the share link…'}</p>}
+    {link && <div className="share-row"><button type="button" className="secondary" onClick={() => void copyLink()}>{copied ? 'Copied' : 'Copy link'}</button><a className="secondary" href={link} target="_blank" rel="noreferrer">Open</a></div>}
+    <p className="share-hint">{visibility === 'public' ? 'Anyone with the link can view it.' : 'Only people you invite can open it. They sign in on the share site with the invited email.'}</p>
+    {preview && <p>Live preview <a href={preview} target="_blank" rel="noreferrer">{preview}</a></p>}
     <form className="share-row" onSubmit={(event) => {
       event.preventDefault();
       const next = email.trim();
