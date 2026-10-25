@@ -32,22 +32,17 @@ const deskProvider: Record<Provider, Agent['provider']> = { codex: 'codex-cli', 
 const statusColor: Record<string, string> = { starting: '#b88732', running: '#477ead', done: '#38826c', error: '#b55c48', stopped: '#8a969f' };
 
 /** The office for one project: its agents at their desks, built from Convex for the 3D scene. */
-function roomFor(row: SkyRow, runs: Run[], lasting: Lasting[] = [], tickets: Ticket[] = []): Room {
-  // Lasting agents each have a desk; their id is prefixed so the office can tell them from runs.
-  // One working on a ticket shows as working on it; its run doesn't get a desk of its own.
-  const desks: Agent[] = lasting.map(agent => {
+function roomFor(row: SkyRow, lasting: Lasting[] = [], tickets: Ticket[] = []): Room {
+  // The office seats the team in the Agents panel and no one else: the project manager in the
+  // manager's office, the rest at desks. Their id is prefixed so the office can tell them from runs.
+  // One working on a ticket shows as working on it.
+  const agents: Agent[] = lasting.map(agent => {
     const current = tickets.find(ticket => ticket.agentId === agent.id && !ticket.archivedAt && (ticket.status === 'working' || ticket.status === 'planning'));
     return {
       id: `pa:${agent.id}`, name: agent.name, title: agent.role, role: agent.role, task: current?.title ?? agent.instructions, model: agent.engine, manager: agent.manager,
       provider: deskProvider[agent.engine], status: current ? 'working' : 'idle', color: kindOf(agent.role, agent.manager).color, progress: 0, plan: [], tokens: 0, events: [],
     };
   });
-  const ticketRuns = new Set(tickets.flatMap(ticket => ticket.runId ? [ticket.runId] : []));
-  const agents: Agent[] = [...desks, ...runs.filter((run, index) => !ticketRuns.has(run.id) && (working(run) || index < 6)).map((run): Agent => ({
-    id: run.id, name: run.userLabel.split(/[\s@]/)[0] || 'Agent', title: deskTitle[run.agent], role: providerNames[run.agent], task: run.prompt, model: run.agent,
-    provider: deskProvider[run.agent], status: working(run) ? 'working' : run.status === 'error' ? 'error' : 'done', color: '#c96442', progress: 0, plan: [], tokens: 0,
-    events: run.lastLine ? [{ id: `${run.id}:last`, kind: 'update', text: run.lastLine.text, time: run.startedAt }] : [],
-  }))];
   return {
     id: row.id, name: row.name, path: '', tag: 'CLOUD', demo: false, goal: row.description, viewOnly: row.role !== 'editor',
     timeline: [], checkpoints: [], workItems: [], messages: [], skills: [], budget: 3, paused: false, agents,
@@ -98,7 +93,7 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
 
   const lasting = useLasting(projectId);
   const tickets = useTickets(projectId);
-  const room = useMemo(() => roomFor(row, runs || [], lasting || [], tickets || []), [row, runs, lasting, tickets]);
+  const room = useMemo(() => roomFor(row, lasting || [], tickets || []), [row, lasting, tickets]);
   // Every project has a project manager; one opening it to edit brings one in if it hasn't.
   const ensureManager = useMutation(api.tickets.ensureManager);
   const needsManager = editor && !!lasting && !lasting.some(agent => agent.manager);
@@ -210,8 +205,8 @@ function AgentsPanel({ projectId, runs, lasting, tickets, targets, go, editor, o
       <button type="button" role="radio" aria-checked={fetchOpen} aria-selected={fetchOpen} onClick={() => setChosen('fetch')}>Fetch.ai</button>
     </div>
     {fetchOpen ? <FetchAgents projectId={projectId} runs={runs || []} editor={editor} mine={owner} /> : <>
-    {editor && agent && <label className="web-model">Model
-      <select value={model} onChange={e => pickModel(e.target.value)}>{MODELS[agent].map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>
+    {editor && <label className="web-model">Model
+      <select value={model} onChange={e => pickModel(e.target.value)}>{MODELS[tab].map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}</select>
     </label>}
     {editor && <AskManager projectId={projectId} manager={manager} {...(agent ? { engine: agent, model } : {})} />}
     {editor && connections && !agent && <div className="web-key-needed"><b>Connect Codex, Claude or Cursor so the team can work</b><ConnectionTabs key={tab} initial={tab} /></div>}
