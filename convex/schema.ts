@@ -113,18 +113,23 @@ export default defineSchema({
     lastSeenAt: v.number(),
   }).index("by_project", ["projectId"]),
 
-  // A person's own Anthropic API key, encrypted with KEY_ENCRYPTION_SECRET. Only agent runs decrypt it.
+  // A person's own key for Codex, Claude or Cursor, encrypted with KEY_ENCRYPTION_SECRET. Only
+  // agent runs decrypt it. Rows from before providers were added have none, and are Claude.
   userKeys: defineTable({
     userId: v.string(),
+    provider: v.optional(v.union(v.literal("codex"), v.literal("claude"), v.literal("cursor"))),
     ciphertext: v.string(),
     iv: v.string(),
     last4: v.string(),
+    // Claude only: a Claude Pro/Max token from `claude setup-token` instead of an API key.
+    subscription: v.optional(v.boolean()),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
-  // One Claude Code run inside a project's sandbox, started from the web office.
+  // One agent run inside a project's sandbox, started from the web office. No agent means Claude.
   agentRuns: defineTable({
     projectId: v.id("projects"),
+    agent: v.optional(v.union(v.literal("codex"), v.literal("claude"), v.literal("cursor"))),
     userId: v.string(),
     userLabel: v.string(),
     sessionId: v.optional(v.id("sessions")),

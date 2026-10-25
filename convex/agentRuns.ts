@@ -5,6 +5,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { requireAccess } from "./access";
 import { recordEvent } from "./events";
 import { currentUser } from "./identity";
+import { keyRow, providerValidator } from "./keyStore";
 import { beginSession } from "./sessions";
 
 const MAX_PROMPT = 8000;
@@ -12,13 +13,14 @@ const MAX_ACTIVE_PER_PROJECT = 3;
 const LINE_LIMIT = 4000;
 
 const active = (run: Doc<"agentRuns">) => run.status === "starting" || run.status === "running";
+const NAMES = { codex: "Codex", claude: "Claude", cursor: "Cursor" } as const;
 
 /**
- * Starts a Claude Code agent on this project, in its cloud sandbox, on the caller's own
- * Anthropic key. Needs edit access. agentRunner.launch takes it from here.
+ * Starts a Codex, Claude Code or Cursor agent on this project, in its cloud sandbox, on the
+ * caller's own key for that provider. Needs edit access. agentRunner.launch takes it from here.
  */
 export const start = mutation({
-  args: { projectId: v.id("projects"), prompt: v.string() },
+  args: { projectId: v.id("projects"), prompt: v.string(), agent: v.optional(providerValidator) },
   handler: async (ctx, args) => {
     const user = await currentUser(ctx);
     if (user.local) throw new Error("Sign in to start an agent");
@@ -26,16 +28,17 @@ export const start = mutation({
     const prompt = args.prompt.trim();
     if (!prompt) throw new Error("Describe what the agent should do");
     if (prompt.length > MAX_PROMPT) throw new Error(`Keep the task under ${MAX_PROMPT} characters`);
-    const key = await ctx.db.query("userKeys").withIndex("by_user", (q) => q.eq("userId", user.id)).unique();
-    if (!key) throw new Error("Add your Anthropic API key first");
+    const agent = args.agent ?? "claude";
+    if (!(await keyRow(ctx, user.id, agent))) throw new Error(`Connect ${NAMES[agent]} first`);
     const runs = await ctx.db.query("agentRuns").withIndex("by_project", (q) => q.eq("projectId", args.projectId)).collect();
     if (runs.filter(active).length >= MAX_ACTIVE_PER_PROJECT) {
       throw new Error(`${MAX_ACTIVE_PER_PROJECT} agents are already working on this project. Wait for one to finish.`);
     }
-    const sessionId = await beginSession(ctx, args.projectId, "claude");
+    const sessionId = await beginSession(ctx, args.projectId, agent);
     const userLabel = user.name || user.email || "Someone";
     const runId = await ctx.db.insert("agentRuns", {
       projectId: args.projectId,
+      agent,
       userId: user.id,
       userLabel,
       sessionId,
@@ -45,7 +48,7 @@ export const start = mutation({
       startedAt: Date.now(),
     });
     await ctx.scheduler.runAfter(0, internal.agentRunner.launch, { runId });
-    await recordEvent(ctx, { projectId: args.projectId, sessionId, kind: "agent.started", detail: `${userLabel}: ${prompt.slice(0, 200)}` });
+    await recordEvent(ctx, { projectId: args.projectId, sessionId, kind: "agent.started", detail: `${userLabel} (${NAMES[agent]}): ${prompt.slice(0, 200)}` });
     return runId;
   },
 });
@@ -61,6 +64,7 @@ export const list = query({
       const last = await ctx.db.query("runLines").withIndex("by_run", (q) => q.eq("runId", run._id)).order("desc").first();
       return {
         id: run._id,
+        agent: run.agent ?? "claude",
         prompt: run.prompt,
         status: run.status,
         detail: run.detail ?? null,
@@ -170,11 +174,11 @@ export const finish = internalMutation({
  * in place of Claude Code, with no key. Internal, so no browser can call it.
  */
 export const testStart = internalMutation({
-  args: { projectId: v.id("projects"), command: v.string() },
+  args: { projectId: v.id("projects"), command: v.string(), agent: v.optional(providerValidator) },
   handler: async (ctx, args) => {
     const sessionId = await beginSession(ctx, args.projectId, "claude");
     const runId = await ctx.db.insert("agentRuns", {
-      projectId: args.projectId, userId: "test", userLabel: "Test", sessionId,
+      projectId: args.projectId, agent: args.agent ?? "claude", userId: "test", userLabel: "Test", sessionId,
       prompt: "test run", status: "starting", offset: 0, startedAt: Date.now(),
     });
     await ctx.scheduler.runAfter(0, internal.agentRunner.launch, { runId, testCommand: args.command });

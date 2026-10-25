@@ -216,7 +216,7 @@ export const sky = query({
         repoUrl: project.repoUrl ?? null,
         session: sessions[0] ? { id: sessions[0]._id, status: sessions[0].status, previewUrl: sessions[0].previewUrl ?? null, previewStatus: sessions[0].previewStatus ?? null } : null,
         snapshotUrl,
-        runs: runs.map((run) => ({ id: run._id, status: run.status, userLabel: run.userLabel, prompt: run.prompt.slice(0, 120) })),
+        runs: runs.map((run) => ({ id: run._id, agent: run.agent ?? "claude", status: run.status, userLabel: run.userLabel, prompt: run.prompt.slice(0, 120) })),
       });
     }
     return rows;
