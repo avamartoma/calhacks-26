@@ -7,6 +7,7 @@ import { recordEvent } from "./events";
 import { currentUser } from "./identity";
 import { connectionProblem, keyRow, providerValidator } from "./keyStore";
 import { beginSession } from "./sessions";
+import { ticketRunFinished } from "./tickets";
 
 const MAX_PROMPT = 8000;
 const MAX_ACTIVE_PER_PROJECT = 3;
@@ -217,6 +218,9 @@ export const finish = internalMutation({
       await ctx.db.insert("fetchActivity", { name: "watcher", kind: "noticed", text: `**${NAMES[run.agent ?? "claude"]} ${what}** for ${run.userLabel}: ${run.prompt.slice(0, 160)}${detail}`, projectId: run.projectId });
     }
     await ctx.scheduler.runAfter(0, internal.runChanges.capture, { runId: args.runId });
+    // A ticket's run: the ticket is done or failed, and the next one in its request starts.
+    // A problem starting the next one mustn't undo the run finishing.
+    try { await ticketRunFinished(ctx, args.runId, status); } catch (error) { console.error(`next ticket didn't start: ${error instanceof Error ? error.message : String(error)}`); }
   },
 });
 
