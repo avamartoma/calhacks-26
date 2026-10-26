@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import type { Agent, FetchState, OfficeIdentity, Room } from './types';
 import { FetchPanel, TicketAgents } from './FetchAgents';
-import { agentCharge, modelLabel } from './identity';
+import { agentCharge, agentLine, modelLabel } from './identity';
 import { officeApi, WorkDetail, workColors, workLabels, type Action } from './Operations';
 import { HandoffsPanel } from './HandoffsPanel';
 import { agentIsMine, diffFiles, ownerLabel, ticketDiff, type FileDiff } from './office-panel';
@@ -24,10 +24,21 @@ export function AgentSide({ room, identities, ownRoomId, busy, selectedId, model
   const agents = room.agents.filter(agent => agent.status !== 'ejected');
   const selected = agents.find(agent => agent.id === selectedId) || null;
   const viewingShared = !!room.viewOnly;
+  const [tab, setTab] = useState<'agents' | 'tickets' | 'handoffs'>('agents');
+  const tickets = room.workItems.filter(item => !item.archived);
+  // Opening an agent from a ticket or a handoff shows it on the Agents tab.
+  const openAgent = (id: string) => { setTab('agents'); onSelect(id); };
 
   return <aside className="agent-side" aria-label="Office">
     {share}
-    <header><b>Agents</b><span>{agents.length}</span></header>
+    <nav className="agent-side-tabs" aria-label="Office views">
+      <button type="button" aria-pressed={tab === 'agents'} onClick={() => setTab('agents')}>Agents <span>{agents.length}</span></button>
+      <button type="button" aria-pressed={tab === 'tickets'} onClick={() => setTab('tickets')}>Tickets <span>{tickets.filter(item => item.status !== 'done').length}</span></button>
+      <button type="button" aria-pressed={tab === 'handoffs'} onClick={() => setTab('handoffs')}>Handoffs <span>{room.messages.length}</span></button>
+    </nav>
+    {tab === 'tickets' && <TicketBoard room={room} agents={viewingShared ? [] : agents.filter(agent => agentIsMine(agent, identities))} identities={identities} preferId={selected?.id} busy={busy} fetch={fetch} action={action} onSelect={openAgent} />}
+    {tab === 'handoffs' && <HandoffsPanel room={room} onAgent={openAgent} onTask={() => setTab('tickets')} />}
+    {tab === 'agents' && <>
     {!agents.length && <p className="agent-side-note">No agents in this office.</p>}
     <ul className="agent-side-list">
       {agents.map(agent => {
@@ -43,7 +54,44 @@ export function AgentSide({ room, identities, ownRoomId, busy, selectedId, model
     </ul>
     {selected && <SelectedAgent key={selected.id} room={room} agent={selected} identities={identities} ownRoomId={ownRoomId} busy={busy} models={models} fetch={fetch} action={action} onSelect={onSelect} onCloned={onCloned} />}
     {fetch && !room.viewOnly && <FetchPanel fetch={fetch} room={room} onTask={() => {}} />}
+    </>}
   </aside>;
+}
+
+/** Turns a chat message into a ticket owned by the agent, then hands the message to that agent. */
+async function assignTicket(roomId: string, agentId: string, text: string) {
+  const line = text.split('\n')[0].trim();
+  const title = (line.length > 120 ? `${line.slice(0, 119)}…` : line).padEnd(3, '.');
+  await officeApi(`/rooms/${roomId}/work`, { title, description: text.padEnd(3, '.'), acceptanceCriteria: ['The requested outcome is done'], agentId });
+  await officeApi(`/rooms/${roomId}/agents/${agentId}/message`, { message: text });
+}
+
+const ticketOrder: Record<string, number> = { working: 0, queued: 1, review: 2, blocked: 3, ready: 4, done: 5 };
+
+function TicketBoard({ room, agents, identities, preferId, busy, fetch, action, onSelect }: {
+  room: Room; agents: Agent[]; identities: OfficeIdentity[]; preferId?: string; busy: boolean; fetch?: FetchState; action: Action; onSelect: (id: string) => void;
+}) {
+  const [text, setText] = useState('');
+  const [agentId, setAgentId] = useState(() => agents.find(agent => agent.id === preferId)?.id || agents[0]?.id || '');
+  const owner = agents.some(agent => agent.id === agentId) ? agentId : agents[0]?.id || '';
+  const items = room.workItems.filter(item => !item.archived).sort((a, b) => (ticketOrder[a.status] ?? 9) - (ticketOrder[b.status] ?? 9) || b.updatedAt - a.updatedAt);
+  return <section className="agent-side-detail" aria-label="Tickets">
+    {!!agents.length && <form onSubmit={event => { event.preventDefault(); action(async () => { await assignTicket(room.id, owner, text.trim()); setText(''); }, 'Ticket assigned'); }}>
+      <label>New ticket<textarea value={text} onChange={event => setText(event.target.value)} rows={3} maxLength={12000} placeholder="What should get done" required /></label>
+      <label>Assign to
+        <select value={owner} onChange={event => setAgentId(event.target.value)}>{agents.map(agent => <option key={agent.id} value={agent.id}>{agentLine(agent)}</option>)}</select>
+      </label>
+      <button className="secondary" disabled={busy || text.trim().length < 3 || !owner}>Assign</button>
+    </form>}
+    {!items.length && <p className="agent-side-note">No tickets yet. {agents.length ? 'Write one above, or direct an agent, and it shows up here.' : ''}</p>}
+    {items.map(item => {
+      const agent = room.agents.find(entry => entry.id === item.agentId);
+      return <div key={item.id}>
+        <TicketRow room={room} item={item} agent={agent} fetch={fetch} onSelect={onSelect} />
+        <p className="agent-side-note">{agent ? <button type="button" onClick={() => onSelect(agent.id)}>{agentLine(agent)}</button> : 'Unassigned'}{agent && ` · ${ownerLabel(agent, identities)}`}</p>
+      </div>;
+    })}
+  </section>;
 }
 
 function SelectedAgent({ room, agent, identities, ownRoomId, busy, models, fetch, action, onSelect, onCloned }: {
@@ -65,7 +113,7 @@ function SelectedAgent({ room, agent, identities, ownRoomId, busy, models, fetch
         </select>
       </label>
       <button type="button" className="secondary" disabled={busy} onClick={() => action(() => officeApi(`/rooms/${room.id}/agents/${agent.id}/${paused ? 'resume' : 'stop'}`, {}), paused ? 'Agent resumed' : 'Agent paused')}>{paused ? 'Resume' : 'Pause'}</button>
-      <form onSubmit={event => { event.preventDefault(); action(async () => { await officeApi(`/rooms/${room.id}/agents/${agent.id}/message`, { message: note.trim() }); setNote(''); }, 'Message sent'); }}>
+      <form onSubmit={event => { event.preventDefault(); action(async () => { await assignTicket(room.id, agent.id, note.trim()); setNote(''); }, 'Ticket assigned and sent'); }}>
         <label>Direct this agent<textarea value={note} onChange={event => setNote(event.target.value)} rows={3} maxLength={12000} placeholder="What this agent should do next" required /></label>
         <button className="secondary" disabled={busy || !note.trim()}>Send</button>
       </form>
@@ -90,7 +138,7 @@ function SelectedAgent({ room, agent, identities, ownRoomId, busy, models, fetch
   </div>;
 }
 
-function TicketRow({ room, item, agent, fetch, onSelect }: { room: Room; item: WorkItemFiles; agent: Agent; fetch?: FetchState; onSelect: (id: string) => void }) {
+function TicketRow({ room, item, agent, fetch, onSelect }: { room: Room; item: WorkItemFiles; agent?: Agent; fetch?: FetchState; onSelect: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<string | null>(null);
   const files = diffFiles(ticketDiff(item, agent), item.files || []);
