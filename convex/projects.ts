@@ -208,6 +208,7 @@ export const sky = query({
       const owner = await ctx.db.query("members").withIndex("by_project", (q) => q.eq("projectId", project._id)).collect();
       const sessions = await ctx.db.query("sessions").withIndex("by_project", (q) => q.eq("projectId", project._id)).order("desc").take(1);
       const runs = await ctx.db.query("agentRuns").withIndex("by_project", (q) => q.eq("projectId", project._id)).order("desc").take(6);
+      const lasting = await ctx.db.query("projectAgents").withIndex("by_project", (q) => q.eq("projectId", project._id)).take(12);
       const snapshotUrl = project.lastSnapshot ? await ctx.storage.getUrl(project.lastSnapshot) : null;
       rows.push({
         id: project._id,
@@ -222,6 +223,7 @@ export const sky = query({
         session: sessions[0] ? { id: sessions[0]._id, status: sessions[0].status, previewUrl: sessions[0].previewUrl ?? null, previewStatus: sessions[0].previewStatus ?? null } : null,
         snapshotUrl,
         runs: runs.map((run) => ({ id: run._id, agent: run.agent ?? "claude", status: run.status, userLabel: run.userLabel, prompt: run.prompt.slice(0, 120) })),
+        agents: lasting.map((agent) => ({ id: agent._id, name: agent.name, role: agent.role, engine: agent.engine })),
         workspaceId: await workspaceFor(ctx, project, user, workspaces),
         placed: placed ? { x: placed.x, y: placed.y } : null,
       });

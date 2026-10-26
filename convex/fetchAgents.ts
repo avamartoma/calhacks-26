@@ -218,12 +218,13 @@ export const modelKey = internalQuery({
 
 /** Starts an agent run for the person who asked, on the first of their connections that's set up. */
 export const startFor = internalMutation({
-  args: { projectId: v.id("projects"), userId: v.string(), userLabel: v.string(), prompt: v.string(), via: v.string() },
+  args: { projectId: v.id("projects"), userId: v.string(), userLabel: v.string(), prompt: v.string(), via: v.string(), prefer: v.optional(v.union(v.literal("codex"), v.literal("claude"), v.literal("cursor"))) },
   handler: async (ctx, args) => {
     const text = args.prompt.trim();
     if (!text) throw new Error("Describe the work to start");
+    // The preferred program if the person has it connected, otherwise the first one they do.
     let agent: "claude" | "codex" | "cursor" | null = null;
-    for (const provider of ["claude", "codex", "cursor"] as const) if (!agent && (await keyRow(ctx, args.userId, provider))) agent = provider;
+    for (const provider of [...(args.prefer ? [args.prefer] : []), "claude", "codex", "cursor"] as const) if (!agent && (await keyRow(ctx, args.userId, provider))) agent = provider;
     if (!agent) throw new Error("Connect Codex, Claude or Cursor in Accounts first, so there's an agent to start");
     const sessionId = await openSession(ctx, args.projectId, agent, args.userId);
     const runId = await ctx.db.insert("agentRuns", {

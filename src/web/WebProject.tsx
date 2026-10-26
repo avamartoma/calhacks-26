@@ -14,8 +14,12 @@ import { ConnectionTabs, ConnectionsPanel, providerNames, providers, useConnecti
 import { describe, useSkyRows, type SkyRow } from './WebSky';
 import { FetchPanel } from './FetchWeb';
 import { ShareLinkButtons } from './ShareLinks';
+import { CloneButton, takeArrival, type CloneTarget } from './CloneAgent';
+import { kindOf } from '../sky/agents';
 
 type Run = NonNullable<ReturnType<typeof useRuns>>[number];
+type Lasting = NonNullable<ReturnType<typeof useLasting>>[number];
+const useLasting = (projectId: Id<'projects'>) => useQuery(api.projectAgents.list, { projectId });
 const useRuns = (projectId: Id<'projects'>) => useQuery(api.agentRuns.list, { projectId });
 const message = (error: unknown) => (error instanceof Error ? error.message.replace(/^.*Uncaught Error: /s, '').split('\n')[0] : 'Something went wrong');
 const working = (run: Run) => run.status === 'starting' || run.status === 'running';
@@ -26,12 +30,17 @@ const deskProvider: Record<Provider, Agent['provider']> = { codex: 'codex-cli', 
 const statusColor: Record<string, string> = { starting: '#b88732', running: '#477ead', done: '#38826c', error: '#b55c48', stopped: '#8a969f' };
 
 /** The office for one project: its agents at their desks, built from Convex for the 3D scene. */
-function roomFor(row: SkyRow, runs: Run[]): Room {
-  const agents: Agent[] = runs.filter((run, index) => working(run) || index < 6).map(run => ({
+function roomFor(row: SkyRow, runs: Run[], lasting: Lasting[] = []): Room {
+  // Lasting agents each have a desk; their id is prefixed so the office can tell them from runs.
+  const desks: Agent[] = lasting.map(agent => ({
+    id: `pa:${agent.id}`, name: agent.name, title: agent.role, role: agent.role, task: agent.instructions, model: agent.engine,
+    provider: deskProvider[agent.engine], status: 'idle', color: kindOf(agent.role).color, progress: 0, plan: [], tokens: 0, events: [],
+  }));
+  const agents: Agent[] = [...desks, ...runs.filter((run, index) => working(run) || index < 6).map((run): Agent => ({
     id: run.id, name: run.userLabel.split(/[\s@]/)[0] || 'Agent', title: deskTitle[run.agent], role: providerNames[run.agent], task: run.prompt, model: run.agent,
     provider: deskProvider[run.agent], status: working(run) ? 'working' : run.status === 'error' ? 'error' : 'done', color: '#c96442', progress: 0, plan: [], tokens: 0,
     events: run.lastLine ? [{ id: `${run.id}:last`, kind: 'update', text: run.lastLine.text, time: run.startedAt }] : [],
-  }));
+  }))];
   return {
     id: row.id, name: row.name, path: '', tag: 'CLOUD', demo: false, goal: row.description, viewOnly: row.role !== 'editor',
     timeline: [], checkpoints: [], workItems: [], messages: [], skills: [], budget: 3, paused: false, agents,
@@ -80,7 +89,12 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
     void ensurePreview({ sessionId }).catch(() => {});
   }, [sessionId, sandboxReady]);
 
-  const room = useMemo(() => roomFor(row, runs || []), [row, runs]);
+  const lasting = useLasting(projectId);
+  const room = useMemo(() => roomFor(row, runs || [], lasting || []), [row, runs, lasting]);
+  // Arriving with a just-cloned agent: select it, at its desk and in the Agents panel.
+  useEffect(() => { const arrived = takeArrival(projectId); if (arrived) setSelected(`pa:${arrived}`); }, [projectId]);
+  const rows = useSkyRows();
+  const targets: CloneTarget[] = (rows || []).filter(item => item.mine || item.role === 'editor').map(item => ({ id: item.id, name: item.name }));
   useEffect(() => {
     if (!container.current) return;
     try {
@@ -129,7 +143,7 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
       <div className="world">
         <div ref={container} className="world-canvas" />
         <div className="cloud-arrival" style={{ background: `rgb(${paletteAt(localHour()).cloudLight.map(v => Math.round(v * 255)).join(',')})` }} />
-        <AgentsPanel projectId={projectId} runs={runs} editor={editor} selected={selected} onSelect={setSelected} />
+        <AgentsPanel projectId={projectId} runs={runs} lasting={lasting} targets={targets} go={go} editor={editor} selected={selected} onSelect={setSelected} />
         {shareOpen && <SharePanel row={row} onClose={() => setShareOpen(false)} />}
         {accountsOpen && <ConnectionsPanel onClose={() => setAccountsOpen(false)} />}
         {fetchOpen && <FetchPanel projectId={projectId} runs={runs || []} editor={editor} mine={row.mine} onClose={() => setFetchOpen(false)} />}
@@ -151,7 +165,9 @@ function StartPreview({ sessionId }: { sessionId: Id<'sessions'> }) {
   </div>;
 }
 
-function AgentsPanel({ projectId, runs, editor, selected, onSelect }: { projectId: Id<'projects'>; runs: Run[] | undefined; editor: boolean; selected: string | null; onSelect: (id: string | null) => void }) {
+function AgentsPanel({ projectId, runs, lasting, targets, go, editor, selected, onSelect }: { projectId: Id<'projects'>; runs: Run[] | undefined; lasting: Lasting[] | undefined; targets: CloneTarget[]; go: (path: string) => void; editor: boolean; selected: string | null; onSelect: (id: string | null) => void }) {
+  const startLasting = useMutation(api.projectAgents.start);
+  const removeLasting = useMutation(api.projectAgents.remove);
   const connections = useConnections();
   const connected = providers.filter(provider => connections?.providers[provider].connected);
   const [chosen, setChosen] = useState<Provider | null>(() => localStorage.getItem('opencloud-agent') as Provider | null);
@@ -177,7 +193,21 @@ function AgentsPanel({ projectId, runs, editor, selected, onSelect }: { projectI
         </form>
       : connections && <div className="web-key-needed"><b>Connect Codex, Claude or Cursor to start agents</b><ConnectionTabs initial="claude" /></div>)}
     {!editor && <p className="web-note">You can watch this project's agents. Ask the owner for edit access to start your own.</p>}
-    {runs && !runs.length && <p className="web-note">No agents have worked here yet.</p>}
+    {!!lasting?.length && <ul className="web-runs web-lasting" aria-label="This project's agents">
+      {lasting.map(item => { const key = `pa:${item.id}`, open = selected === key; return <li key={item.id} className={open ? 'open' : ''}>
+        <button className="web-run" onClick={() => onSelect(open ? null : key)}>
+          <i style={{ background: kindOf(item.role).color }} />
+          <span><b>{item.name}</b><small>{item.role} · {providerNames[item.engine]}{item.clonedFrom ? ` · cloned from ${item.clonedFrom.projectName}` : ''}</small></span>
+        </button>
+        {open && <p className="web-last">{item.instructions}</p>}
+        <div className="web-lasting-actions">
+          {editor && <button className="text-button" onClick={async () => { setError(''); try { const started = await startLasting({ agentId: item.id }); onSelect(started.runId); } catch (e) { setError(message(e)); } }}><Play size={12} /> Start</button>}
+          <CloneButton source={{ agentId: item.id }} fromProjectId={projectId} targets={targets} go={go} />
+          {editor && open && <button className="text-button danger" onClick={() => void removeLasting({ agentId: item.id })}>Remove</button>}
+        </div>
+      </li>; })}
+    </ul>}
+    {runs && !runs.length && !lasting?.length && <p className="web-note">No agents have worked here yet.</p>}
     <ul className="web-runs">
       {runs?.map(run => <li key={run.id} className={selected === run.id ? 'open' : ''}>
         <button className="web-run" onClick={() => onSelect(selected === run.id ? null : run.id)}>
@@ -187,6 +217,7 @@ function AgentsPanel({ projectId, runs, editor, selected, onSelect }: { projectI
         {selected === run.id ? <RunLog runId={run.id} /> : run.lastLine && <p className="web-last">{run.lastLine.text}</p>}
         {editor && run.mine && working(run) && <button className="text-button danger" onClick={() => void stop({ runId: run.id })}><Square size={12} /> Stop</button>}
         {editor && selected === run.id && run.canFollowUp && <FollowUp runId={run.id} agent={providerNames[run.agent]} onSent={onSelect} />}
+        {selected === run.id && <CloneButton source={{ runId: run.id }} fromProjectId={projectId} targets={targets} go={go} />}
       </li>)}
     </ul>
   </aside>;

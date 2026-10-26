@@ -180,6 +180,19 @@ export default defineSchema({
   }).index("by_user", ["userId"]),
 
   // One agent run inside a project's sandbox, started from the web office. No agent means Claude.
+  // A lasting agent in a project: a name, a role, the program it runs on and its instructions.
+  // It sits on the project's cloud and at a desk in its office, and can be started again any time;
+  // cloning one (or a run) into another project makes a copy there.
+  projectAgents: defineTable({
+    projectId: v.id("projects"),
+    name: v.string(),
+    role: v.string(),
+    engine: v.union(v.literal("codex"), v.literal("claude"), v.literal("cursor")),
+    instructions: v.string(),
+    clonedFrom: v.optional(v.object({ projectId: v.id("projects"), projectName: v.string(), agentName: v.string() })),
+    createdBy: v.string(),
+  }).index("by_project", ["projectId"]),
+
   agentRuns: defineTable({
     projectId: v.id("projects"),
     agent: v.optional(v.union(v.literal("codex"), v.literal("claude"), v.literal("cursor"))),

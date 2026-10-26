@@ -10,6 +10,7 @@ import type { Room, Workspace } from '../types';
 import { SkyView, type SkyProject } from '../sky/SkyView';
 import { seedOf } from '../sky/sky-math';
 import { builtinBlobs, taskRole } from '../sky/builtins';
+import { takeTransfer } from './CloneAgent';
 
 const engines: Record<string, string> = { claude: 'Claude', codex: 'Codex', cursor: 'Cursor' };
 import { ConnectionsPanel } from './Connections';
@@ -67,6 +68,8 @@ export function WebSky({ go }: { go: (path: string) => void }) {
   const [membersOf, setMembersOf] = useState<string | null>(null);
   const membersWorkspace = workspaces?.find(workspace => workspace.id === membersOf);
   const everyone = workspaces?.find(workspace => workspace.kind === 'public');
+  // An agent just cloned into another project travels across the sky (src/web/CloneAgent.tsx leaves this).
+  const [transfer] = useState(takeTransfer);
   // The built-in agents each sit on the cloud they last worked on, once they've been used.
   const uses = useQuery(api.fetchAgents.builtinUses, {});
   const builtins = useMemo(() => builtinBlobs(uses || []), [uses]);
@@ -80,12 +83,16 @@ export function WebSky({ go }: { go: (path: string) => void }) {
       return {
         // Everything on your web sky is a project you can view, so every cloud opens.
         id: row.id, name: row.name, description: describe(row), mine: row.mine, enterable: true, owner: row.owner?.split('@')[0],
-        agents: [...row.runs.map(run => ({ name: `${engines[run.agent] ?? 'Claude'} · ${run.userLabel}`, role: taskRole(run.prompt), status: agentStatus(run.status) })), ...(builtins.get(row.id) ?? [])],
+        agents: [
+          ...row.agents.filter(agent => agent.id !== transfer?.agentId).map(agent => ({ name: agent.name, role: agent.role, status: 'idle' })),
+          ...row.runs.map(run => ({ name: `${engines[run.agent] ?? 'Claude'} · ${run.userLabel}`, role: taskRole(run.prompt), status: agentStatus(run.status) })),
+          ...(builtins.get(row.id) ?? []),
+        ],
         x: Math.cos(angle) * radius, y: Math.sin(angle) * radius * (row.mine ? .8 : .6), depth: row.mine ? 1 : .45 + .35 * seed, seed,
         ...(row.placed ? { placed: row.placed } : {}),
       };
     });
-  }, [rows, builtins]);
+  }, [rows, builtins, transfer]);
   const account = user ? { sub: user.sub || '', label: user.name || user.email || 'You', email: user.email, picture: user.picture } : null;
   const githubLogin = !!user?.sub?.startsWith('github|');
   // Signing in with GitHub the first time offers your repos once; New project always has them.
@@ -109,7 +116,7 @@ export function WebSky({ go }: { go: (path: string) => void }) {
       </div>
       <div className="world">
         {account && <AccountBadge account={account} onSignOut={() => void logout({ logoutParams: { returnTo: window.location.origin } })} />}
-        {rows && <SkyView key={current?.id} projects={projects} onEnter={id => go(`/project/${encodeURIComponent(id)}`)} onMove={(id, x, y) => void place({ projectId: id as Id<'projects'>, x, y }).catch(() => {})} />}
+        {rows && <SkyView key={current?.id} projects={projects} returnFrom={transfer?.from} transfer={transfer} onEnter={id => go(`/project/${encodeURIComponent(id)}`)} onMove={(id, x, y) => void place({ projectId: id as Id<'projects'>, x, y }).catch(() => {})} />}
         {error && <p className="web-toast" role="alert">{error}<button aria-label="Dismiss" onClick={() => setError('')}><X size={14} /></button></p>}
         {rows && !rows.length && !creating && !offer && <div className="sky-hint"><Cloud size={16} /><span>No projects yet. Upload a folder or link a GitHub repo to start.</span><button className="primary" onClick={() => setCreating(true)}>New project</button></div>}
         {newWorkspace && <NewWorkspace onClose={() => setNewWorkspace(false)} onCreated={id => { setNewWorkspace(false); choose(id); }} />}

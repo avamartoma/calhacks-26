@@ -135,7 +135,10 @@ function homeCamera(projects: SkyProject[], view: Viewport, style: SkyStyle): Ca
  * The workspace sky, with a switch between two looks: projects as hot air balloons, or as
  * clouds. The choice is remembered; `?sky=` in the address overrides it.
  */
-export function SkyView(props: { projects: SkyProject[]; onEnter: (id: string) => void; returnFrom?: string | null; onMove?: (id: string, x: number, y: number) => void }) {
+/** An agent travelling from one cloud to another, as when it's cloned into another project; the sky then flies into `to`. */
+export interface SkyTransfer { from: string; to: string; color: string }
+
+export function SkyView(props: { projects: SkyProject[]; onEnter: (id: string) => void; returnFrom?: string | null; onMove?: (id: string, x: number, y: number) => void; transfer?: SkyTransfer | null }) {
   // Clouds only for now. The other looks (balloons in 3D among them) are kept but hidden; open
   // one with `?sky=balloons` and so on. See "Hidden sky looks" in the README before deleting them.
   const style = (new URLSearchParams(location.search).get('sky') || 'clouds') as SkyStyle;
@@ -228,7 +231,7 @@ function useSemanticSearch(terms: string, list: { current: SkyProject[] }): Rank
   return ranked;
 }
 
-function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyMine }: { style: SkyStyle; projects: SkyProject[]; onEnter: (id: string) => void; returnFrom?: string | null; command?: SkyCommand; onMove?: (id: string, x: number, y: number) => void; onlyMine?: boolean }) {
+function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyMine, transfer }: { style: SkyStyle; projects: SkyProject[]; onEnter: (id: string) => void; returnFrom?: string | null; command?: SkyCommand; onMove?: (id: string, x: number, y: number) => void; onlyMine?: boolean; transfer?: SkyTransfer | null }) {
   const balloons = style === 'balloons';
   const host = useRef<HTMLDivElement>(null), canvas = useRef<HTMLCanvasElement>(null), whiteout = useRef<HTMLDivElement>(null);
   const labels = useRef(new Map<string, HTMLElement>()), agentRows = useRef(new Map<string, HTMLElement>());
@@ -377,13 +380,43 @@ function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyM
     };
     resize();
     sky.setClouds(list.current);
+    /**
+     * An agent travelling between clouds: a blob in its color leaves the bottom of one cloud, where
+     * agents sit, arcs over to the other, lands, and the sky flies into that project.
+     */
+    const travel = () => {
+      const from = transfer && list.current.find(p => p.id === transfer.from), to = transfer && list.current.find(p => p.id === transfer.to);
+      if (!transfer) return;
+      // The project it went to isn't on this sky (another workspace, say): just open it.
+      if (!to) { state.entering = false; enter.current(transfer.to); return; }
+      const spot = (p: SkyProject) => { const c = screenOf(p); return { x: c.x + c.width * .22, y: c.y + c.height * .3 }; };
+      const end = spot(to), start = from ? spot(from) : { x: end.x, y: -40 };
+      const blob = document.createElement('div');
+      blob.className = 'sky-transfer-blob';
+      blob.style.setProperty('--blob', transfer.color);
+      blob.innerHTML = '<i></i><i></i>';
+      el.appendChild(blob);
+      const lift = Math.min(160, Math.max(70, Math.hypot(end.x - start.x, end.y - start.y) * .35));
+      const at = (x: number, y: number, scale: number) => `translate(${x}px, ${y}px) translate(-50%, -50%) scale(${scale})`;
+      const flight = blob.animate([
+        { transform: at(start.x, start.y, .4), opacity: 0 },
+        { transform: at(start.x, start.y - 14, 1.1), opacity: 1, offset: .15 },
+        { transform: at((start.x + end.x) / 2, Math.min(start.y, end.y) - lift, 1.25), offset: .55 },
+        { transform: at(end.x, end.y - 10, 1.05), offset: .88 },
+        { transform: at(end.x, end.y, 1) },
+      ], { duration: reducedMotion() ? 1 : 1900, easing: 'cubic-bezier(.45,0,.3,1)', fill: 'forwards' });
+      flight.onfinish = () => setTimeout(() => { blob.remove(); state.entering = false; flyTo(to); }, reducedMotion() ? 0 : 450);
+    };
     const back = returnFrom && list.current.find(p => p.id === returnFrom && opens(p));
     if (back && !reducedMotion()) {
       // Coming out of a project: start inside it and pull back out to your projects.
       state.camera = { x: back.x, y: back.y, zoom: insideZoom(back), z: 0, yaw: 0, pitch: 0 };
       state.entering = true;
-      animate(home(), 1300, () => { state.entering = false; });
-    } else state.camera = home();
+      animate(home(), 1300, () => { state.entering = false; if (transfer) { state.entering = true; setTimeout(travel, 250); } });
+    } else {
+      state.camera = home();
+      if (transfer) { state.entering = true; setTimeout(travel, 500); }
+    }
 
     // Ready for W A S D straight away, without clicking first.
     el.focus({ preventScroll: true });
