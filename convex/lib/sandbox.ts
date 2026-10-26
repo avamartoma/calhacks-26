@@ -320,7 +320,8 @@ export class E2BProvider implements SandboxProvider {
     let install: string | undefined;
     let serve: string | undefined;
     if (!command) {
-      const packageJson = await sandbox.files.read(`${cwd}/package.json`);
+      // No package.json (a plain HTML site, say) is served as static files rather than failing.
+      const packageJson = await sandbox.files.read(`${cwd}/package.json`).catch(() => null);
       const detected = commandFromPackageJson(packageJson, input.port);
       command = detected.command;
       install = detected.install;
