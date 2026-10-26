@@ -475,6 +475,31 @@ export const setPreview = internalMutation({
   },
 });
 
+/**
+ * Makes sure the project's preview is really running: if nothing answers on its port (a dev server
+ * that never started, or one a resume didn't bring back), starts it again. The web office calls this
+ * when a project opens, so a stale "live" preview doesn't show E2B's "port closed" page. Viewers can
+ * call it: it only starts the project's own preview.
+ */
+export const ensurePreview = action({
+  args: { sessionId: v.id("sessions") },
+  handler: async (ctx, args): Promise<{ previewStatus: "live" | "error"; previewUrl?: string; restarted: boolean }> => {
+    const sandboxId = await requireReadySandbox(ctx, args.sessionId, "viewer");
+    const port = 3000;
+    if (await ctx.runAction(internal.sessionSandbox.portOpen, { sandboxId, port })) return { previewStatus: "live", restarted: false };
+    await ctx.runMutation(internal.sessions.setPreview, { sessionId: args.sessionId, previewStatus: "starting" });
+    try {
+      const result: { previewUrl: string; command: string } = await ctx.runAction(internal.sessionSandbox.startPreview, { sandboxId, port });
+      await ctx.runMutation(internal.sessions.setPreview, { sessionId: args.sessionId, previewStatus: "live", previewUrl: result.previewUrl, eventKind: "session.preview_ready", detail: result.previewUrl });
+      return { previewStatus: "live", previewUrl: result.previewUrl, restarted: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "preview failed";
+      await ctx.runMutation(internal.sessions.setPreview, { sessionId: args.sessionId, previewStatus: "error", eventKind: "session.preview_error", detail: message.slice(0, 500) });
+      return { previewStatus: "error", restarted: true };
+    }
+  },
+});
+
 export const startPreview = action({
   args: {
     sessionId: v.id("sessions"),

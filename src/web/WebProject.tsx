@@ -72,6 +72,13 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
     const timer = setInterval(() => void heartbeat({ sessionId }).catch(() => {}), 60_000);
     return () => clearInterval(timer);
   }, [sessionId]);
+  // Once the sandbox is up, make sure its preview really answers, and start it again if not.
+  const ensurePreview = useAction(api.sessions.ensurePreview);
+  const sandboxReady = row.session?.status === 'ready' && row.session.id === sessionId;
+  useEffect(() => {
+    if (!sessionId || !sandboxReady) return;
+    void ensurePreview({ sessionId }).catch(() => {});
+  }, [sessionId, sandboxReady]);
 
   const room = useMemo(() => roomFor(row, runs || []), [row, runs]);
   useEffect(() => {

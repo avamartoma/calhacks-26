@@ -278,6 +278,14 @@ export const readFile = internalAction({
   },
 });
 
+/** Whether anything in the sandbox answers on the preview port. */
+export const portOpen = internalAction({
+  args: { sandboxId: v.string(), port: v.number() },
+  handler: async (_ctx, args): Promise<boolean> => {
+    try { return await getSandboxProvider().portOpen(args.sandboxId, args.port); } catch { return false; }
+  },
+});
+
 export const startPreview = internalAction({
   args: {
     sandboxId: v.string(),
