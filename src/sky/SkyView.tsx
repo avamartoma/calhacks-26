@@ -384,9 +384,12 @@ function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyM
      * An agent travelling between clouds: a blob in its color leaves the bottom of one cloud, where
      * agents sit, arcs over to the other, lands, and the sky flies into that project.
      */
+    // Timers for the transfer, cleared if this sky goes away first.
+    const timers: number[] = [];
+    const later = (fn: () => void, ms: number) => { timers.push(window.setTimeout(fn, ms)); };
     const travel = () => {
       const from = transfer && list.current.find(p => p.id === transfer.from), to = transfer && list.current.find(p => p.id === transfer.to);
-      if (!transfer) return;
+      if (!transfer || !renderer.current) return;
       // The project it went to isn't on this sky (another workspace, say): just open it.
       if (!to) { state.entering = false; enter.current(transfer.to); return; }
       const spot = (p: SkyProject) => { const c = screenOf(p); return { x: c.x + c.width * .22, y: c.y + c.height * .3 }; };
@@ -405,17 +408,17 @@ function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyM
         { transform: at(end.x, end.y - 10, 1.05), offset: .88 },
         { transform: at(end.x, end.y, 1) },
       ], { duration: reducedMotion() ? 1 : 1900, easing: 'cubic-bezier(.45,0,.3,1)', fill: 'forwards' });
-      flight.onfinish = () => setTimeout(() => { blob.remove(); state.entering = false; flyTo(to); }, reducedMotion() ? 0 : 450);
+      flight.onfinish = () => later(() => { blob.remove(); if (!renderer.current) return; state.entering = false; flyTo(to); }, reducedMotion() ? 0 : 450);
     };
     const back = returnFrom && list.current.find(p => p.id === returnFrom && opens(p));
     if (back && !reducedMotion()) {
       // Coming out of a project: start inside it and pull back out to your projects.
       state.camera = { x: back.x, y: back.y, zoom: insideZoom(back), z: 0, yaw: 0, pitch: 0 };
       state.entering = true;
-      animate(home(), 1300, () => { state.entering = false; if (transfer) { state.entering = true; setTimeout(travel, 250); } });
+      animate(home(), 1300, () => { state.entering = false; if (transfer) { state.entering = true; later(travel, 250); } });
     } else {
       state.camera = home();
-      if (transfer) { state.entering = true; setTimeout(travel, 500); }
+      if (transfer) { state.entering = true; later(travel, 500); }
     }
 
     // Ready for W A S D straight away, without clicking first.
@@ -524,7 +527,7 @@ function SkySpace({ style, projects, onEnter, returnFrom, command, onMove, onlyM
       state.camera = fly(state.camera, rayThrough(state.camera, state.view, cursor), step);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); el.removeEventListener('wheel', onWheel); sky.dispose(); renderer.current = null; };
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); el.removeEventListener('wheel', onWheel); timers.forEach(clearTimeout); el.querySelectorAll('.sky-transfer-blob').forEach(blob => blob.remove()); sky.dispose(); renderer.current = null; };
   }, []);
 
   useEffect(() => {

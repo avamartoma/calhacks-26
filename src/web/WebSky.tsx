@@ -25,7 +25,8 @@ const agentStatus = (status: string) => status === 'starting' || status === 'run
 
 export function describe(row: SkyRow) {
   const working = row.runs.filter(run => run.status === 'starting' || run.status === 'running').length;
-  const agents = working ? `${working} agent${working === 1 ? '' : 's'} working` : row.runs.length ? 'Agents idle' : 'No agents yet';
+  const lasting = row.agents.length;
+  const agents = working ? `${working} agent${working === 1 ? '' : 's'} working` : lasting ? `${lasting} agent${lasting === 1 ? '' : 's'}` : row.runs.length ? 'Agents idle' : 'No agents yet';
   const preview = row.session?.previewStatus === 'live' ? 'Preview live' : 'Paused';
   return row.mine ? `${agents} · ${preview}` : `${row.owner ? `${row.owner.split('@')[0]}'s project` : 'Shared with you'} · ${row.role === 'editor' ? 'Can edit' : 'View only'}`;
 }

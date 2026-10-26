@@ -17,20 +17,20 @@ const message = (error: unknown) => (error instanceof Error ? error.message.repl
 export function takeTransfer(): (SkyTransfer & { agentId: string }) | null {
   try {
     const saved = JSON.parse(sessionStorage.getItem(TRANSFER) || 'null');
-    sessionStorage.removeItem(TRANSFER);
+    // Cleared a moment later rather than now, so a component mounted twice (React's dev mode) still sees it.
+    setTimeout(() => sessionStorage.removeItem(TRANSFER), 3000);
     return saved && Date.now() - saved.at < 60_000 ? saved : null;
   } catch { return null; }
 }
 
-/** The agent to select when its project opens after a clone, once. */
-export function takeArrival(projectId: string): string | null {
+/** The agent to select when its project opens after a clone. It stays until clearArrival, once it's showing. */
+export function peekArrival(projectId: string): string | null {
   try {
     const saved = JSON.parse(sessionStorage.getItem(ARRIVE) || 'null');
-    if (!saved || saved.projectId !== projectId || Date.now() - saved.at > 120_000) return null;
-    sessionStorage.removeItem(ARRIVE);
-    return saved.agentId;
+    return saved && saved.projectId === projectId && Date.now() - saved.at < 120_000 ? saved.agentId : null;
   } catch { return null; }
 }
+export const clearArrival = () => sessionStorage.removeItem(ARRIVE);
 
 export interface CloneTarget { id: string; name: string }
 

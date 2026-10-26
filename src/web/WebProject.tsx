@@ -14,7 +14,7 @@ import { ConnectionTabs, ConnectionsPanel, providerNames, providers, useConnecti
 import { describe, useSkyRows, type SkyRow } from './WebSky';
 import { FetchPanel } from './FetchWeb';
 import { ShareLinkButtons } from './ShareLinks';
-import { CloneButton, takeArrival, type CloneTarget } from './CloneAgent';
+import { CloneButton, clearArrival, peekArrival, type CloneTarget } from './CloneAgent';
 import { kindOf } from '../sky/agents';
 
 type Run = NonNullable<ReturnType<typeof useRuns>>[number];
@@ -61,7 +61,8 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
   const resume = useMutation(api.sessions.resume);
   const heartbeat = useMutation(api.sessions.heartbeat);
   const [sessionId, setSessionId] = useState<Id<'sessions'> | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  // Arriving with a just-cloned agent: it starts selected, at its desk and in the Agents panel.
+  const [selected, setSelected] = useState<string | null>(() => { const arrived = peekArrival(row.id); return arrived ? `pa:${arrived}` : null; });
   const [shareOpen, setShareOpen] = useState(false);
   const [accountsOpen, setAccountsOpen] = useState(false);
   const [fetchOpen, setFetchOpen] = useState(false);
@@ -91,8 +92,7 @@ function ProjectOffice({ row, go }: { row: SkyRow; go: (path: string) => void })
 
   const lasting = useLasting(projectId);
   const room = useMemo(() => roomFor(row, runs || [], lasting || []), [row, runs, lasting]);
-  // Arriving with a just-cloned agent: select it, at its desk and in the Agents panel.
-  useEffect(() => { const arrived = takeArrival(projectId); if (arrived) setSelected(`pa:${arrived}`); }, [projectId]);
+  useEffect(() => { if (selected && lasting?.some(agent => `pa:${agent.id}` === selected)) clearArrival(); }, [selected, lasting]);
   const rows = useSkyRows();
   const targets: CloneTarget[] = (rows || []).filter(item => item.mine || item.role === 'editor').map(item => ({ id: item.id, name: item.name }));
   useEffect(() => {
